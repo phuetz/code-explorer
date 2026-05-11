@@ -73,6 +73,9 @@ describe('SystemDiagnostics', () => {
     fireEvent.click(screen.getByRole('button', { name: /ouvrir le diagnostic système/i }));
 
     await waitFor(() => {
+      const dialog = screen.getByRole('dialog', { name: /diagnostic système gitnexus/i });
+      expect(dialog.className).toContain('fixed');
+      expect(dialog.className).toContain('z-[100]');
       expect(screen.getByText('Diagnostic GitNexus')).toBeTruthy();
       expect(screen.getByText('gitnexus 0.1.0')).toBeTruthy();
       expect(screen.getAllByText('Alise_v2').length).toBeGreaterThanOrEqual(1);

@@ -123,6 +123,50 @@ describe('MermaidBlock', () => {
     expect(screen.getByText('Parse error')).toBeTruthy();
     expect(container.querySelector('pre')?.textContent).toBe(source);
   });
+
+  it('uses a lightweight SVG fallback for large flowcharts', async () => {
+    const source = [
+      'flowchart TD',
+      'A[Code metier:<br/>StackLogger.Info/Error/BeginMethodScope] --> B[Selection utilisateurs]',
+      'B --> C[Beneficiaires]',
+      'B --> D[Dossiers]',
+      'B --> E[Fournisseurs]',
+      'C --> F[Preparation courrier]',
+      'D --> G[Validation dossier]',
+      'E --> H[Controle fournisseur]',
+      'F --> I[Generation document]',
+      'G --> I',
+      'H --> I',
+      'I --> J[Mail merge]',
+      'J --> K[Sauvegarde PDF]',
+      'K --> L[Historisation]',
+      'L --> M[Fin]',
+    ].join('\n');
+
+    const { container } = render(<MermaidBlock text={source} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('svg')).toBeTruthy();
+    });
+
+    expect(mermaidMock.render).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Selection utilisateurs');
+    const labels = Array.from(container.querySelectorAll('.mermaid-canvas svg text')).map(
+      (node) => node.textContent ?? ''
+    );
+    expect(labels).toContain('Code metier:');
+    expect(labels.join('')).toContain('StackLogger.Info/Error/BeginMethodScope');
+    expect(container.querySelector('.mermaid-canvas svg title')?.textContent).toContain(
+      'Code metier: / StackLogger.Info/Error/BeginMethodScope'
+    );
+    const textYValues = Array.from(container.querySelectorAll('.mermaid-canvas svg text')).map(
+      (node) => Number(node.getAttribute('y'))
+    );
+    expect(textYValues.length).toBeGreaterThan(0);
+    expect(textYValues.every((value) => Number.isFinite(value) && Math.abs(value) <= 20)).toBe(
+      true
+    );
+  });
 });
 
 describe('repairMermaidSource', () => {

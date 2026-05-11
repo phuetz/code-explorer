@@ -18,6 +18,7 @@ declare module 'react-syntax-highlighter/dist/esm/prism-light' {
 
 declare module 'react-syntax-highlighter/dist/esm/styles/prism' {
   const styles: { [key: string]: { [key: string]: React.CSSProperties } };
+  export const oneLight: { [key: string]: React.CSSProperties };
   export const vscDarkPlus: { [key: string]: React.CSSProperties };
   export default styles;
 }

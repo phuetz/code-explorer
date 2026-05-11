@@ -6,6 +6,7 @@ Written in Rust. Supports 14 programming languages. Ships with a desktop app and
 
 [Version française](README.fr.md)
 [Installation Guide](INSTALLATION.md)
+[Ubuntu Installation](INSTALLATION_UBUNTU.md)
 [Modernization Roadmap](MODERNIZATION.md)
 [React Source/Graph Navigation Plan](REACT_SOURCE_GRAPH_NAVIGATION.md)
 

@@ -31,7 +31,10 @@ describe('LlmStatus', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /configuration llm/i }));
 
-    expect(screen.getByRole('dialog', { name: /détails de la configuration llm/i })).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: /détails de la configuration llm/i });
+    expect(dialog).toBeTruthy();
+    expect(dialog.className).toContain('fixed');
+    expect(dialog.className).toContain('z-[100]');
     expect(screen.getAllByText('chatgpt').length).toBeGreaterThan(0);
     expect(screen.getAllByText('gpt-5.5').length).toBeGreaterThan(0);
     expect(screen.getAllByText('high').length).toBeGreaterThan(0);

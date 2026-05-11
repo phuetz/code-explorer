@@ -143,6 +143,9 @@ describe('ProjectSelector', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /sélectionner le projet/i }));
+    const menu = screen.getByRole('listbox', { name: /projets indexés/i });
+    expect(menu.className).toContain('fixed');
+    expect(menu.className).toContain('z-[100]');
     fireEvent.change(screen.getByRole('searchbox', { name: /rechercher un projet/i }), {
       target: { value: 'facturation' },
     });

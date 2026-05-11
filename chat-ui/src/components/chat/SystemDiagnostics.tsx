@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Activity, Check, Copy, RefreshCw, ShieldCheck, TriangleAlert, X } from 'lucide-react';
 import clsx from 'clsx';
 import { mcpClient, type DiagnosticsInfo } from '../../api/mcp-client';
+import { useAnchoredPopover } from '../../hooks/use-anchored-popover';
 import { useChatStore } from '../../stores/chat-store';
 import { formatExportTimestamp, parseIndexedAt } from '../../utils/dates';
 import { copyTextToClipboard } from '../../utils/clipboard';
@@ -16,6 +18,16 @@ export function SystemDiagnostics() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticsInfo | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const closePopover = useCallback(() => setOpen(false), []);
+  const { anchorRef, popoverRef, position, updatePosition } = useAnchoredPopover<
+    HTMLButtonElement,
+    HTMLDivElement
+  >({
+    maxWidth: 480,
+    minWidth: 360,
+    onClose: closePopover,
+    open,
+  });
 
   const refresh = async () => {
     setStatus('loading');
@@ -33,6 +45,7 @@ export function SystemDiagnostics() {
 
   const toggle = () => {
     const nextOpen = !open;
+    if (nextOpen) updatePosition();
     setOpen(nextOpen);
     if (nextOpen && status === 'idle') {
       void refresh();
@@ -56,9 +69,83 @@ export function SystemDiagnostics() {
     }
   };
 
+  const popover =
+    open && position
+      ? createPortal(
+          <div
+            ref={popoverRef}
+            role="dialog"
+            aria-label="Diagnostic système GitNexus"
+            className="popover-panel fixed z-[100] overflow-y-auto rounded-lg border p-4 text-xs text-neutral-300 shadow-2xl"
+            style={position}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-neutral-100">Diagnostic GitNexus</div>
+                <div className="mt-1 text-neutral-500">{statusLabel(status, diagnostics)}</div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void copyReport()}
+                  disabled={!diagnostics}
+                  className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Copier le rapport de diagnostic"
+                  title={copied ? 'Copié' : 'Copier le rapport'}
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refresh()}
+                  className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
+                  aria-label="Rafraîchir le diagnostic"
+                  title="Rafraîchir"
+                >
+                  <RefreshCw
+                    className={clsx('h-3.5 w-3.5', status === 'loading' && 'animate-spin')}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={closePopover}
+                  className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
+                  aria-label="Fermer le diagnostic"
+                  title="Fermer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {status === 'error' ? (
+              <div className="rounded-md border border-red-900/60 bg-red-950/20 p-3 text-red-200">
+                <div className="mb-1 flex items-center gap-2 font-medium">
+                  <TriangleAlert className="h-4 w-4" aria-hidden />
+                  Diagnostic indisponible
+                </div>
+                <div className="leading-relaxed text-red-200/80">{error}</div>
+              </div>
+            ) : (
+              <DiagnosticsBody
+                diagnostics={diagnostics}
+                selectedRepo={selectedRepo}
+                selectedRepoName={selectedRepoName}
+              />
+            )}
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
         onClick={toggle}
         className={clsx(
@@ -78,71 +165,7 @@ export function SystemDiagnostics() {
         )}
         <span className="hidden xl:inline">Diagnostic</span>
       </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Diagnostic système GitNexus"
-          className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,30rem)] rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-300 shadow-xl"
-        >
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <div className="font-medium text-neutral-100">Diagnostic GitNexus</div>
-              <div className="mt-1 text-neutral-500">{statusLabel(status, diagnostics)}</div>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => void copyReport()}
-                disabled={!diagnostics}
-                className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Copier le rapport de diagnostic"
-                title={copied ? 'Copié' : 'Copier le rapport'}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" aria-hidden />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => void refresh()}
-                className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
-                aria-label="Rafraîchir le diagnostic"
-                title="Rafraîchir"
-              >
-                <RefreshCw className={clsx('h-3.5 w-3.5', status === 'loading' && 'animate-spin')} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
-                aria-label="Fermer le diagnostic"
-                title="Fermer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {status === 'error' ? (
-            <div className="rounded-md border border-red-900/60 bg-red-950/20 p-3 text-red-200">
-              <div className="mb-1 flex items-center gap-2 font-medium">
-                <TriangleAlert className="h-4 w-4" aria-hidden />
-                Diagnostic indisponible
-              </div>
-              <div className="leading-relaxed text-red-200/80">{error}</div>
-            </div>
-          ) : (
-            <DiagnosticsBody
-              diagnostics={diagnostics}
-              selectedRepo={selectedRepo}
-              selectedRepoName={selectedRepoName}
-            />
-          )}
-        </div>
-      )}
+      {popover}
     </div>
   );
 }

@@ -16,12 +16,35 @@ export interface ToolCall {
   status: 'pending' | 'running' | 'done' | 'error';
 }
 
+export interface AnalysisSourceReference {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+export interface AnalysisSnapshot {
+  id: string;
+  title: string;
+  repo: string | null;
+  repoName: string | null;
+  createdAt: number;
+  updatedAt: number;
+  sourceReferences: AnalysisSourceReference[];
+  summary: {
+    fileCount: number;
+    diagramCount: number;
+    toolCallCount: number;
+    decisionCount: number;
+  };
+}
+
 export interface Session {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
   messages: Message[];
+  analyses?: AnalysisSnapshot[];
 }
 
 export interface MCPTool {

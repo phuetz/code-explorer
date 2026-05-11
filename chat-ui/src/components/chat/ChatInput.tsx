@@ -94,8 +94,8 @@ export function ChatInput() {
   };
 
   return (
-    <div className="border-t border-neutral-900 bg-neutral-950 p-4">
-      <div className="mx-auto max-w-4xl">
+    <div className="composer-panel border-t p-4">
+      <div className="mx-auto w-full max-w-[78rem] px-0 sm:px-1 lg:px-3">
         <div className="mb-2 flex items-center justify-between gap-3 text-xs text-neutral-500">
           <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
             <Database size={12} aria-hidden="true" />
@@ -105,7 +105,7 @@ export function ChatInput() {
             {selectedRepo ? 'Prêt' : 'Projet requis'}
           </span>
         </div>
-        <div className="flex items-end gap-2 rounded-lg border border-neutral-800 bg-neutral-900/70 p-2 shadow-[0_1px_0_rgba(255,255,255,0.03)] focus-within:border-neutral-700">
+        <div className="composer-shell flex items-end gap-2 rounded-lg border p-2">
         <textarea
           ref={taRef}
           value={value}
@@ -118,7 +118,7 @@ export function ChatInput() {
           }
           aria-label="Message à envoyer au chat"
           aria-busy={isStreaming}
-          className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 text-neutral-100 outline-none placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:text-neutral-600"
+          className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] disabled:cursor-not-allowed disabled:text-[var(--text-faint)]"
           style={{ minHeight: MIN_HEIGHT }}
           disabled={isStreaming || !selectedRepo}
         />
@@ -127,7 +127,7 @@ export function ChatInput() {
             type="button"
             onClick={cancel}
             aria-label="Annuler la requête en cours"
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-red-500/30 bg-red-600/90 text-white transition hover:bg-red-500"
+            className="danger-action flex h-10 w-10 items-center justify-center rounded-md border text-white transition"
             title="Annuler"
           >
             <Square size={14} fill="currentColor" aria-hidden="true" />
@@ -138,7 +138,7 @@ export function ChatInput() {
             onClick={submit}
             disabled={!value.trim() || !selectedRepo}
             aria-label="Envoyer le message"
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-transparent bg-purple-600 text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-900 disabled:text-neutral-600"
+            className="send-action flex h-10 w-10 items-center justify-center rounded-md border text-white transition disabled:cursor-not-allowed"
             title="Envoyer (Entrée)"
           >
             <Send size={16} aria-hidden="true" />

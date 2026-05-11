@@ -2,6 +2,8 @@ import type { LlmConfigInfo } from '../api/mcp-client';
 import type { Message, Session } from '../types/chat';
 import { formatExportTimestamp } from './dates';
 import { looksLikeMermaid, normalizeCodeFenceLanguage } from './markdown';
+import { extractSourceReferences, groupSourceReferences, type SourceReferenceGroup } from './source-references';
+import { sourceReferenceSummary } from './related-sources-export';
 
 interface ExportMetadata {
   repo: string | null;
@@ -10,6 +12,7 @@ interface ExportMetadata {
 
 export function conversationToMarkdown(session: Session, metadata: ExportMetadata): string {
   const messages = exportableMessages(session);
+  const sourceGroups = collectSessionSourceGroups(messages);
   const lines: string[] = [
     `# ${session.title || 'Conversation GitNexus'}`,
     '',
@@ -21,6 +24,14 @@ export function conversationToMarkdown(session: Session, metadata: ExportMetadat
     `- Export: ${formatExportTimestamp(Date.now())}`,
     '',
   ];
+
+  if (sourceGroups.length > 0) {
+    lines.push('### Fichiers sources cités', '');
+    for (const group of sourceGroups) {
+      lines.push(`- ${sourceReferenceSummary(group)}`);
+    }
+    lines.push('');
+  }
 
   for (const message of messages) {
     lines.push(`## ${messageLabel(message)}`);
@@ -41,7 +52,26 @@ export function exportMarkdown(session: Session, metadata: ExportMetadata) {
   downloadTextFile(exportFilename(session, metadata.repo, 'md'), conversationToMarkdown(session, metadata));
 }
 
-export function exportPdf(session: Session, metadata: ExportMetadata, renderedTranscript?: HTMLElement | null) {
+export function exportPrintableHtml(
+  session: Session,
+  metadata: ExportMetadata,
+  renderedTranscript?: HTMLElement | null
+) {
+  const transcriptHtml = renderedTranscript
+    ? transcriptHtmlFromRenderedElement(renderedTranscript)
+    : fallbackTranscriptHtml(session);
+  downloadTextFile(
+    exportFilename(session, metadata.repo, 'html'),
+    printableHtml(session, metadata, transcriptHtml),
+    'text/html;charset=utf-8'
+  );
+}
+
+export async function exportPdf(
+  session: Session,
+  metadata: ExportMetadata,
+  renderedTranscript?: HTMLElement | null
+) {
   const popup = window.open('', '_blank', 'width=980,height=760');
   if (!popup) {
     throw new Error('Le navigateur a bloqué la fenêtre d’export PDF.');
@@ -54,10 +84,16 @@ export function exportPdf(session: Session, metadata: ExportMetadata, renderedTr
   popup.document.write(printableHtml(session, metadata, transcriptHtml));
   popup.document.close();
   popup.focus();
-  popup.setTimeout(() => popup.print(), 650);
+  await waitForPrintReady(popup);
+  popup.focus();
+  popup.print();
 }
 
-export function exportFilename(session: Session, repo: string | null, extension: 'md' | 'pdf'): string {
+export function exportFilename(
+  session: Session,
+  repo: string | null,
+  extension: 'md' | 'pdf' | 'html'
+): string {
   const base = [repo, session.title || 'conversation']
     .filter(Boolean)
     .join('-')
@@ -96,8 +132,12 @@ function formatToolCalls(message: Message): string {
   return calls.map((call) => `${call.name} (${call.status})`).join(', ');
 }
 
-function downloadTextFile(filename: string, content: string) {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+function downloadTextFile(
+  filename: string,
+  content: string,
+  mimeType = 'text/markdown;charset=utf-8'
+) {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -124,6 +164,8 @@ function fallbackTranscriptHtml(session: Session): string {
 
 function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtml: string): string {
   const messages = exportableMessages(session);
+  const toc = collectPrintToc(messages);
+  const sourceGroups = collectSessionSourceGroups(messages);
   return `<!doctype html>
 <html lang="fr">
 <head>
@@ -146,7 +188,8 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
       line-height: 1.5;
     }
     body > header,
-    body > main {
+    body > main,
+    .print-toc {
       margin: 0 auto;
       max-width: 980px;
       padding: 0 28px;
@@ -175,9 +218,55 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
     p {
       margin: 0 0 10px;
     }
+    .print-cover {
+      background: linear-gradient(135deg, #eef2ff, #f8fafc);
+      border: 1px solid #dbe4ff;
+      border-radius: 14px;
+      margin-top: 28px;
+      padding: 20px;
+    }
+    .print-kicker {
+      color: #4f46e5;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
     .meta {
       color: #4b5563;
       font-size: 12px;
+    }
+    .print-toc {
+      break-after: page;
+      padding-bottom: 18px;
+    }
+    .print-toc h2 {
+      color: #111827;
+      font-size: 16px;
+      margin: 18px 0 8px;
+    }
+    .print-toc ol {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      list-style: none;
+      margin: 0;
+      padding: 8px 12px;
+    }
+    .print-toc li {
+      border-bottom: 1px solid #eef2f7;
+      color: #334155;
+      font-size: 11px;
+      padding: 5px 0;
+    }
+    .print-toc li:last-child {
+      border-bottom: 0;
+    }
+    .print-toc .toc-level-3 {
+      padding-left: 14px;
+    }
+    .print-toc .toc-level-4 {
+      padding-left: 28px;
     }
     .print-help {
       margin: 18px auto 0;
@@ -208,6 +297,7 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
       border: 1px solid #e5e7eb;
       border-radius: 6px;
       color: #111827;
+      line-height: 1.45;
       overflow-wrap: anywhere;
       padding: 10px;
       white-space: pre-wrap;
@@ -276,17 +366,58 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
     .print-message-assistant {
       border-left-color: #10b981;
     }
+    .print-message h2,
+    .print-message h3,
+    .print-message h4 {
+      break-after: avoid;
+      page-break-after: avoid;
+    }
     .print-tools {
       color: #4b5563;
       font-size: 12px;
       font-style: italic;
       margin: 0 0 8px;
     }
-    .print-code-block,
     .print-diagram,
     [data-testid="mermaid-block"] {
       break-inside: avoid;
       page-break-inside: avoid;
+    }
+    .print-code-block {
+      break-inside: auto;
+      page-break-inside: auto;
+    }
+    .print-code {
+      padding: 0;
+    }
+    .print-code-line {
+      display: grid;
+      grid-template-columns: 3.5ch minmax(0, 1fr);
+      min-height: 1.35em;
+    }
+    .print-code-line-number {
+      background: #e2e8f0;
+      border-right: 1px solid #cbd5e1;
+      color: #64748b;
+      padding: 0 6px 0 0;
+      text-align: right;
+      user-select: none;
+    }
+    .print-code-line-text {
+      min-width: 0;
+      padding-left: 10px;
+      white-space: pre-wrap;
+    }
+    .print-code-keyword {
+      color: #7c3aed;
+      font-weight: 700;
+    }
+    .print-code-type {
+      color: #0369a1;
+      font-weight: 600;
+    }
+    .print-code-literal {
+      color: #047857;
     }
     .print-diagram,
     [data-testid="mermaid-block"] {
@@ -326,12 +457,43 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
       padding: 0 3px;
     }
+    .print-related-sources {
+      break-before: page;
+      margin: 24px auto 0;
+      max-width: 980px;
+      padding: 0 28px 28px;
+    }
+    .print-related-sources h2 {
+      color: #111827;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    .print-related-sources ul {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      list-style: none;
+      margin: 0;
+      padding: 8px 12px;
+    }
+    .print-related-sources li {
+      border-bottom: 1px solid #eef2f7;
+      color: #334155;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 10px;
+      overflow-wrap: anywhere;
+      padding: 6px 0;
+    }
+    .print-related-sources li:last-child {
+      border-bottom: 0;
+    }
     @page {
       margin: 18mm;
     }
     @media print {
       body > header,
-      body > main {
+      body > main,
+      .print-toc,
+      .print-related-sources {
         max-width: none;
         padding: 0;
       }
@@ -346,18 +508,58 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
 </head>
 <body>
   <header>
-    <h1>${escapeHtml(session.title || 'Conversation GitNexus')}</h1>
-    <div class="meta">Projet : ${escapeHtml(metadata.repo ?? 'non sélectionné')}</div>
-    <div class="meta">LLM : ${escapeHtml(formatLlmLabel(metadata.llm))}</div>
-    <div class="meta">Conversation créée : ${escapeHtml(formatExportTimestamp(session.createdAt) || 'inconnue')}</div>
-    <div class="meta">Dernière activité : ${escapeHtml(formatExportTimestamp(session.updatedAt) || 'inconnue')}</div>
-    <div class="meta">Messages exportés : ${messages.length}</div>
-    <div class="meta">Export : ${escapeHtml(formatExportTimestamp(Date.now()))}</div>
+    <div class="print-cover">
+      <div class="print-kicker">GitNexus Chat</div>
+      <h1>${escapeHtml(session.title || 'Conversation GitNexus')}</h1>
+      <div class="meta">Projet : ${escapeHtml(metadata.repo ?? 'non sélectionné')}</div>
+      <div class="meta">LLM : ${escapeHtml(formatLlmLabel(metadata.llm))}</div>
+      <div class="meta">Conversation créée : ${escapeHtml(formatExportTimestamp(session.createdAt) || 'inconnue')}</div>
+      <div class="meta">Dernière activité : ${escapeHtml(formatExportTimestamp(session.updatedAt) || 'inconnue')}</div>
+      <div class="meta">Messages exportés : ${messages.length}</div>
+      <div class="meta">Export : ${escapeHtml(formatExportTimestamp(Date.now()))}</div>
+    </div>
   </header>
+  ${toc.length > 0 ? printTocHtml(toc) : ''}
   <div class="print-help">Aperçu PDF GitNexus. Utilise "Enregistrer au format PDF" dans la fenêtre d'impression.</div>
   <main class="chat-transcript">${transcriptHtml}</main>
+  ${sourceGroups.length > 0 ? printRelatedSourcesHtml(sourceGroups) : ''}
 </body>
 </html>`;
+}
+
+async function waitForPrintReady(popup: Window) {
+  await popupDelay(popup, 350);
+  await Promise.race([waitForPrintableAssets(popup.document), popupDelay(popup, 2800)]);
+}
+
+function popupDelay(popup: Window, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    popup.setTimeout(() => resolve(), ms);
+  });
+}
+
+async function waitForPrintableAssets(document: Document) {
+  const fontSet = document.fonts as FontFaceSet | undefined;
+  try {
+    await fontSet?.ready;
+  } catch {
+    // Printing still works with fallback fonts.
+  }
+
+  const imageElements = Array.from(document.images ?? []);
+  await Promise.all(
+    imageElements
+      .filter((image) => !image.complete)
+      .map(
+        (image) =>
+          new Promise<void>((resolve) => {
+            const done = () => resolve();
+            image.addEventListener('load', done, { once: true });
+            image.addEventListener('error', done, { once: true });
+            void image.decode?.().then(done, done);
+          })
+      )
+  );
 }
 
 function exportableMessages(session: Session): Message[] {
@@ -486,12 +688,183 @@ function fallbackTextHtml(text: string): string {
 
 function fallbackCodeHtml(code: string, language: string | undefined): string {
   const isMermaid = language === 'mermaid' || looksLikeMermaid(code);
-  const classes = isMermaid ? 'print-diagram print-diagram-mermaid' : 'print-code-block';
-  const label = isMermaid ? 'Diagramme Mermaid (source)' : `Code${language ? ` ${language}` : ''}`;
-  return `<figure class="${classes}">
-    <figcaption>${escapeHtml(label)}</figcaption>
+  if (isMermaid) {
+    return `<figure class="print-diagram print-diagram-mermaid">
+    <figcaption>Diagramme Mermaid (source)</figcaption>
     <pre><code>${escapeHtml(code)}</code></pre>
   </figure>`;
+  }
+
+  const chunks = chunkCodeForPrint(code);
+  const baseLabel = `Code${language ? ` ${language}` : ''}`;
+  return chunks
+    .map((chunk, index) => {
+      const label =
+        chunks.length === 1
+          ? baseLabel
+          : `${baseLabel} · lignes ${index * PRINT_CODE_CHUNK_SIZE + 1}-${index * PRINT_CODE_CHUNK_SIZE + chunk.split('\n').length}`;
+      return `<figure class="print-code-block">
+    <figcaption>${escapeHtml(label)}</figcaption>
+    <pre class="print-code"><code>${printableCodeLinesHtml(chunk, language, index * PRINT_CODE_CHUNK_SIZE + 1)}</code></pre>
+  </figure>`;
+    })
+    .join('\n');
+}
+
+const PRINT_CODE_CHUNK_SIZE = 42;
+const PRINT_CODE_KEYWORDS = new Set([
+  'abstract',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'default',
+  'delegate',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'finally',
+  'for',
+  'foreach',
+  'from',
+  'function',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'interface',
+  'let',
+  'match',
+  'module',
+  'namespace',
+  'new',
+  'private',
+  'protected',
+  'public',
+  'readonly',
+  'return',
+  'sealed',
+  'static',
+  'struct',
+  'switch',
+  'throw',
+  'try',
+  'using',
+  'var',
+  'while',
+]);
+const PRINT_CODE_TYPES = new Set([
+  'bool',
+  'boolean',
+  'char',
+  'decimal',
+  'double',
+  'float',
+  'int',
+  'long',
+  'number',
+  'object',
+  'record',
+  'short',
+  'string',
+  'String',
+  'void',
+]);
+const PRINT_CODE_LITERALS = new Set(['false', 'null', 'None', 'self', 'this', 'true']);
+
+function chunkCodeForPrint(code: string): string[] {
+  const lines = code.split('\n');
+  const chunks: string[] = [];
+  for (let index = 0; index < lines.length; index += PRINT_CODE_CHUNK_SIZE) {
+    chunks.push(lines.slice(index, index + PRINT_CODE_CHUNK_SIZE).join('\n'));
+  }
+  return chunks.length > 0 ? chunks : [''];
+}
+
+function printableCodeLinesHtml(code: string, language: string | undefined, firstLine: number): string {
+  return code
+    .split('\n')
+    .map((line, index) => {
+      const lineNumber = firstLine + index;
+      return `<span class="print-code-line"><span class="print-code-line-number">${lineNumber}</span><span class="print-code-line-text">${highlightPrintableCodeLine(line, language)}</span></span>`;
+    })
+    .join('');
+}
+
+function highlightPrintableCodeLine(line: string, language: string | undefined): string {
+  const escaped = escapeHtml(line);
+  if (!language || language === 'text' || language === 'plain') return escaped;
+  return escaped.replace(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (token) => {
+    if (PRINT_CODE_KEYWORDS.has(token)) return `<span class="print-code-keyword">${token}</span>`;
+    if (PRINT_CODE_TYPES.has(token)) return `<span class="print-code-type">${token}</span>`;
+    if (PRINT_CODE_LITERALS.has(token)) return `<span class="print-code-literal">${token}</span>`;
+    return token;
+  });
+}
+
+interface PrintTocEntry {
+  level: number;
+  title: string;
+}
+
+function collectPrintToc(messages: Message[]): PrintTocEntry[] {
+  const entries: PrintTocEntry[] = [];
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    for (const line of message.content.split('\n')) {
+      const match = /^(#{2,4})\s+(.+)$/.exec(line.trim());
+      if (!match) continue;
+      const title = stripInlineMarkdown(match[2]).replace(/\s+\{#[^}]+}\s*$/, '').trim();
+      if (title) entries.push({ level: match[1].length, title });
+      if (entries.length >= 40) return entries;
+    }
+  }
+  return entries;
+}
+
+function printTocHtml(entries: PrintTocEntry[]): string {
+  return `<section class="print-toc" aria-label="Sommaire">
+    <h2>Sommaire</h2>
+    <ol>
+      ${entries
+        .map(
+          (entry) =>
+            `<li class="toc-level-${entry.level}">${escapeHtml(entry.title)}</li>`
+        )
+        .join('\n')}
+    </ol>
+  </section>`;
+}
+
+function collectSessionSourceGroups(messages: Message[]): SourceReferenceGroup[] {
+  return groupSourceReferences(
+    messages.flatMap((message) =>
+      message.role === 'assistant' ? extractSourceReferences(message.content) : []
+    )
+  );
+}
+
+function printRelatedSourcesHtml(groups: SourceReferenceGroup[]): string {
+  return `<section class="print-related-sources" aria-label="Fichiers sources cités">
+    <h2>Fichiers sources cités</h2>
+    <ul>
+      ${groups.map((group) => `<li>${escapeHtml(sourceReferenceSummary(group))}</li>`).join('\n')}
+    </ul>
+  </section>`;
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 }
 
 function sanitizeExportText(value: string): string {

@@ -104,14 +104,14 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
 
   if (!session || session.messages.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center px-6 py-8">
-        <div className="w-full max-w-3xl">
+      <div className="welcome-panel flex h-full items-center justify-center px-6 py-8">
+        <div className="w-full max-w-5xl">
           <div className="mb-7 flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300">
+            <div className="brand-tile flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border">
               <MessageSquareText size={22} aria-hidden="true" />
             </div>
             <div className="min-w-0 text-left">
-              <h2 className="text-xl font-medium text-neutral-100">GitNexus Chat</h2>
+              <h2 className="text-xl font-medium text-[var(--text-primary)]">GitNexus Chat</h2>
               <p className="mt-1 text-sm text-neutral-500">
                 {selectedRepo
                   ? `Contexte actif : ${repoLabel}`
@@ -132,7 +132,7 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
                   type="button"
                   onClick={() => setInputDraft(prompt)}
                   aria-label={`Suggestion : ${prompt}`}
-                  className="group flex min-h-24 items-start gap-3 rounded-lg border border-neutral-800 bg-neutral-900/40 p-4 text-left transition hover:border-neutral-700 hover:bg-neutral-900"
+                  className="suggestion-card group flex min-h-24 items-start gap-3 rounded-lg border p-4 text-left transition"
                 >
                   <Icon size={18} className="mt-0.5 shrink-0 text-purple-400" aria-hidden="true" />
                   <div className="min-w-0">
@@ -159,7 +159,10 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
       aria-relevant="additions text"
       onScroll={handleScroll}
     >
-      <div id="gitnexus-chat-export-source" className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5">
+      <div
+        id="gitnexus-chat-export-source"
+        className="mx-auto flex w-full max-w-[78rem] flex-col gap-4 px-4 py-5 sm:px-5 lg:px-7"
+      >
         {session.messages.map((m, i) => (
           <ChatMessage
             key={m.id}
@@ -167,6 +170,8 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
             llm={llm}
             onRegenerate={regenerate}
             onOpenSourceReference={onOpenSourceReference}
+            repo={selectedRepo}
+            repoName={selectedRepoName}
             canRegenerate={
               m.role === 'assistant' &&
               i === session.messages.length - 1 &&
@@ -176,7 +181,7 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
           />
         ))}
         {isStreaming && (
-          <div className="flex gap-3 rounded-lg border border-neutral-900 bg-neutral-900/30 px-4 py-4">
+          <div className="streaming-card flex gap-3 rounded-lg border px-4 py-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-600/15 text-emerald-300">
               <div className="h-2 w-2 animate-pulse rounded-full bg-current" />
             </div>
@@ -191,7 +196,7 @@ export function ChatMessages({ llm = null, onOpenSourceReference }: Props) {
             scrollToBottom('smooth');
             setIsNearBottom(true);
           }}
-          className="sticky bottom-4 z-10 ml-auto mr-6 mb-4 flex h-9 w-9 items-center justify-center rounded-full border border-neutral-800 bg-neutral-900 text-neutral-300 shadow-lg shadow-black/30 transition hover:border-neutral-700 hover:bg-neutral-800 hover:text-neutral-100"
+          className="control-button sticky bottom-4 z-10 ml-auto mr-6 mb-4 flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition"
           aria-label="Aller au dernier message"
           title="Aller au dernier message"
         >

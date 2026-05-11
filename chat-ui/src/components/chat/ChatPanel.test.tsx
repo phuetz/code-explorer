@@ -181,6 +181,8 @@ describe('ChatPanel', () => {
 
     render(<ChatPanel />);
 
+    expect(screen.getByRole('button', { name: /1 fichier concerné/i })).toBeTruthy();
+
     fireEvent.click(screen.getByRole('button', { name: /src\/App\.tsx:12/ }));
 
     expect(await screen.findByText('const app = true;')).toBeTruthy();

@@ -6,6 +6,7 @@ Intelligence de code basée sur un graphe de connaissances pour agents IA. GitNe
 
 [English version](README.md)
 [Guide d'installation](INSTALLATION.md)
+[Installation Ubuntu](INSTALLATION_UBUNTU.md)
 [Feuille de route de modernisation](MODERNIZATION.md)
 [Plan navigation React sources/graphe](REACT_SOURCE_GRAPH_NAVIGATION.md)
 

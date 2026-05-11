@@ -50,10 +50,10 @@ export function ChatSidebar() {
   };
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-neutral-900 bg-neutral-950">
-      <div className="border-b border-neutral-900 p-3">
+    <aside className="app-sidebar flex h-full w-72 shrink-0 flex-col border-r">
+      <div className="border-b border-[var(--border)] p-3">
         <div className="mb-3 flex items-center gap-2 px-1">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-900 text-neutral-400">
+          <div className="brand-tile flex h-7 w-7 items-center justify-center rounded-md">
             <Library size={14} aria-hidden="true" />
           </div>
           <div className="min-w-0">
@@ -66,12 +66,12 @@ export function ChatSidebar() {
         <button
           type="button"
           onClick={() => createSession()}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-700 hover:bg-neutral-800"
+          className="primary-action flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition"
         >
           <Plus size={14} aria-hidden="true" />
           Nouvelle conversation
         </button>
-        <label className="mt-2 flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1.5 text-xs text-neutral-500 focus-within:border-neutral-700">
+        <label className="field-shell mt-2 flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs">
           <Search size={13} aria-hidden="true" />
           <input
             type="search"
@@ -79,7 +79,7 @@ export function ChatSidebar() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Rechercher..."
             aria-label="Rechercher une conversation"
-            className="min-w-0 flex-1 bg-transparent text-neutral-200 outline-none placeholder:text-neutral-600"
+            className="min-w-0 flex-1 bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)]"
           />
         </label>
       </div>
@@ -110,8 +110,8 @@ export function ChatSidebar() {
                 className={clsx(
                   'group flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm transition',
                   session.id === currentSessionId
-                    ? 'border-neutral-700 bg-neutral-800/80 text-neutral-100'
-                    : 'border-transparent text-neutral-400 hover:border-neutral-900 hover:bg-neutral-900/80'
+                    ? 'session-row session-row-active'
+                    : 'session-row text-neutral-400'
                 )}
               >
                 <MessageSquare size={14} className="mt-0.5 shrink-0 opacity-60" aria-hidden="true" />
@@ -134,7 +134,7 @@ export function ChatSidebar() {
                       }}
                       aria-label="Nouveau titre de conversation"
                       autoFocus
-                      className="block w-full rounded border border-neutral-700 bg-neutral-950 px-1.5 py-0.5 text-xs text-neutral-100 outline-none focus:border-neutral-500"
+                      className="field-shell block w-full rounded border px-1.5 py-0.5 text-xs outline-none"
                     />
                   ) : (
                     <span className="block truncate">{session.title}</span>
@@ -175,7 +175,7 @@ export function ChatSidebar() {
         )}
       </div>
 
-      <div className="border-t border-neutral-900 p-3 text-[11px] text-neutral-600">
+      <div className="border-t border-[var(--border)] p-3 text-[11px] text-neutral-600">
         <div className="font-medium text-neutral-500">GitNexus Chat</div>
         <div className="mt-0.5">Interface web MCP</div>
       </div>

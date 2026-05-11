@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, FileDown, Printer } from 'lucide-react';
+import { Check, Copy, FileCode2, FileDown, Printer } from 'lucide-react';
 import type { LlmConfigState } from '../../hooks/use-llm-config';
 import { useChatStore } from '../../stores/chat-store';
-import { conversationToMarkdown, exportMarkdown, exportPdf } from '../../utils/chat-export';
+import {
+  conversationToMarkdown,
+  exportMarkdown,
+  exportPdf,
+  exportPrintableHtml,
+} from '../../utils/chat-export';
 import { copyTextToClipboard } from '../../utils/clipboard';
 
 interface Props {
@@ -15,6 +20,7 @@ export function ChatExports({ llm }: Props) {
   const selectedRepoName = useChatStore((s) => s.selectedRepoName);
   const hasContent = !!session?.messages.some((m) => m.content.trim());
   const [copied, setCopied] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const copiedResetTimer = useRef<number | null>(null);
   const errorResetTimer = useRef<number | null>(null);
@@ -56,13 +62,26 @@ export function ChatExports({ llm }: Props) {
     exportMarkdown(session, exportMetadata);
   };
 
-  const handlePdf = () => {
+  const handleHtml = () => {
+    if (!session || !hasContent) return;
+    clearExportError();
+    exportPrintableHtml(
+      session,
+      exportMetadata,
+      document.getElementById('gitnexus-chat-export-source')
+    );
+  };
+
+  const handlePdf = async () => {
     if (!session || !hasContent) return;
     try {
       clearExportError();
-      exportPdf(session, exportMetadata, document.getElementById('gitnexus-chat-export-source'));
+      setIsPdfExporting(true);
+      await exportPdf(session, exportMetadata, document.getElementById('gitnexus-chat-export-source'));
     } catch (e) {
       showExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsPdfExporting(false);
     }
   };
 
@@ -91,7 +110,7 @@ export function ChatExports({ llm }: Props) {
         type="button"
         onClick={() => void handleCopyMarkdown()}
         disabled={!hasContent}
-        className="rounded-md border border-neutral-800 bg-neutral-900/60 p-1.5 text-neutral-300 transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+        className="control-button rounded-md border p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
         aria-label={copied ? 'Conversation Markdown copiée' : 'Copier la conversation en Markdown'}
         title={copied ? 'Copié' : 'Copier en Markdown'}
       >
@@ -105,7 +124,7 @@ export function ChatExports({ llm }: Props) {
         type="button"
         onClick={handleMarkdown}
         disabled={!hasContent}
-        className="rounded-md border border-neutral-800 bg-neutral-900/60 p-1.5 text-neutral-300 transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+        className="control-button rounded-md border p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
         aria-label="Exporter la conversation en Markdown"
         title="Exporter en Markdown"
       >
@@ -113,11 +132,21 @@ export function ChatExports({ llm }: Props) {
       </button>
       <button
         type="button"
-        onClick={handlePdf}
+        onClick={handleHtml}
         disabled={!hasContent}
-        className="rounded-md border border-neutral-800 bg-neutral-900/60 p-1.5 text-neutral-300 transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label="Exporter la conversation en PDF"
-        title="Exporter en PDF"
+        className="control-button rounded-md border p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label="Exporter la conversation en HTML imprimable"
+        title="Exporter en HTML imprimable"
+      >
+        <FileCode2 className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      <button
+        type="button"
+        onClick={() => void handlePdf()}
+        disabled={!hasContent || isPdfExporting}
+        className="control-button rounded-md border p-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={isPdfExporting ? 'Préparation du PDF' : 'Exporter la conversation en PDF'}
+        title={isPdfExporting ? 'Préparation du PDF' : 'Exporter en PDF'}
       >
         <Printer className="h-3.5 w-3.5" aria-hidden />
       </button>
@@ -127,10 +156,12 @@ export function ChatExports({ llm }: Props) {
         className={
           exportError
             ? 'absolute right-0 top-[calc(100%+0.35rem)] z-20 max-w-64 rounded-md border border-red-900/70 bg-red-950/95 px-2 py-1 text-xs text-red-100 shadow-lg'
+            : isPdfExporting
+              ? 'absolute right-0 top-[calc(100%+0.35rem)] z-20 max-w-64 rounded-md border border-sky-900/40 bg-sky-950/90 px-2 py-1 text-xs text-sky-100 shadow-lg'
             : 'sr-only'
         }
       >
-        {exportError ?? ''}
+        {exportError ?? (isPdfExporting ? 'Préparation du PDF…' : '')}
       </span>
     </div>
   );

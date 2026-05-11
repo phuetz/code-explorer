@@ -4,6 +4,8 @@ Derniere mise a jour: 2026-05-07
 
 Ce guide donne le chemin le plus simple pour installer, configurer et lancer GitNexus en local. Les exemples Windows utilisent PowerShell depuis la racine du depot.
 
+Pour une installation sur une machine Ubuntu neuve, voir aussi [INSTALLATION_UBUNTU.md](INSTALLATION_UBUNTU.md).
+
 ## 1. Prerequis
 
 | Outil | Version conseillee | Usage |

@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Braces,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  Database,
+  GitFork,
+  Download,
   FileCode2,
   Folder,
   GitBranch,
   Loader2,
+  ListFilter,
   MessageSquarePlus,
   Search,
   X,
@@ -19,6 +28,21 @@ import {
   type SymbolSearchResult,
 } from '../../api/mcp-client';
 import { useChatStore } from '../../stores/chat-store';
+import { copyTextToClipboard } from '../../utils/clipboard';
+import type { AnalysisSnapshot } from '../../types/chat';
+import { buildAnalysisSnapshot, snapshotSourceGroups } from '../../utils/analysis-snapshots';
+import type { SourceReference, SourceReferenceGroup } from '../../utils/source-references';
+import {
+  downloadTextFile,
+  relatedSourcesFilename,
+  relatedSourcesMarkdown,
+  sourceReferenceSummary,
+} from '../../utils/related-sources-export';
+import type { SourceCodeHighlightState } from './SourceCodeHighlighter';
+
+const SourceCodeHighlighter = lazy(() =>
+  import('./SourceCodeHighlighter').then((m) => ({ default: m.SourceCodeHighlighter }))
+);
 
 type WorkspaceTab = 'sources' | 'graph';
 
@@ -42,6 +66,8 @@ interface WorkspacePanelProps {
   initialSourceTarget?: SourceTarget | null;
   initialGraphTarget?: GraphTarget | null;
   initialTab?: WorkspaceTab;
+  highlightedSourcePaths?: string[];
+  relatedSourceGroups?: SourceReferenceGroup[];
 }
 
 export function WorkspacePanel({
@@ -49,16 +75,63 @@ export function WorkspacePanel({
   initialSourceTarget = null,
   initialGraphTarget = null,
   initialTab,
+  highlightedSourcePaths = [],
+  relatedSourceGroups = [],
 }: WorkspacePanelProps) {
+  const currentSession = useChatStore((s) => s.getCurrentSession());
+  const saveAnalysisSnapshot = useChatStore((s) => s.saveAnalysisSnapshot);
+  const deleteAnalysisSnapshot = useChatStore((s) => s.deleteAnalysisSnapshot);
   const selectedRepo = useChatStore((s) => s.selectedRepo);
   const selectedRepoName = useChatStore((s) => s.selectedRepoName);
   const [tab, setTab] = useState<WorkspaceTab>(initialTab ?? (initialGraphTarget ? 'graph' : 'sources'));
   const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(initialSourceTarget);
+  const [graphTarget, setGraphTarget] = useState<GraphTarget | null>(initialGraphTarget);
+  const [activeAnalysisSnapshot, setActiveAnalysisSnapshot] = useState<AnalysisSnapshot | null>(null);
+  const effectiveRelatedSourceGroups = useMemo(
+    () => activeAnalysisSnapshot ? snapshotSourceGroups(activeAnalysisSnapshot) : relatedSourceGroups,
+    [activeAnalysisSnapshot, relatedSourceGroups]
+  );
+  const highlightedSourcePathSet = useMemo(
+    () => new Set([...highlightedSourcePaths, ...effectiveRelatedSourceGroups.map((group) => group.path)].map((path) => normalizePath(path))),
+    [effectiveRelatedSourceGroups, highlightedSourcePaths]
+  );
 
   const openSource = useCallback((target: SourceTarget) => {
     setSourceTarget(target);
     setTab('sources');
   }, []);
+
+  const openGraph = useCallback((target: GraphTarget) => {
+    setGraphTarget(target);
+    setTab('graph');
+  }, []);
+
+  const saveCurrentAnalysis = useCallback(() => {
+    if (!currentSession || effectiveRelatedSourceGroups.length === 0) return;
+    saveAnalysisSnapshot(
+      currentSession.id,
+      buildAnalysisSnapshot({
+        session: currentSession,
+        repo: selectedRepo,
+        repoName: selectedRepoName,
+        sourceGroups: effectiveRelatedSourceGroups,
+      })
+    );
+  }, [currentSession, effectiveRelatedSourceGroups, saveAnalysisSnapshot, selectedRepo, selectedRepoName]);
+
+  const openAnalysisSnapshot = useCallback((snapshot: AnalysisSnapshot) => {
+    setActiveAnalysisSnapshot(snapshot);
+    setTab('sources');
+  }, []);
+
+  const deleteAnalysis = useCallback(
+    (snapshotId: string) => {
+      if (!currentSession) return;
+      deleteAnalysisSnapshot(currentSession.id, snapshotId);
+      setActiveAnalysisSnapshot((snapshot) => snapshot?.id === snapshotId ? null : snapshot);
+    },
+    [currentSession, deleteAnalysisSnapshot]
+  );
 
   return (
     <aside className="flex h-full w-[min(520px,42vw)] min-w-[360px] flex-col border-l border-neutral-900 bg-neutral-950">
@@ -95,9 +168,22 @@ export function WorkspacePanel({
           Selectionne un projet indexe pour naviguer dans ses sources et son graphe.
         </div>
       ) : tab === 'sources' ? (
-        <SourceExplorer repo={selectedRepo} target={sourceTarget} />
+        <SourceExplorer
+          repo={selectedRepo}
+          repoLabel={selectedRepoName ?? selectedRepo}
+          target={sourceTarget}
+          relatedSourceGroups={effectiveRelatedSourceGroups}
+          analysisSnapshots={currentSession?.analyses ?? []}
+          activeAnalysisSnapshot={activeAnalysisSnapshot}
+          onSaveAnalysis={saveCurrentAnalysis}
+          onOpenAnalysis={openAnalysisSnapshot}
+          onClearAnalysis={() => setActiveAnalysisSnapshot(null)}
+          onDeleteAnalysis={deleteAnalysis}
+          highlightedSourcePaths={highlightedSourcePathSet}
+          onOpenGraph={openGraph}
+        />
       ) : (
-        <GraphNavigator repo={selectedRepo} onOpenSource={openSource} initialTarget={initialGraphTarget} />
+        <GraphNavigator repo={selectedRepo} onOpenSource={openSource} initialTarget={graphTarget} />
       )}
     </aside>
   );
@@ -130,7 +216,33 @@ function WorkspaceTabButton({
   );
 }
 
-function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget | null }) {
+function SourceExplorer({
+  repo,
+  repoLabel,
+  target,
+  relatedSourceGroups,
+  analysisSnapshots,
+  activeAnalysisSnapshot,
+  highlightedSourcePaths,
+  onSaveAnalysis,
+  onOpenAnalysis,
+  onClearAnalysis,
+  onDeleteAnalysis,
+  onOpenGraph,
+}: {
+  repo: string;
+  repoLabel: string;
+  target: SourceTarget | null;
+  relatedSourceGroups: SourceReferenceGroup[];
+  analysisSnapshots: AnalysisSnapshot[];
+  activeAnalysisSnapshot: AnalysisSnapshot | null;
+  highlightedSourcePaths: ReadonlySet<string>;
+  onSaveAnalysis: () => void;
+  onOpenAnalysis: (snapshot: AnalysisSnapshot) => void;
+  onClearAnalysis: () => void;
+  onDeleteAnalysis: (snapshotId: string) => void;
+  onOpenGraph: (target: GraphTarget) => void;
+}) {
   const setInputDraft = useChatStore((s) => s.setInputDraft);
   const [treeState, setTreeState] = useState<{
     repo: string | null;
@@ -138,6 +250,17 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
     error: string | null;
   }>({ repo: null, files: [], error: null });
   const [filter, setFilter] = useState('');
+  const [showRelatedOnly, setShowRelatedOnly] = useState(false);
+  const [manuallyExpandedPaths, setManuallyExpandedPaths] = useState<Set<string>>(new Set());
+  const [manuallyCollapsedPaths, setManuallyCollapsedPaths] = useState<Set<string>>(new Set());
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [outlineFocus, setOutlineFocus] = useState<{ path: string; lineNumber: number } | null>(null);
+  const [pathCopied, setPathCopied] = useState(false);
+  const [graphLookup, setGraphLookup] = useState<{ loading: boolean; error: string | null }>({
+    loading: false,
+    error: null,
+  });
   const [manualTarget, setManualTarget] = useState<SourceTarget | null>(null);
   const activeTarget = manualTarget ?? target;
   const activePath = activeTarget?.path ?? null;
@@ -205,15 +328,66 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
   ]);
 
   const openFile = useCallback((path: string, startLine?: number, endLine?: number) => {
+    const parents = parentFolderSet(path);
+    setManuallyCollapsedPaths((current) => removeSetValues(current, parents));
+    setManuallyExpandedPaths((current) => mergeSets(current, parents));
     setManualTarget({ path, startLine, endLine });
   }, []);
 
   const treeLoading = treeState.repo !== repo;
   const treeError = treeLoading ? null : treeState.error;
+  const relatedFolderCounts = useMemo(
+    () => buildRelatedFolderCounts(relatedSourceGroups),
+    [relatedSourceGroups]
+  );
+  const autoExpandedPaths = useMemo(
+    () => buildAutoExpandedFolders(treeState.files, relatedSourceGroups, activePath, true),
+    [activePath, relatedSourceGroups, treeState.files]
+  );
+  const expandedPaths = useMemo(
+    () => expandedFolderSet(autoExpandedPaths, manuallyExpandedPaths, manuallyCollapsedPaths),
+    [autoExpandedPaths, manuallyCollapsedPaths, manuallyExpandedPaths]
+  );
+  const toggleFolder = useCallback((path: string) => {
+    const key = normalizePath(path);
+    if (expandedPaths.has(key)) {
+      setManuallyExpandedPaths((current) => removeSetValues(current, new Set([key])));
+      setManuallyCollapsedPaths((current) => mergeSets(current, new Set([key])));
+    } else {
+      setManuallyCollapsedPaths((current) => removeSetValues(current, new Set([key])));
+      setManuallyExpandedPaths((current) => mergeSets(current, new Set([key])));
+    }
+  }, [expandedPaths]);
   const filteredTree = useMemo(() => filterTree(treeState.files, filter), [treeState.files, filter]);
+  const displayedTree = useMemo(
+    () =>
+      showRelatedOnly
+        ? filterTreeToRelated(filteredTree, highlightedSourcePaths)
+        : sortTreeByRelated(filteredTree, highlightedSourcePaths, relatedFolderCounts),
+    [filteredTree, highlightedSourcePaths, relatedFolderCounts, showRelatedOnly]
+  );
   const sourceLoading = !!activeTargetKey && sourceState.key !== activeTargetKey;
   const source = sourceLoading ? null : sourceState.source;
   const sourceError = sourceLoading ? null : sourceState.error;
+  const sourceRelatedGroup = useMemo(
+    () => relatedSourceGroups.find((group) => normalizePath(group.path) === normalizePath(source?.path)),
+    [relatedSourceGroups, source?.path]
+  );
+  const sourceMatches = useMemo(() => findSourceMatches(source, sourceQuery), [source, sourceQuery]);
+  const sourceOutline = useMemo(() => extractSourceOutline(source), [source]);
+  const safeActiveMatchIndex =
+    sourceMatches.length === 0 ? 0 : Math.min(activeMatchIndex, sourceMatches.length - 1);
+  const activeMatchLine = sourceMatches[safeActiveMatchIndex]?.lineNumber ?? null;
+  const activeOutlineLine = source && outlineFocus?.path === source.path ? outlineFocus.lineNumber : null;
+  const highlightState = useMemo<SourceCodeHighlightState>(
+    () => ({
+      searchLines: new Set(sourceMatches.map((match) => match.lineNumber)),
+      activeLine: activeMatchLine ?? activeOutlineLine,
+      targetStartLine: activeStartLine,
+      targetEndLine: activeEndLine,
+    }),
+    [activeEndLine, activeMatchLine, activeOutlineLine, activeStartLine, sourceMatches]
+  );
 
   const askAboutSource = () => {
     if (!source) return;
@@ -222,6 +396,51 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
         ? ` lignes ${source.startLine}-${source.endLine}`
         : '';
     setInputDraft(`Explique le fichier ${source.path}${range} et ses liens avec le graphe GitNexus.`);
+  };
+
+  const copySourcePath = async () => {
+    if (!source) return;
+    const ok = await copyTextToClipboard(source.path);
+    if (!ok) return;
+    setPathCopied(true);
+    window.setTimeout(() => setPathCopied(false), 1200);
+  };
+
+  const openGraphForSource = async () => {
+    if (!source || graphLookup.loading) return;
+    setGraphLookup({ loading: true, error: null });
+    try {
+      const symbols = await mcpClient.symbols(repo, symbolQueryFromPath(source.path), 25);
+      const symbol = bestSymbolForSource(symbols, source);
+      if (!symbol) {
+        setGraphLookup({ loading: false, error: 'Aucun symbole du graphe trouvé pour ce fichier.' });
+        return;
+      }
+      setGraphLookup({ loading: false, error: null });
+      onOpenGraph({
+        nodeId: symbol.nodeId,
+        name: symbol.name,
+        label: symbol.label,
+        filePath: symbol.filePath,
+        startLine: symbol.startLine,
+        endLine: symbol.endLine,
+      });
+    } catch (err) {
+      setGraphLookup({
+        loading: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const goToPreviousMatch = () => {
+    if (sourceMatches.length === 0) return;
+    setActiveMatchIndex((index) => (index + sourceMatches.length - 1) % sourceMatches.length);
+  };
+
+  const goToNextMatch = () => {
+    if (sourceMatches.length === 0) return;
+    setActiveMatchIndex((index) => (index + 1) % sourceMatches.length);
   };
 
   return (
@@ -239,14 +458,41 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)]">
         <div className="min-h-0 overflow-auto border-r border-neutral-900 p-2 text-xs">
+          <AnalysisSnapshotsPanel
+            snapshots={analysisSnapshots}
+            activeSnapshot={activeAnalysisSnapshot}
+            canSave={relatedSourceGroups.length > 0}
+            onSave={onSaveAnalysis}
+            onOpen={onOpenAnalysis}
+            onClear={onClearAnalysis}
+            onDelete={onDeleteAnalysis}
+          />
+          {relatedSourceGroups.length > 0 && (
+            <ExplorerRelatedSourcesPanel
+              repo={repo}
+              repoLabel={repoLabel}
+              groups={relatedSourceGroups}
+              relatedOnly={showRelatedOnly}
+              onToggleRelatedOnly={() => setShowRelatedOnly((value) => !value)}
+              onOpenReference={(reference) => openFile(reference.path, reference.startLine, reference.endLine)}
+            />
+          )}
           {treeLoading ? (
             <LoadingLine label="Chargement des sources..." />
           ) : treeError ? (
             <ErrorText message={treeError} />
-          ) : filteredTree.length === 0 ? (
+          ) : displayedTree.length === 0 ? (
             <div className="p-3 text-neutral-600">Aucun fichier.</div>
           ) : (
-            <FileTree nodes={filteredTree} onOpenFile={(path) => void openFile(path)} />
+            <FileTree
+              nodes={displayedTree}
+              activePath={activePath}
+              expandedPaths={expandedPaths}
+              relatedFolderCounts={relatedFolderCounts}
+              highlightedSourcePaths={highlightedSourcePaths}
+              onToggleFolder={toggleFolder}
+              onOpenFile={(path) => void openFile(path)}
+            />
           )}
         </div>
         <div className="min-h-0 overflow-hidden">
@@ -260,22 +506,111 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
             </div>
           ) : source ? (
             <div className="flex h-full flex-col">
-              <div className="flex min-h-10 items-center gap-2 border-b border-neutral-900 px-3 text-xs">
-                <FileCode2 className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
-                <span className="min-w-0 flex-1 truncate font-mono text-neutral-200">{source.path}</span>
-                <span className="shrink-0 text-neutral-600">
-                  {source.totalLines} lignes{source.language ? ` - ${source.language}` : ''}
-                </span>
-                <button
-                  type="button"
-                  onClick={askAboutSource}
-                  className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300 hover:bg-neutral-900"
-                  title="Envoyer ce contexte au chat"
-                >
-                  <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
-                </button>
+              <div className="border-b border-neutral-900 px-3 py-2 text-xs">
+                <div className="flex min-h-8 items-center gap-2">
+                  <FileCode2 className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-mono text-neutral-200">{source.path}</span>
+                  {sourceRelatedGroup && (
+                    <span className="source-related-badge shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                      Fichier concerné
+                    </span>
+                  )}
+                  <span className="shrink-0 text-neutral-600">
+                    {source.totalLines} lignes{source.language ? ` - ${source.language}` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void copySourcePath()}
+                    className="rounded-md border border-neutral-800 p-1.5 text-neutral-300 hover:bg-neutral-900"
+                    aria-label="Copier le chemin du fichier"
+                    title={pathCopied ? 'Chemin copié' : 'Copier le chemin'}
+                  >
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openGraphForSource()}
+                    disabled={graphLookup.loading}
+                    className="rounded-md border border-neutral-800 p-1.5 text-neutral-300 hover:bg-neutral-900 disabled:cursor-wait disabled:opacity-60"
+                    aria-label="Ouvrir le fichier dans le graphe"
+                    title="Ouvrir dans le graphe"
+                  >
+                    {graphLookup.loading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <GitBranch className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={askAboutSource}
+                    className="rounded-md border border-neutral-800 p-1.5 text-neutral-300 hover:bg-neutral-900"
+                    aria-label="Envoyer ce contexte au chat"
+                    title="Envoyer ce contexte au chat"
+                  >
+                    <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900/70 px-2 py-1.5 text-neutral-400">
+                    <Search className="h-3.5 w-3.5" aria-hidden />
+                    <input
+                      value={sourceQuery}
+                      onChange={(event) => {
+                        setSourceQuery(event.target.value);
+                        setActiveMatchIndex(0);
+                      }}
+                      placeholder="Rechercher dans ce fichier..."
+                      className="min-w-0 flex-1 bg-transparent text-neutral-100 outline-none placeholder:text-neutral-600"
+                    />
+                  </label>
+                  <span className="w-14 shrink-0 text-center tabular-nums text-neutral-500">
+                    {sourceQuery.trim()
+                      ? `${sourceMatches.length === 0 ? 0 : safeActiveMatchIndex + 1} / ${sourceMatches.length}`
+                      : '-'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={goToPreviousMatch}
+                    disabled={sourceMatches.length === 0}
+                    className="rounded-md border border-neutral-800 p-1.5 text-neutral-300 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Occurrence précédente"
+                    title="Occurrence précédente"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToNextMatch}
+                    disabled={sourceMatches.length === 0}
+                    className="rounded-md border border-neutral-800 p-1.5 text-neutral-300 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Occurrence suivante"
+                    title="Occurrence suivante"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+                {graphLookup.error && <div className="mt-2 text-[11px] text-red-300">{graphLookup.error}</div>}
+                {sourceRelatedGroup && (
+                  <SourceRelatedReferences
+                    group={sourceRelatedGroup}
+                    onOpenReference={(reference) => openFile(reference.path, reference.startLine, reference.endLine)}
+                  />
+                )}
+                <SourceGraphInsights repo={repo} source={source} onOpenGraph={onOpenGraph} />
+                {sourceOutline.length > 0 && (
+                  <SourceOutline
+                    items={sourceOutline}
+                    activeLine={activeOutlineLine}
+                    onSelect={(item) => {
+                      setSourceQuery('');
+                      setActiveMatchIndex(0);
+                      setOutlineFocus({ path: source.path, lineNumber: item.lineNumber });
+                    }}
+                  />
+                )}
               </div>
-              <SourceCode source={source} />
+              <SourceCode source={source} highlight={highlightState} />
             </div>
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-neutral-600">
@@ -288,70 +623,587 @@ function SourceExplorer({ repo, target }: { repo: string; target: SourceTarget |
   );
 }
 
-function FileTree({
-  nodes,
-  onOpenFile,
-  depth = 0,
+function AnalysisSnapshotsPanel({
+  snapshots,
+  activeSnapshot,
+  canSave,
+  onSave,
+  onOpen,
+  onClear,
+  onDelete,
 }: {
-  nodes: FileTreeNode[];
-  onOpenFile: (path: string) => void;
-  depth?: number;
+  snapshots: AnalysisSnapshot[];
+  activeSnapshot: AnalysisSnapshot | null;
+  canSave: boolean;
+  onSave: () => void;
+  onOpen: (snapshot: AnalysisSnapshot) => void;
+  onClear: () => void;
+  onDelete: (snapshotId: string) => void;
 }) {
+  const visibleSnapshots = snapshots.slice(0, 4);
   return (
-    <div className="space-y-0.5">
-      {nodes.map((node) => (
-        <div key={node.path}>
+    <section className="analysis-snapshots mb-2 rounded-lg border p-2" aria-label="Analyses sauvegardées">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-primary)]">
+            <Database className="h-3.5 w-3.5 text-[var(--accent)]" aria-hidden />
+            <span className="truncate">Analyses</span>
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)]">
+            {snapshots.length} sauvegarde{snapshots.length > 1 ? 's' : ''}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="icon-button rounded p-1 disabled:cursor-not-allowed disabled:opacity-45"
+          aria-label="Sauvegarder l'analyse courante"
+          title="Sauvegarder l'analyse courante"
+        >
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      {activeSnapshot && (
+        <div className="analysis-active mb-2 rounded-md border px-2 py-1 text-[10px]">
+          <div className="truncate font-medium">Analyse chargée</div>
           <button
             type="button"
-            onClick={() => {
-              if (!node.isDir) onOpenFile(node.path);
-            }}
-            className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left ${
-              node.isDir ? 'text-neutral-500' : 'text-neutral-300 hover:bg-neutral-900 hover:text-neutral-100'
-            }`}
-            style={{ paddingLeft: `${depth * 10 + 6}px` }}
-            disabled={node.isDir}
-            title={node.path}
+            onClick={onClear}
+            className="mt-1 text-[var(--accent-strong)] hover:underline"
           >
-            {node.isDir ? (
-              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-300/70" aria-hidden />
-            ) : (
-              <FileCode2 className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden />
-            )}
-            <span className="truncate">{node.name}</span>
+            Revenir à l'échange courant
           </button>
-          {node.isDir && node.children.length > 0 && (
-            <FileTree nodes={node.children} onOpenFile={onOpenFile} depth={depth + 1} />
-          )}
         </div>
+      )}
+      {visibleSnapshots.length === 0 ? (
+        <div className="text-[10px] text-[var(--text-muted)]">
+          Sauvegarde une analyse pour la rouvrir plus tard.
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {visibleSnapshots.map((snapshot) => (
+            <div
+              key={snapshot.id}
+              className={`analysis-snapshot-row rounded-md border px-2 py-1 ${
+                activeSnapshot?.id === snapshot.id ? 'analysis-snapshot-active' : ''
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onOpen(snapshot)}
+                className="w-full text-left"
+                title={snapshot.title}
+              >
+                <span className="block truncate text-[11px] font-medium text-[var(--text-primary)]">
+                  {snapshot.title}
+                </span>
+                <span className="block text-[10px] text-[var(--text-muted)]">
+                  {snapshot.summary.fileCount} fichier{snapshot.summary.fileCount > 1 ? 's' : ''} ·{' '}
+                  {snapshot.summary.diagramCount} diagramme{snapshot.summary.diagramCount > 1 ? 's' : ''}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(snapshot.id)}
+                className="mt-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--danger)]"
+              >
+                Supprimer
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExplorerRelatedSourcesPanel({
+  repo,
+  repoLabel,
+  groups,
+  relatedOnly,
+  onToggleRelatedOnly,
+  onOpenReference,
+}: {
+  repo: string;
+  repoLabel: string;
+  groups: SourceReferenceGroup[];
+  relatedOnly: boolean;
+  onToggleRelatedOnly: () => void;
+  onOpenReference: (reference: SourceReference) => void;
+}) {
+  const setInputDraft = useChatStore((s) => s.setInputDraft);
+  const [exportState, setExportState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const visibleGroups = groups.slice(0, 10);
+
+  const exportPack = async () => {
+    setExportState('loading');
+    setExportError(null);
+    try {
+      const files = await Promise.all(
+        groups.map(async (group) => {
+          try {
+            return {
+              group,
+              source: await mcpClient.source(repo, group.path),
+              error: null,
+            };
+          } catch (error) {
+            return {
+              group,
+              source: null,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        })
+      );
+      downloadTextFile(
+        relatedSourcesFilename(repoLabel, 'pack-analyse'),
+        relatedSourcesMarkdown({
+          files,
+          repoLabel,
+          createdAt: Date.now(),
+          title: 'Pack d’analyse GitNexus',
+          note: 'Ce pack regroupe les fichiers cités dans la conversation courante pour reprise ou analyse ultérieure.',
+        })
+      );
+      setExportState('done');
+      window.setTimeout(() => setExportState('idle'), 1400);
+    } catch (error) {
+      setExportState('error');
+      setExportError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const askAboutRelatedFiles = () => {
+    const list = groups
+      .slice(0, 16)
+      .map((group) => `- ${sourceReferenceSummary(group)}`)
+      .join('\n');
+    setInputDraft(`Analyse les fichiers concernés par cet échange et explique les liens importants :\n${list}`);
+  };
+
+  const copyRelatedList = async () => {
+    const ok = await copyTextToClipboard(groups.map(sourceReferenceSummary).join('\n'));
+    setCopyState(ok ? 'done' : 'error');
+    window.setTimeout(() => setCopyState('idle'), 1400);
+  };
+
+  return (
+    <section className="related-explorer-panel mb-2 rounded-lg border p-2" aria-label="Fichiers concernés dans l'explorateur">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[11px] font-semibold text-[var(--text-primary)]">
+            Fichiers concernés
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)]">
+            {groups.length} fichier{groups.length > 1 ? 's' : ''} dans l'échange
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button
+            type="button"
+            onClick={() => void copyRelatedList()}
+            className="icon-button rounded p-1"
+            aria-label="Copier la liste des fichiers concernés"
+            title={copyState === 'done' ? 'Liste copiée' : copyState === 'error' ? 'Copie impossible' : 'Copier la liste'}
+          >
+            {copyState === 'done' ? (
+              <Check className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleRelatedOnly}
+            className={`icon-button rounded p-1 ${relatedOnly ? 'control-button-active' : ''}`}
+            aria-label={relatedOnly ? 'Afficher tous les fichiers' : 'Afficher seulement les fichiers concernés'}
+            aria-pressed={relatedOnly}
+            title={relatedOnly ? 'Afficher tous les fichiers' : 'Afficher seulement les fichiers concernés'}
+          >
+            <ListFilter className="h-3.5 w-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={askAboutRelatedFiles}
+            className="icon-button rounded p-1"
+            aria-label="Préparer une question sur les fichiers concernés"
+            title="Question sur ces fichiers"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportPack()}
+            disabled={exportState === 'loading'}
+            className="icon-button rounded p-1 disabled:cursor-wait disabled:opacity-60"
+            aria-label="Exporter le pack d'analyse des fichiers concernés"
+            title={exportState === 'done' ? 'Pack exporté' : "Exporter le pack d'analyse"}
+          >
+            {exportState === 'loading' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Download className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </button>
+        </div>
+      </div>
+      {relatedOnly && (
+        <div className="related-explorer-mode mb-2 rounded-md border px-2 py-1 text-[10px]">
+          Arbre filtré sur les fichiers concernés.
+        </div>
+      )}
+      <div className="space-y-1">
+        {visibleGroups.map((group) => {
+          const first = group.references[0] ?? { path: group.path };
+          return (
+            <button
+              key={group.path}
+              type="button"
+              onClick={() => onOpenReference(first)}
+              className="related-explorer-file w-full rounded-md border px-2 py-1 text-left font-mono"
+              title={sourceReferenceSummary(group)}
+            >
+              <span className="block truncate">{group.path}</span>
+              <span className="block text-[10px] text-[var(--text-muted)]">
+                {group.references.length} réf.
+                {first.startLine ? ` · ligne ${first.startLine}` : ''}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {groups.length > visibleGroups.length && (
+        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+          +{groups.length - visibleGroups.length} autre{groups.length - visibleGroups.length > 1 ? 's' : ''}
+        </div>
+      )}
+      {exportError && <div className="mt-2 text-[10px] text-red-300">{exportError}</div>}
+    </section>
+  );
+}
+
+function SourceRelatedReferences({
+  group,
+  onOpenReference,
+}: {
+  group: SourceReferenceGroup;
+  onOpenReference: (reference: SourceReference) => void;
+}) {
+  const lineReferences = group.references.filter((reference) => reference.startLine).slice(0, 10);
+  if (lineReferences.length === 0) return null;
+  return (
+    <div className="source-related-lines mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-[var(--text-muted)]">Références :</span>
+      {lineReferences.map((reference) => (
+        <button
+          key={`${reference.path}:${reference.startLine ?? ''}:${reference.endLine ?? ''}`}
+          type="button"
+          onClick={() => onOpenReference(reference)}
+          className="source-related-line rounded border px-1.5 py-0.5 font-mono text-[11px]"
+          title={sourceReferenceSummary({ path: group.path, references: [reference] })}
+        >
+          L{reference.startLine}
+          {reference.endLine && reference.endLine !== reference.startLine ? `-${reference.endLine}` : ''}
+        </button>
       ))}
     </div>
   );
 }
 
-function SourceCode({ source }: { source: SourceContent }) {
+function SourceGraphInsights({
+  repo,
+  source,
+  onOpenGraph,
+}: {
+  repo: string;
+  source: SourceContent;
+  onOpenGraph: (target: GraphTarget) => void;
+}) {
+  const [state, setState] = useState<{
+    key: string;
+    loading: boolean;
+    symbols: SymbolSearchResult[];
+    error: string | null;
+  }>({ key: '', loading: false, symbols: [], error: null });
+  const key = `${repo}:${source.path}`;
+  const visibleSymbols = state.key === key ? state.symbols.slice(0, 6) : [];
+  const loading = state.key !== key || state.loading;
+
+  useEffect(() => {
+    let alive = true;
+    void mcpClient
+      .symbols(repo, symbolQueryFromPath(source.path), 30)
+      .then((symbols) => {
+        if (!alive) return;
+        const sourcePath = normalizePath(source.path);
+        setState({
+          key,
+          loading: false,
+          symbols: symbols.filter((symbol) => normalizePath(symbol.filePath) === sourcePath),
+          error: null,
+        });
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setState({
+          key,
+          loading: false,
+          symbols: [],
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [key, repo, source.path]);
+
+  if (!loading && visibleSymbols.length === 0 && !state.error) return null;
+
+  return (
+    <div className="source-graph-insights mt-2 rounded-md border p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-[var(--text-primary)]">
+          <GitFork className="h-3.5 w-3.5 text-[var(--accent)]" aria-hidden />
+          <span>Symboles graphe</span>
+        </div>
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--text-muted)]" aria-hidden />}
+      </div>
+      {state.error ? (
+        <div className="text-[10px] text-red-300">{state.error}</div>
+      ) : visibleSymbols.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {visibleSymbols.map((symbol) => (
+            <button
+              key={symbol.nodeId}
+              type="button"
+              onClick={() =>
+                onOpenGraph({
+                  nodeId: symbol.nodeId,
+                  name: symbol.name,
+                  label: symbol.label,
+                  filePath: symbol.filePath,
+                  startLine: symbol.startLine,
+                  endLine: symbol.endLine,
+                })
+              }
+              className="source-graph-symbol rounded border px-1.5 py-0.5 text-[11px]"
+              title={`Voir le voisinage graphe de ${symbol.name}`}
+            >
+              <span className="font-mono">{symbol.name}</span>
+              <span className="ml-1 text-[var(--text-muted)]">{symbol.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="text-[10px] text-[var(--text-muted)]">Recherche des symboles...</div>
+      )}
+    </div>
+  );
+}
+
+function FileTree({
+  nodes,
+  onOpenFile,
+  onToggleFolder,
+  highlightedSourcePaths,
+  relatedFolderCounts,
+  expandedPaths,
+  activePath = null,
+  depth = 0,
+}: {
+  nodes: FileTreeNode[];
+  onOpenFile: (path: string) => void;
+  onToggleFolder: (path: string) => void;
+  highlightedSourcePaths: ReadonlySet<string>;
+  relatedFolderCounts: ReadonlyMap<string, number>;
+  expandedPaths: ReadonlySet<string>;
+  activePath?: string | null;
+  depth?: number;
+}) {
+  const activePathKey = normalizePath(activePath ?? undefined);
+  return (
+    <div className="space-y-0.5">
+      {nodes.map((node) => {
+        const pathKey = normalizePath(node.path);
+        const isRelated = !node.isDir && highlightedSourcePaths.has(pathKey);
+        const isActive = !node.isDir && activePathKey === pathKey;
+        const folderRelatedCount = node.isDir ? relatedFolderCounts.get(pathKey) ?? 0 : 0;
+        const isExpanded = !node.isDir || expandedPaths.has(pathKey);
+        return (
+          <div key={node.path}>
+            <button
+              type="button"
+              onClick={() => {
+                if (node.isDir) {
+                  onToggleFolder(node.path);
+                } else {
+                  onOpenFile(node.path);
+                }
+              }}
+              className={`file-tree-item flex w-full items-center gap-1.5 rounded border border-transparent px-1.5 py-1 text-left ${
+                node.isDir ? 'text-neutral-500' : 'text-neutral-300 hover:bg-neutral-900 hover:text-neutral-100'
+              } ${isRelated ? 'file-tree-related' : ''} ${folderRelatedCount > 0 ? 'file-tree-folder-related' : ''} ${isActive ? 'file-tree-active' : ''}`}
+              style={{ paddingLeft: `${depth * 10 + 6}px` }}
+              aria-expanded={node.isDir ? isExpanded : undefined}
+              title={
+                isRelated
+                  ? `${node.path} - fichier concerné`
+                  : folderRelatedCount > 0
+                    ? `${node.path} - ${folderRelatedCount} fichier concerné`
+                    : node.path
+              }
+              aria-label={
+                isRelated
+                  ? `${node.name} - fichier concerné`
+                  : folderRelatedCount > 0
+                    ? `${node.name} - ${folderRelatedCount} fichier concerné`
+                    : node.name
+              }
+            >
+              {node.isDir ? (
+                <>
+                  {isExpanded ? (
+                    <ChevronDown className="h-3 w-3 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                  )}
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-300/70" aria-hidden />
+                </>
+              ) : (
+                <FileCode2 className="h-3.5 w-3.5 shrink-0 text-neutral-500" aria-hidden />
+              )}
+              <span className="min-w-0 flex-1 truncate">{node.name}</span>
+              {folderRelatedCount > 0 && (
+                <span className="file-tree-related-count ml-auto shrink-0 rounded px-1 text-[10px] tabular-nums">
+                  {folderRelatedCount}
+                </span>
+              )}
+              {isRelated && <span className="file-tree-related-dot ml-auto h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden />}
+            </button>
+            {node.isDir && isExpanded && node.children.length > 0 && (
+              <FileTree
+                nodes={node.children}
+                activePath={activePath}
+                expandedPaths={expandedPaths}
+                highlightedSourcePaths={highlightedSourcePaths}
+                relatedFolderCounts={relatedFolderCounts}
+                onToggleFolder={onToggleFolder}
+                onOpenFile={onOpenFile}
+                depth={depth + 1}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SourceCode({
+  source,
+  highlight,
+}: {
+  source: SourceContent;
+  highlight: SourceCodeHighlightState;
+}) {
+  return (
+    <Suspense fallback={<PlainSourceCode source={source} highlight={highlight} />}>
+      <SourceCodeHighlighter source={source} highlight={highlight} />
+    </Suspense>
+  );
+}
+
+function PlainSourceCode({
+  source,
+  highlight,
+}: {
+  source: SourceContent;
+  highlight: SourceCodeHighlightState;
+}) {
   const lines = source.content ? source.content.split('\n') : [];
   const start = source.startLine || 1;
 
   return (
-    <pre className="min-h-0 flex-1 overflow-auto bg-neutral-950 p-0 text-[11px] leading-5 text-neutral-200">
+    <pre
+      className="source-code-view min-h-0 flex-1 overflow-auto p-0 text-[11px] leading-5"
+      data-testid="source-code-view"
+    >
       <code>
         {lines.map((line, index) => (
-          <div key={`${source.path}-${start + index}`} className="flex hover:bg-neutral-900/70">
-            <span className="w-12 shrink-0 select-none border-r border-neutral-900 pr-3 text-right text-neutral-700">
+          <div
+            key={`${source.path}-${start + index}`}
+            className={`source-code-row flex ${sourceLineClass(start + index, highlight)}`}
+            data-source-line={start + index}
+          >
+            <span className="source-line-number w-12 shrink-0 select-none border-r pr-3 text-right">
               {start + index}
             </span>
-            <span className="min-w-0 flex-1 whitespace-pre px-3 font-mono">{line || ' '}</span>
+            <span className="source-code-text min-w-0 flex-1 whitespace-pre px-3 font-mono">{line || ' '}</span>
           </div>
         ))}
         {source.truncated && (
-          <div className="border-t border-neutral-900 px-3 py-2 text-xs text-amber-300">
+          <div className="source-truncated border-t px-3 py-2 text-xs">
             Extrait limite aux premieres lignes demandees.
           </div>
         )}
       </code>
     </pre>
   );
+}
+
+function SourceOutline({
+  items,
+  activeLine,
+  onSelect,
+}: {
+  items: SourceOutlineItem[];
+  activeLine: number | null;
+  onSelect: (item: SourceOutlineItem) => void;
+}) {
+  return (
+    <div className="source-outline mt-2 rounded-md border border-neutral-800 bg-neutral-900/35 p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Plan</span>
+        <span className="text-[11px] text-neutral-600">{items.length} symboles</span>
+      </div>
+      <div className="flex max-h-20 flex-wrap gap-1 overflow-auto">
+        {items.map((item) => (
+          <button
+            key={`${item.kind}-${item.lineNumber}-${item.name}`}
+            type="button"
+            onClick={() => onSelect(item)}
+            className={`source-outline-item rounded border px-1.5 py-0.5 text-[11px] ${
+              activeLine === item.lineNumber ? 'source-outline-item-active' : ''
+            }`}
+            title={`Ligne ${item.lineNumber}`}
+          >
+            <span className="source-outline-kind">{sourceOutlineKindLabel(item.kind)}</span>
+            <span className="font-mono">{item.name}</span>
+            <span className="text-neutral-600">:{item.lineNumber}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sourceLineClass(lineNumber: number, highlight: SourceCodeHighlightState): string {
+  const classes = ['source-code-line'];
+  if (isTargetLine(lineNumber, highlight)) classes.push('source-line-target');
+  if (highlight.searchLines.has(lineNumber)) classes.push('source-line-match');
+  if (highlight.activeLine === lineNumber) classes.push('source-line-active');
+  return classes.join(' ');
+}
+
+function isTargetLine(lineNumber: number, highlight: SourceCodeHighlightState): boolean {
+  if (!highlight.targetStartLine) return false;
+  const end = highlight.targetEndLine ?? highlight.targetStartLine;
+  return lineNumber >= highlight.targetStartLine && lineNumber <= end;
 }
 
 function GraphNavigator({
@@ -794,6 +1646,273 @@ function nodeColor(node: GraphNode): string {
 function compactLabel(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(1, max - 3))}...`;
+}
+
+interface SourceSearchMatch {
+  lineNumber: number;
+  column: number;
+}
+
+type SourceOutlineKind = 'type' | 'method' | 'property';
+
+interface SourceOutlineItem {
+  kind: SourceOutlineKind;
+  name: string;
+  lineNumber: number;
+  level: number;
+}
+
+function findSourceMatches(source: SourceContent | null, query: string): SourceSearchMatch[] {
+  const needle = query.trim().toLowerCase();
+  if (!source || !needle) return [];
+  const start = source.startLine || 1;
+  return source.content
+    .split('\n')
+    .map((line, index) => ({
+      lineNumber: start + index,
+      column: line.toLowerCase().indexOf(needle),
+    }))
+    .filter((match) => match.column >= 0);
+}
+
+function extractSourceOutline(source: SourceContent | null): SourceOutlineItem[] {
+  if (!source?.content) return [];
+  const start = source.startLine || 1;
+  const items: SourceOutlineItem[] = [];
+  const seen = new Set<string>();
+
+  source.content.split('\n').forEach((line, index) => {
+    const item = outlineItemFromLine(line, start + index);
+    if (!item) return;
+    const key = `${item.kind}:${item.name}:${item.lineNumber}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  });
+
+  return items.slice(0, 32);
+}
+
+function outlineItemFromLine(line: string, lineNumber: number): SourceOutlineItem | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*')) return null;
+  const level = Math.min(3, Math.floor((line.match(/^\s*/)?.[0].length ?? 0) / 2));
+  const typeMatch = /^(?:(?:export|public|private|protected|internal|abstract|sealed|static|partial)\s+)*(class|interface|enum|struct|record)\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(trimmed);
+  if (typeMatch) {
+    return { kind: 'type', name: typeMatch[2], lineNumber, level };
+  }
+
+  const functionMatch = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(trimmed);
+  if (functionMatch) {
+    return { kind: 'method', name: functionMatch[1], lineNumber, level };
+  }
+
+  const rustFunctionMatch = /^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(trimmed);
+  if (rustFunctionMatch) {
+    return { kind: 'method', name: rustFunctionMatch[1], lineNumber, level };
+  }
+
+  const propertyMatch = /^(?:(?:public|private|protected|internal|static|virtual|override|required|readonly)\s+)+[A-Za-z_][A-Za-z0-9_<>,.?[\]\s]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*(?:get|set|init)\b/.exec(trimmed);
+  if (propertyMatch) {
+    return { kind: 'property', name: propertyMatch[1], lineNumber, level };
+  }
+
+  const methodMatch = /^(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|partial|extern|unsafe)\s+)+[A-Za-z_][A-Za-z0-9_<>,.?[\]\s]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:\{|=>|$)/.exec(trimmed);
+  if (methodMatch && !CONTROL_WORDS.has(methodMatch[1])) {
+    return { kind: 'method', name: methodMatch[1], lineNumber, level };
+  }
+
+  const arrowFunctionMatch = /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_][A-Za-z0-9_]*)\s*=>/.exec(trimmed);
+  if (arrowFunctionMatch) {
+    return { kind: 'method', name: arrowFunctionMatch[1], lineNumber, level };
+  }
+
+  return null;
+}
+
+const CONTROL_WORDS = new Set(['catch', 'for', 'if', 'lock', 'switch', 'using', 'while']);
+
+function sourceOutlineKindLabel(kind: SourceOutlineKind): string {
+  if (kind === 'type') return 'T';
+  if (kind === 'property') return 'P';
+  return 'M';
+}
+
+function symbolQueryFromPath(path: string): string {
+  const filename = path.split(/[\\/]/).pop() ?? path;
+  return filename.replace(/\.[^.]+$/, '') || filename;
+}
+
+function bestSymbolForSource(symbols: SymbolSearchResult[], source: SourceContent): SymbolSearchResult | null {
+  const sourcePath = normalizePath(source.path);
+  const sourceName = symbolQueryFromPath(source.path).toLowerCase();
+  return (
+    symbols
+      .slice()
+      .sort((a, b) => symbolScore(b, sourcePath, sourceName, source) - symbolScore(a, sourcePath, sourceName, source))[0] ??
+    null
+  );
+}
+
+function symbolScore(
+  symbol: SymbolSearchResult,
+  sourcePath: string,
+  sourceName: string,
+  source: SourceContent
+): number {
+  let score = 0;
+  if (normalizePath(symbol.filePath) === sourcePath) score += 100;
+  if (symbol.name.toLowerCase() === sourceName) score += 30;
+  if (symbol.name.toLowerCase().includes(sourceName)) score += 10;
+  if (linesOverlap(symbol.startLine, symbol.endLine, source.startLine, source.endLine)) score += 20;
+  return score;
+}
+
+function linesOverlap(
+  aStart?: number,
+  aEnd?: number,
+  bStart?: number,
+  bEnd?: number
+): boolean {
+  if (!aStart || !bStart) return false;
+  const aLast = aEnd ?? aStart;
+  const bLast = bEnd ?? bStart;
+  return aStart <= bLast && bStart <= aLast;
+}
+
+function normalizePath(path: string | undefined): string {
+  return (path ?? '').replace(/\\/g, '/').toLowerCase();
+}
+
+function buildAutoExpandedFolders(
+  nodes: FileTreeNode[],
+  groups: SourceReferenceGroup[],
+  activePath: string | null,
+  includeTopLevel: boolean
+): Set<string> {
+  const expanded = new Set<string>();
+  if (includeTopLevel) {
+    nodes.filter((node) => node.isDir).slice(0, 12).forEach((node) => expanded.add(normalizePath(node.path)));
+  }
+
+  for (const group of groups) {
+    addParentFolders(expanded, group.path);
+  }
+  if (activePath) {
+    addParentFolders(expanded, activePath);
+  }
+  return expanded;
+}
+
+function addParentFolders(target: Set<string>, path: string) {
+  const parts = normalizePath(path).split('/').filter(Boolean);
+  for (let index = 1; index < parts.length; index += 1) {
+    target.add(parts.slice(0, index).join('/'));
+  }
+}
+
+function parentFolderSet(path: string): Set<string> {
+  const folders = new Set<string>();
+  addParentFolders(folders, path);
+  return folders;
+}
+
+function expandedFolderSet(
+  autoExpanded: ReadonlySet<string>,
+  manuallyExpanded: ReadonlySet<string>,
+  manuallyCollapsed: ReadonlySet<string>
+): Set<string> {
+  const expanded = new Set([...autoExpanded, ...manuallyExpanded]);
+  for (const path of manuallyCollapsed) {
+    expanded.delete(path);
+  }
+  return expanded;
+}
+
+function mergeSets(current: Set<string>, additions: ReadonlySet<string>): Set<string> {
+  let changed = false;
+  const next = new Set(current);
+  for (const value of additions) {
+    if (!next.has(value)) {
+      next.add(value);
+      changed = true;
+    }
+  }
+  return changed ? next : current;
+}
+
+function removeSetValues(current: Set<string>, removals: ReadonlySet<string>): Set<string> {
+  let changed = false;
+  const next = new Set(current);
+  for (const value of removals) {
+    if (next.delete(value)) changed = true;
+  }
+  return changed ? next : current;
+}
+
+function filterTreeToRelated(
+  nodes: FileTreeNode[],
+  highlightedSourcePaths: ReadonlySet<string>
+): FileTreeNode[] {
+  const result: FileTreeNode[] = [];
+  for (const node of nodes) {
+    const pathKey = normalizePath(node.path);
+    if (!node.isDir) {
+      if (highlightedSourcePaths.has(pathKey)) result.push(node);
+      continue;
+    }
+
+    const children = filterTreeToRelated(node.children, highlightedSourcePaths);
+    if (children.length > 0) {
+      result.push({ ...node, children });
+    }
+  }
+  return result;
+}
+
+function sortTreeByRelated(
+  nodes: FileTreeNode[],
+  highlightedSourcePaths: ReadonlySet<string>,
+  relatedFolderCounts: ReadonlyMap<string, number>
+): FileTreeNode[] {
+  return nodes
+    .map((node) => ({
+      ...node,
+      children: node.isDir
+        ? sortTreeByRelated(node.children, highlightedSourcePaths, relatedFolderCounts)
+        : node.children,
+    }))
+    .sort((a, b) => {
+      const rankDelta =
+        relatedTreeRank(a, highlightedSourcePaths, relatedFolderCounts) -
+        relatedTreeRank(b, highlightedSourcePaths, relatedFolderCounts);
+      if (rankDelta !== 0) return rankDelta;
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+function relatedTreeRank(
+  node: FileTreeNode,
+  highlightedSourcePaths: ReadonlySet<string>,
+  relatedFolderCounts: ReadonlyMap<string, number>
+): number {
+  const pathKey = normalizePath(node.path);
+  if (!node.isDir && highlightedSourcePaths.has(pathKey)) return 0;
+  if (node.isDir && (relatedFolderCounts.get(pathKey) ?? 0) > 0) return 1;
+  return 2;
+}
+
+function buildRelatedFolderCounts(groups: SourceReferenceGroup[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const group of groups) {
+    const parts = normalizePath(group.path).split('/').filter(Boolean);
+    for (let index = 1; index < parts.length; index += 1) {
+      const folder = parts.slice(0, index).join('/');
+      counts.set(folder, (counts.get(folder) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 function graphTargetToNode(target: GraphTarget): GraphNode {

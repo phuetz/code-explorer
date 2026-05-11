@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Message, Role, Session, ToolCall } from '../types/chat';
+import type { AnalysisSnapshot, Message, Role, Session, ToolCall } from '../types/chat';
 
 interface ChatState {
   sessions: Session[];
@@ -15,6 +15,8 @@ interface ChatState {
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
   renameSession: (id: string, title: string) => void;
+  saveAnalysisSnapshot: (sessionId: string, snapshot: AnalysisSnapshot) => void;
+  deleteAnalysisSnapshot: (sessionId: string, snapshotId: string) => void;
 
   appendMessage: (sessionId: string, message: Message) => void;
   updateMessage: (sessionId: string, messageId: string, content: string) => void;
@@ -97,15 +99,72 @@ function sanitizeSessions(value: unknown): Session[] {
     const createdAt = readTimestamp(session.createdAt) ?? 0;
     const updatedAt = readTimestamp(session.updatedAt) ?? createdAt;
 
+    const analyses = sanitizeAnalysisSnapshots(session.analyses);
     sessions.push({
       id,
       title,
       createdAt,
       updatedAt,
       messages: sanitizeMessages(session.messages),
+      ...(analyses.length > 0 ? { analyses } : {}),
     });
   }
   return sessions;
+}
+
+function sanitizeAnalysisSnapshots(value: unknown): AnalysisSnapshot[] {
+  if (!Array.isArray(value)) return [];
+
+  const snapshots: AnalysisSnapshot[] = [];
+  for (const rawSnapshot of value) {
+    const snapshot = asRecord(rawSnapshot);
+    const id = readString(snapshot?.id);
+    const title = readString(snapshot?.title);
+    if (!snapshot || !id || !title) continue;
+
+    snapshots.push({
+      id,
+      title,
+      repo: readString(snapshot.repo),
+      repoName: readString(snapshot.repoName),
+      createdAt: readTimestamp(snapshot.createdAt) ?? 0,
+      updatedAt: readTimestamp(snapshot.updatedAt) ?? readTimestamp(snapshot.createdAt) ?? 0,
+      sourceReferences: sanitizeAnalysisSourceReferences(snapshot.sourceReferences),
+      summary: sanitizeAnalysisSummary(snapshot.summary),
+    });
+  }
+  return snapshots.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
+}
+
+function sanitizeAnalysisSourceReferences(value: unknown): AnalysisSnapshot['sourceReferences'] {
+  if (!Array.isArray(value)) return [];
+  const references: AnalysisSnapshot['sourceReferences'] = [];
+  const seen = new Set<string>();
+  for (const rawReference of value) {
+    const reference = asRecord(rawReference);
+    const path = readString(reference?.path);
+    if (!reference || !path) continue;
+    const item = {
+      path: path.replace(/\\/g, '/'),
+      startLine: readPositiveInteger(reference.startLine),
+      endLine: readPositiveInteger(reference.endLine),
+    };
+    const key = `${item.path}:${item.startLine ?? ''}:${item.endLine ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    references.push(item);
+  }
+  return references;
+}
+
+function sanitizeAnalysisSummary(value: unknown): AnalysisSnapshot['summary'] {
+  const summary = asRecord(value) ?? {};
+  return {
+    fileCount: readNonNegativeInteger(summary.fileCount) ?? 0,
+    diagramCount: readNonNegativeInteger(summary.diagramCount) ?? 0,
+    toolCallCount: readNonNegativeInteger(summary.toolCallCount) ?? 0,
+    decisionCount: readNonNegativeInteger(summary.decisionCount) ?? 0,
+  };
 }
 
 function sanitizeMessages(value: unknown): Message[] {
@@ -174,6 +233,16 @@ function readTimestamp(value: unknown): number | null {
   return null;
 }
 
+function readPositiveInteger(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
 function readString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
@@ -227,6 +296,34 @@ export const useChatStore = create<ChatState>()(
           sessions: updateSessionByRecentActivity(s.sessions, id, (sess, now) => ({
             ...sess,
             title,
+            updatedAt: now,
+          })),
+        })),
+
+      saveAnalysisSnapshot: (sessionId, snapshot) =>
+        set((s) => ({
+          sessions: updateSessionByRecentActivity(s.sessions, sessionId, (sess, now) => {
+            const existing = sess.analyses ?? [];
+            const nextSnapshot = { ...snapshot, updatedAt: now };
+            const next = [
+              nextSnapshot,
+              ...existing.filter((item) => item.id !== snapshot.id),
+            ]
+              .sort((a, b) => b.updatedAt - a.updatedAt)
+              .slice(0, 12);
+            return {
+              ...sess,
+              analyses: next,
+              updatedAt: now,
+            };
+          }),
+        })),
+
+      deleteAnalysisSnapshot: (sessionId, snapshotId) =>
+        set((s) => ({
+          sessions: updateSessionByRecentActivity(s.sessions, sessionId, (sess, now) => ({
+            ...sess,
+            analyses: (sess.analyses ?? []).filter((snapshot) => snapshot.id !== snapshotId),
             updatedAt: now,
           })),
         })),

@@ -7,6 +7,7 @@ import { Markdown } from '../ui/Markdown';
 import type { SourceReference } from '../../utils/source-references';
 import { formatMessageTimestamp } from '../../utils/dates';
 import { copyTextToClipboard } from '../../utils/clipboard';
+import { RelatedSourceFiles } from './RelatedSourceFiles';
 
 interface Props {
   message: Message;
@@ -14,6 +15,8 @@ interface Props {
   onRegenerate?: (messageId: string) => void;
   canRegenerate?: boolean;
   onOpenSourceReference?: (reference: SourceReference) => void;
+  repo?: string | null;
+  repoName?: string | null;
 }
 
 export function ChatMessage({
@@ -22,6 +25,8 @@ export function ChatMessage({
   onRegenerate,
   canRegenerate,
   onOpenSourceReference,
+  repo,
+  repoName,
 }: Props) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -43,13 +48,18 @@ export function ChatMessage({
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
-      <div className={clsx('flex max-w-[88%] gap-3', isUser && 'flex-row-reverse')}>
+      <div
+        className={clsx(
+          'flex gap-3',
+          isUser ? 'max-w-[76%] flex-row-reverse' : 'w-full max-w-none'
+        )}
+      >
         <div
           className={clsx(
             'flex h-8 w-8 shrink-0 items-center justify-center rounded-md border',
             isUser
-              ? 'border-purple-800/50 bg-purple-600/15 text-purple-300'
-              : 'border-emerald-800/50 bg-emerald-600/15 text-emerald-300'
+              ? 'message-avatar-user'
+              : 'message-avatar-assistant'
           )}
         >
           {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -58,8 +68,8 @@ export function ChatMessage({
           className={clsx(
             'min-w-0 flex-1 rounded-lg border px-4 py-3',
             isUser
-              ? 'border-purple-900/50 bg-purple-950/30'
-              : 'border-neutral-900 bg-neutral-900/35'
+              ? 'message-card-user'
+              : 'message-card-assistant'
           )}
         >
           <div className="mb-2 flex items-center gap-2">
@@ -77,7 +87,7 @@ export function ChatMessage({
             )}
             {llmLabel && (
               <span
-                className="max-w-[16rem] truncate rounded bg-neutral-900 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500"
+                className="status-pill max-w-[16rem] truncate rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
                 title={`LLM actif : ${llmLabel}`}
               >
                 {llmLabel}
@@ -88,7 +98,7 @@ export function ChatMessage({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
+                  className="icon-button rounded p-1"
                   aria-label={isUser ? 'Copier le message' : 'Copier la réponse'}
                   title={copied ? 'Copié !' : 'Copier'}
                 >
@@ -98,7 +108,7 @@ export function ChatMessage({
                   <button
                     type="button"
                     onClick={() => onRegenerate(message.id)}
-                    className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
+                    className="icon-button rounded p-1"
                     aria-label="Régénérer la réponse"
                     title="Régénérer"
                   >
@@ -116,11 +126,20 @@ export function ChatMessage({
             </div>
           )}
           {isUser ? (
-            <div className="whitespace-pre-wrap text-sm leading-6 text-neutral-100">
+            <div className="whitespace-pre-wrap text-sm leading-6 text-[var(--text-primary)]">
               {message.content}
             </div>
           ) : (
-            <Markdown onOpenSourceReference={onOpenSourceReference}>{message.content}</Markdown>
+            <>
+              <Markdown onOpenSourceReference={onOpenSourceReference}>{message.content}</Markdown>
+              <RelatedSourceFiles
+                content={message.content}
+                messageCreatedAt={message.createdAt}
+                repo={repo ?? null}
+                repoName={repoName ?? null}
+                onOpenSourceReference={onOpenSourceReference}
+              />
+            </>
           )}
         </div>
       </div>

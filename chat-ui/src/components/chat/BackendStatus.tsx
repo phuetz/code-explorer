@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useBackendStatus, type BackendStatus as Status } from '../../hooks/use-backend-status';
+import { useAnchoredPopover } from '../../hooks/use-anchored-popover';
 
 /**
  * Header badge that shows whether the MCP backend is reachable. Click
@@ -20,46 +22,71 @@ import { useBackendStatus, type BackendStatus as Status } from '../../hooks/use-
 export function BackendStatus() {
   const health = useBackendStatus();
   const [expanded, setExpanded] = useState(false);
+  const closePopover = useCallback(() => setExpanded(false), []);
+  const { anchorRef, popoverRef, position, updatePosition } = useAnchoredPopover<
+    HTMLButtonElement,
+    HTMLDivElement
+  >({
+    maxWidth: 320,
+    minWidth: 288,
+    onClose: closePopover,
+    open: expanded,
+  });
+
+  const toggle = () => {
+    const next = !expanded;
+    if (next) updatePosition();
+    setExpanded(next);
+  };
+
+  const popover =
+    expanded && position
+      ? createPortal(
+          <div
+            ref={popoverRef}
+            role="dialog"
+            aria-label="Détails de la connexion au serveur MCP"
+            className="popover-panel fixed z-[100] overflow-y-auto rounded-lg border p-3 text-xs shadow-2xl"
+            style={position}
+          >
+            <div className="mb-1 flex items-center gap-2 font-medium text-neutral-100">
+              <StatusDot status={health.status} />
+              {longLabel(health.status)}
+            </div>
+            <p className="mb-2 leading-relaxed text-neutral-400">{health.message}</p>
+            {health.lastSuccessAt > 0 && health.status !== 'online' && (
+              <p className="text-neutral-500">
+                Dernière connexion réussie : {new Date(health.lastSuccessAt).toLocaleTimeString()}
+              </p>
+            )}
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={closePopover}
+                className="control-button rounded border px-2 py-1 text-xs"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-900"
+        onClick={toggle}
+        className="control-button flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
         aria-label={ariaLabel(health.status, health.message)}
         aria-expanded={expanded}
       >
         <StatusDot status={health.status} />
         <span className="hidden sm:inline">{shortLabel(health)}</span>
       </button>
-      {expanded && (
-        <div
-          role="dialog"
-          aria-label="Détails de la connexion au serveur MCP"
-          className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300 shadow-xl"
-        >
-          <div className="mb-1 flex items-center gap-2 font-medium text-neutral-100">
-            <StatusDot status={health.status} />
-            {longLabel(health.status)}
-          </div>
-          <p className="mb-2 leading-relaxed text-neutral-400">{health.message}</p>
-          {health.lastSuccessAt > 0 && health.status !== 'online' && (
-            <p className="text-neutral-500">
-              Dernière connexion réussie : {new Date(health.lastSuccessAt).toLocaleTimeString()}
-            </p>
-          )}
-          <div className="mt-2 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="rounded border border-neutral-800 px-2 py-1 text-xs hover:bg-neutral-900"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
+      {popover}
     </div>
   );
 }

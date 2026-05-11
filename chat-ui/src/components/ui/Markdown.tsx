@@ -116,7 +116,7 @@ const baseComponents: Components = {
     return (
       <Suspense
         fallback={
-          <pre className="overflow-x-auto rounded-md border border-neutral-800 bg-neutral-900 p-3 text-xs">
+          <pre className="code-block-plain overflow-x-auto rounded-md border p-3 text-xs">
             <code>{raw}</code>
           </pre>
         }
