@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { repairMermaidSource } from '../../utils/mermaid';
 import { MermaidBlock } from './MermaidBlock';
 
 const mermaidMock = vi.hoisted(() => ({
@@ -121,5 +122,31 @@ describe('MermaidBlock', () => {
 
     expect(screen.getByText('Parse error')).toBeTruthy();
     expect(container.querySelector('pre')?.textContent).toBe(source);
+  });
+});
+
+describe('repairMermaidSource', () => {
+  it('quotes flowchart labels that contain punctuation known to break Mermaid parsing', () => {
+    const repaired = repairMermaidSource(
+      [
+        'flowchart TD',
+        'G --> H[CreerCourrier(...,)]',
+        'H --> I[Validation sans sauvegarde]',
+      ].join('\n')
+    );
+
+    expect(repaired).toContain('G --> H["CreerCourrier(...,)"]');
+    expect(repaired).toContain('H --> I[Validation sans sauvegarde]');
+  });
+
+  it('keeps existing flowchart shape syntax untouched', () => {
+    const repaired = repairMermaidSource(
+      ['flowchart TD', 'A[(Base de donnees)] --> B{{Decision}}', 'C[[Sous-processus]] --> D'].join(
+        '\n'
+      )
+    );
+
+    expect(repaired).toContain('A[(Base de donnees)] --> B{{Decision}}');
+    expect(repaired).toContain('C[[Sous-processus]] --> D');
   });
 });

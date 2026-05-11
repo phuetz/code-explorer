@@ -11,8 +11,7 @@ pub struct ToolDefinition {
     pub input_schema: Value,
 }
 
-/// Return definitions for all 27 MCP tools
-/// (19 original + 4 Code Quality Suite + 4 Schema & API Inventory).
+/// Return definitions for all MCP tools.
 pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
@@ -317,6 +316,29 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                     "process": {
                         "type": "string",
                         "description": "Optional process name (e.g., 'courriers', 'paiements', 'baremes'). If omitted, lists all available processes."
+                    }
+                },
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
+            name: "search_processes",
+            description: "Search business process flows in the graph. Use when the question involves a workflow, business process, or multi-step operation.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Text to match against process names/descriptions. Empty lists top processes."
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Repository name or path"
+                    },
+                    "limit": {
+                        "type": "number",
+                        "description": "Maximum processes to return (default: 10)",
+                        "default": 10
                     }
                 },
                 "additionalProperties": false
@@ -733,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_tool_definitions_count() {
-        assert_eq!(tool_definitions().len(), 30);
+        assert_eq!(tool_definitions().len(), 31);
     }
 
     #[test]
@@ -754,6 +776,7 @@ mod tests {
         assert!(names.contains(&"diagram"));
         assert!(names.contains(&"report"));
         assert!(names.contains(&"business"));
+        assert!(names.contains(&"search_processes"));
         assert!(names.contains(&"analyze_execution_trace"));
         assert!(names.contains(&"search_code"));
         assert!(names.contains(&"read_file"));
@@ -778,7 +801,7 @@ mod tests {
     fn test_tools_list_json() {
         let json = tools_list_json();
         let tools = json["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 30);
+        assert_eq!(tools.len(), 31);
         for tool in tools {
             assert!(tool.get("name").is_some());
             assert!(tool.get("description").is_some());

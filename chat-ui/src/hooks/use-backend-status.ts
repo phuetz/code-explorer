@@ -72,8 +72,23 @@ export function useBackendStatus(
 
   useEffect(() => {
     let cancelled = false;
+    let probeRunning = false;
+    let probeAgain = false;
+
+    const scheduleProbe = (delayMs: number) => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(probe, delayMs);
+    };
 
     const probe = async () => {
+      if (probeRunning) {
+        probeAgain = true;
+        return;
+      }
+
+      probeRunning = true;
       const startedAt = Date.now();
       try {
         const result = await mcpClient.health();
@@ -109,21 +124,38 @@ export function useBackendStatus(
           ),
         }));
       } finally {
+        probeRunning = false;
         if (!cancelled) {
-          // Schedule the next probe — re-using a single chained setTimeout
-          // is more reliable than setInterval (no overlapping requests, no
-          // drift if /health hangs).
-          const elapsed = Date.now() - startedAt;
-          const wait = Math.max(0, pollIntervalMs - elapsed);
-          timerRef.current = setTimeout(probe, wait);
+          if (probeAgain) {
+            probeAgain = false;
+            scheduleProbe(0);
+          } else {
+            // Schedule the next probe — re-using a single chained setTimeout
+            // is more reliable than setInterval (no overlapping requests, no
+            // drift if /health hangs).
+            const elapsed = Date.now() - startedAt;
+            const wait = Math.max(0, pollIntervalMs - elapsed);
+            scheduleProbe(wait);
+          }
         }
       }
     };
 
-    timerRef.current = setTimeout(probe, initialDelayMs);
+    const probeWhenVisible = () => {
+      if (document.visibilityState === 'hidden') return;
+      scheduleProbe(0);
+    };
+
+    scheduleProbe(initialDelayMs);
+    window.addEventListener('focus', probeWhenVisible);
+    window.addEventListener('online', probeWhenVisible);
+    document.addEventListener('visibilitychange', probeWhenVisible);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', probeWhenVisible);
+      window.removeEventListener('online', probeWhenVisible);
+      document.removeEventListener('visibilitychange', probeWhenVisible);
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
         timerRef.current = null;

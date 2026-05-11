@@ -49,3 +49,4 @@ Desktop.ini
 # Local notes / scratch (not part of the project)
 /next-steps.md
 /questions/
+/.claude/settings.local.json

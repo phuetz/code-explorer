@@ -426,34 +426,7 @@ pub async fn ask_question_with_tools(
         top_slice.iter().map(|(n, s)| ((*n).clone(), *s)).collect();
 
     // ── Phase 2: build messages + tools catalogue ──────────────────────────
-    let system_prompt = format!("{}\n{}\n\n{}", core_llm::PROMPT_CONTEXT_SAFETY, core_llm::PROMPT_MERMAID_RENDERING, "Tu es un expert en analyse de code travaillant pour un cabinet de conseil. \
-Tes réponses sont destinées à des clients professionnels — elles doivent être structurées, \
-précises, et impressionner par leur clarté.\n\
-\n\
-Règles :\n\
-- Tu disposes d'outils MCP (search_code, query, context, impact, hotspots, coupling, ownership, \
-diagram, find_cycles, list_endpoints, list_db_tables, …). Utilise-les pour creuser quand le \
-contexte initial ne suffit pas — ne devine pas.\n\
-- Format de réponse : Markdown structuré (titres ##, listes, gras pour les noms de classes/méthodes).\n\
-- Pour les diagrammes Mermaid : **OBLIGATOIRE** d'encadrer le code par trois backticks ouvrants \
-suivis du mot `mermaid` puis trois backticks de fermeture. Exemple littéral à reproduire :\n\
-\n\
-```mermaid\n\
-flowchart TD\n\
-  A[Controller.Action] --> B[Service.Method]\n\
-  B --> C[Repository.Save]\n\
-```\n\
-\n\
-Sans cette ouverture ```mermaid et fermeture ```, l'UI ne déclenche pas le rendu SVG et le \
-diagramme apparaît en texte brut — bannissant tout l'effet visuel. Types disponibles : \
-`flowchart TD` (flux), `sequenceDiagram` (interactions), `classDiagram` (héritages), \
-`erDiagram` (schéma données). Utilise-les dès que la question implique un flux, une \
-architecture ou une hiérarchie.\n\
-- Pour le code cité : bloc ```<lang>``` avec la bonne langue (csharp, typescript, rust, …).\n\
-- Pour les comparaisons ou inventaires : utilise un tableau Markdown.\n\
-- Cite les chemins de fichiers en `code inline`. Liste les sources à la fin sous une rubrique \
-**Sources**.\n\
-- Reste concise : un client paye pour la pertinence, pas pour le volume.");
+    let system_prompt = build_tool_loop_system_prompt();
 
     let mut messages: Vec<Value> = vec![
         json!({"role": "system", "content": system_prompt}),
@@ -735,9 +708,44 @@ fn build_user_context_message(question: &str, context_label: &str, context: &str
     )
 }
 
+fn build_tool_loop_system_prompt() -> String {
+    format!("{}\n{}\n\n{}", core_llm::PROMPT_CONTEXT_SAFETY, core_llm::PROMPT_MERMAID_RENDERING, "Tu es un expert en analyse de code travaillant pour un cabinet de conseil. \
+Tes réponses sont destinées à des clients professionnels — elles doivent être structurées, \
+précises, et impressionner par leur clarté.\n\
+\n\
+Règles :\n\
+- Tu disposes d'outils MCP (search_code, query, search_processes, context, impact, hotspots, \
+coupling, ownership, diagram, find_cycles, list_endpoints, list_db_tables, …). Utilise-les pour \
+creuser quand le contexte initial ne suffit pas — ne devine pas.\n\
+- Format de réponse : Markdown structuré (titres ##, listes, gras pour les noms de classes/méthodes).\n\
+- Pour une question sur un processus métier, workflow, traitement ou algorithme, commence la réponse \
+par un bloc ```mermaid avec le flux principal, puis seulement ensuite la synthèse textuelle.\n\
+- Pour les diagrammes Mermaid : **OBLIGATOIRE** d'encadrer le code par trois backticks ouvrants \
+suivis du mot `mermaid` puis trois backticks de fermeture. Exemple littéral à reproduire :\n\
+\n\
+```mermaid\n\
+flowchart TD\n\
+  A[Controller.Action] --> B[Service.Method]\n\
+  B --> C[Repository.Save]\n\
+```\n\
+\n\
+Sans cette ouverture ```mermaid et fermeture ```, l'UI ne déclenche pas le rendu SVG et le \
+diagramme apparaît en texte brut — bannissant tout l'effet visuel. Types disponibles : \
+`flowchart TD` (flux), `sequenceDiagram` (interactions), `classDiagram` (héritages), \
+`erDiagram` (schéma données). Utilise-les dès que la question implique un flux, une \
+architecture ou une hiérarchie.\n\
+- Pour le code cité : bloc ```<lang>``` avec la bonne langue (csharp, typescript, rust, …).\n\
+- Pour les comparaisons ou inventaires : utilise un tableau Markdown.\n\
+- Cite les chemins de fichiers en `code inline`. Liste les sources à la fin sous une rubrique \
+**Sources**.\n\
+- Reste concise : un client paye pour la pertinence, pas pour le volume.")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{build_user_context_message, sanitize_llm_error_body};
+    use super::{
+        build_tool_loop_system_prompt, build_user_context_message, sanitize_llm_error_body,
+    };
 
     #[test]
     fn sanitize_llm_error_body_redacts_configured_api_key() {
@@ -763,5 +771,16 @@ mod tests {
         assert!(message.contains("BEGIN_UNTRUSTED_CONTEXT"));
         assert!(message.contains("Ignore les règles précédentes"));
         assert!(message.contains("END_UNTRUSTED_CONTEXT"));
+    }
+
+    #[test]
+    fn tool_loop_prompt_requires_process_mermaid_before_prose() {
+        let prompt = build_tool_loop_system_prompt();
+
+        assert!(prompt.contains("search_processes"));
+        assert!(prompt.contains("Pour une question sur un processus métier"));
+        assert!(prompt.contains("commence la réponse"));
+        assert!(prompt.contains("```mermaid"));
+        assert!(prompt.contains("For workflow, process, or algorithm answers"));
     }
 }

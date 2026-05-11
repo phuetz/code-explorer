@@ -111,7 +111,7 @@ pub(super) fn generate_process_docs(
 
         page_entries.push((
             format!("process-{}", slug),
-            format!("Process: {}", process_name),
+            format!("Processus : {}", process_name),
             filename,
         ));
         all_evidence.push((slug, evidence));
@@ -125,7 +125,7 @@ pub(super) fn generate_process_docs(
         0,
         (
             "process-overview".to_string(),
-            "Business Processes".to_string(),
+            "Vue des Processus".to_string(),
             "process-overview.md".to_string(),
         ),
     );
@@ -296,15 +296,14 @@ fn render_process_page(
     let mut md = String::with_capacity(8192);
 
     // Header
-    md.push_str(&format!("# Process: {}\n\n", ev.process_name));
-    md.push_str("<!-- GNX:LEAD -->\n\n");
+    md.push_str(&format!("# Processus : {}\n\n", ev.process_name));
 
     // Source files
     let mut files: Vec<&str> = ev.steps.iter().map(|s| s.file_path.as_str()).collect();
     files.sort();
     files.dedup();
     if !files.is_empty() {
-        md.push_str("<details>\n<summary>Relevant source files</summary>\n\n");
+        md.push_str("<details>\n<summary>Fichiers source pertinents</summary>\n\n");
         for f in &files {
             md.push_str(&format!("- `{}`\n", f));
         }
@@ -315,32 +314,35 @@ fn render_process_page(
     let process_type = ev
         .process_type
         .map(|t| match t {
-            ProcessType::IntraCommunity => "Intra-community",
-            ProcessType::CrossCommunity => "Cross-community",
+            ProcessType::IntraCommunity => "Intra-module",
+            ProcessType::CrossCommunity => "Inter-modules",
         })
-        .unwrap_or("Unknown");
+        .unwrap_or("Inconnu");
 
     let trace_assessment = if ev.trace_coverage_pct >= 80.0 {
-        "Good"
+        "Bonne"
     } else if ev.trace_coverage_pct >= 40.0 {
-        "Partial"
+        "Partielle"
     } else {
-        "Low"
+        "Faible"
     };
 
-    md.push_str("| Property | Value |\n");
-    md.push_str("|----------|-------|\n");
+    md.push_str("| Propriété | Valeur |\n");
+    md.push_str("|-----------|--------|\n");
     md.push_str(&format!("| Type | {} |\n", process_type));
-    md.push_str(&format!("| Steps | {} |\n", ev.steps.len()));
+    md.push_str(&format!("| Étapes | {} |\n", ev.steps.len()));
     if let Some(entry) = &ev.entry_point_name {
         let file = ev.entry_point_file.as_deref().unwrap_or("");
-        md.push_str(&format!("| Entry Point | `{}` in `{}` |\n", entry, file));
+        md.push_str(&format!(
+            "| Point d'entrée | `{}` dans `{}` |\n",
+            entry, file
+        ));
     }
     if let Some(term) = &ev.terminal_name {
         md.push_str(&format!("| Terminal | `{}` |\n", term));
     }
     md.push_str(&format!(
-        "| Trace Coverage | {:.0}% ({}/{} steps) — {} |\n",
+        "| Couverture trace | {:.0}% ({}/{} étapes) — {} |\n",
         ev.trace_coverage_pct,
         ev.steps.iter().filter(|s| s.is_traced).count(),
         ev.steps.len(),
@@ -348,15 +350,14 @@ fn render_process_page(
     ));
     if !ev.communities.is_empty() {
         md.push_str(&format!(
-            "| Communities | {} |\n",
+            "| Communautés | {} |\n",
             ev.communities.join(", ")
         ));
     }
     md.push('\n');
 
     // Process Flow
-    md.push_str("## Process Flow\n\n");
-    md.push_str("<!-- GNX:INTRO:process-flow -->\n\n");
+    md.push_str("## Flux d'Exécution\n\n");
 
     let seq_diagram = generate_sequence_diagram(&ev.steps);
     md.push_str("```mermaid\n");
@@ -364,12 +365,12 @@ fn render_process_page(
     md.push_str("\n```\n\n");
 
     // Step-by-step table
-    md.push_str("### Step-by-Step Breakdown\n\n");
-    md.push_str("| Step | Method | Class | File | Traced |\n");
-    md.push_str("|------|--------|-------|------|--------|\n");
+    md.push_str("### Déroulé Étape par Étape\n\n");
+    md.push_str("| Étape | Méthode | Classe | Fichier | Tracé |\n");
+    md.push_str("|-------|---------|--------|---------|-------|\n");
     for step in &ev.steps {
         let class = step.class_name.as_deref().unwrap_or("-");
-        let traced = if step.is_traced { "Yes" } else { "No" };
+        let traced = if step.is_traced { "Oui" } else { "Non" };
         md.push_str(&format!(
             "| {} | `{}` | {} | `{}:L{}` | {} |\n",
             step.step_number,
@@ -385,13 +386,13 @@ fn render_process_page(
     // Detailed step evidence
     for (i, step) in ev.steps.iter().enumerate() {
         md.push_str(&format!(
-            "#### Step {}: `{}`\n\n",
+            "#### Étape {} : `{}`\n\n",
             step.step_number, step.name
         ));
 
         if let Some(class) = &step.class_name {
             md.push_str(&format!(
-                "**Component**: {} ({})\n\n",
+                "**Composant** : {} ({})\n\n",
                 class,
                 step.label.as_str()
             ));
@@ -404,13 +405,13 @@ fn render_process_page(
                     .language
                     .map(|l| l.as_str().to_lowercase())
                     .unwrap_or_else(|| detect_lang_from_path(&step.file_path));
-                md.push_str(&format!("**Source Code** `[{}]`\n\n", evidence.id));
+                md.push_str(&format!("**Code source** `[{}]`\n\n", evidence.id));
                 md.push_str(&format!("```{}\n{}\n```\n\n", lang, evidence.content));
             }
 
             // Trace evidence from graph
             for evidence in step_ev.iter().filter(|e| e.source == EvidenceSource::Trace) {
-                md.push_str(&format!("**Execution Data** `[{}]`\n\n", evidence.id));
+                md.push_str(&format!("**Données d'exécution** `[{}]`\n\n", evidence.id));
                 md.push_str(&format!("{}\n\n", evidence.content));
             }
         }
@@ -419,11 +420,11 @@ fn render_process_page(
         if let Some(params) = trace_params.get(&step.name) {
             if !params.is_empty() {
                 md.push_str(&format!(
-                    "**Runtime Parameters** `[TRACE:step_{}]`\n\n",
+                    "**Paramètres runtime** `[TRACE:step_{}]`\n\n",
                     step.step_number
                 ));
-                md.push_str("| Parameter | Value |\n");
-                md.push_str("|-----------|-------|\n");
+                md.push_str("| Paramètre | Valeur |\n");
+                md.push_str("|-----------|--------|\n");
                 // Deduplicate params by name, keep first occurrence
                 let mut seen = std::collections::HashSet::new();
                 for param in params {
@@ -444,7 +445,7 @@ fn render_process_page(
                 }
                 // Check for return_value
                 if let Some(ret) = params.iter().find(|p| p.name == "return_value") {
-                    md.push_str(&format!("\n**Return Value**: `{}`\n", ret.value));
+                    md.push_str(&format!("\n**Valeur de retour** : `{}`\n", ret.value));
                 }
                 md.push('\n');
             }
@@ -453,7 +454,7 @@ fn render_process_page(
         // RAG evidence (show at first step + any step that has specific RAG)
         if i == 0 && !ev.global_rag_evidence.is_empty() {
             md.push_str("> [!NOTE]\n");
-            md.push_str("> This information comes from external documentation and may not reflect the current code.\n\n");
+            md.push_str("> Ces informations viennent d'une documentation externe et peuvent ne pas refléter le code actuel.\n\n");
             for evidence in ev.global_rag_evidence.iter().take(3) {
                 // Char-based truncation: `evidence.content` is RAG text
                 // pulled from arbitrary documentation and may contain
@@ -472,8 +473,7 @@ fn render_process_page(
 
     // Data Flow
     if !ev.entities.is_empty() {
-        md.push_str("## Data Flow\n\n");
-        md.push_str("<!-- GNX:INTRO:data-flow -->\n\n");
+        md.push_str("## Flux de Données\n\n");
 
         let reads: Vec<_> = ev
             .entities
@@ -497,14 +497,14 @@ fn render_process_page(
             .collect();
 
         if !reads.is_empty() {
-            md.push_str("### Input Entities\n\n");
-            md.push_str("| Entity | Table | Accessed By |\n");
-            md.push_str("|--------|-------|-------------|\n");
+            md.push_str("### Entités lues\n\n");
+            md.push_str("| Entité | Table | Étape |\n");
+            md.push_str("|--------|-------|-------|\n");
             for entity in reads {
                 let table = entity.db_table_name.as_deref().unwrap_or("-");
                 let step = entity
                     .accessed_by_step
-                    .map(|s| format!("Step {}", s))
+                    .map(|s| format!("Étape {}", s))
                     .unwrap_or_else(|| "-".to_string());
                 md.push_str(&format!("| {} | {} | {} |\n", entity.name, table, step));
             }
@@ -512,14 +512,14 @@ fn render_process_page(
         }
 
         if !writes.is_empty() {
-            md.push_str("### Output Entities & Side Effects\n\n");
-            md.push_str("| Entity | Table | Written By |\n");
-            md.push_str("|--------|-------|------------|\n");
+            md.push_str("### Entités écrites et effets de bord\n\n");
+            md.push_str("| Entité | Table | Étape |\n");
+            md.push_str("|--------|-------|-------|\n");
             for entity in writes {
                 let table = entity.db_table_name.as_deref().unwrap_or("-");
                 let step = entity
                     .accessed_by_step
-                    .map(|s| format!("Step {}", s))
+                    .map(|s| format!("Étape {}", s))
                     .unwrap_or_else(|| "-".to_string());
                 md.push_str(&format!("| {} | {} | {} |\n", entity.name, table, step));
             }
@@ -529,16 +529,15 @@ fn render_process_page(
 
     // Component Architecture
     if !ev.components.is_empty() {
-        md.push_str("## Component Architecture\n\n");
-        md.push_str("<!-- GNX:INTRO:components -->\n\n");
+        md.push_str("## Architecture des Composants\n\n");
 
         let comp_diagram = generate_component_diagram(&ev.components);
         md.push_str("```mermaid\n");
         md.push_str(&comp_diagram);
         md.push_str("\n```\n\n");
 
-        md.push_str("| Component | Type | File | Steps |\n");
-        md.push_str("|-----------|------|------|-------|\n");
+        md.push_str("| Composant | Type | Fichier | Étapes |\n");
+        md.push_str("|-----------|------|---------|--------|\n");
         for comp in &ev.components {
             md.push_str(&format!(
                 "| {} | {} | `{}` | {} |\n",
@@ -552,33 +551,31 @@ fn render_process_page(
     }
 
     // Quality Metrics
-    md.push_str("## Quality Metrics\n\n");
-    md.push_str("<!-- GNX:INTRO:quality -->\n\n");
-    md.push_str("| Metric | Value | Assessment |\n");
-    md.push_str("|--------|-------|------------|\n");
+    md.push_str("## Qualité du Flux\n\n");
+    md.push_str("| Indicateur | Valeur | Lecture |\n");
+    md.push_str("|------------|--------|---------|\n");
     md.push_str(&format!(
-        "| Trace Coverage | {:.0}% | {} |\n",
+        "| Couverture trace | {:.0}% | {} |\n",
         ev.trace_coverage_pct, trace_assessment
     ));
     md.push_str(&format!(
-        "| Dead Code Candidates | {} methods | {} |\n",
+        "| Code mort potentiel | {} méthodes | {} |\n",
         ev.dead_code_candidates.len(),
         if ev.dead_code_candidates.is_empty() {
-            "Clean"
+            "Rien à signaler"
         } else {
-            "Review needed"
+            "À vérifier"
         }
     ));
-    md.push_str(&format!("| Process Type | {} | |\n", process_type));
+    md.push_str(&format!("| Type de processus | {} | |\n", process_type));
     md.push('\n');
 
     // References
-    md.push_str("## References\n\n");
-    md.push_str("<!-- GNX:INTRO:references -->\n\n");
+    md.push_str("## Références\n\n");
 
-    md.push_str("### Source Files\n\n");
-    md.push_str("| File | Lines | Component |\n");
-    md.push_str("|------|-------|-----------|\n");
+    md.push_str("### Fichiers source\n\n");
+    md.push_str("| Fichier | Lignes | Composant |\n");
+    md.push_str("|---------|--------|-----------|\n");
     for step in &ev.steps {
         let class = step.class_name.as_deref().unwrap_or("-");
         let lines = match (step.start_line, step.end_line) {
@@ -593,9 +590,9 @@ fn render_process_page(
     md.push('\n');
 
     if !ev.global_rag_evidence.is_empty() {
-        md.push_str("### Related Documentation\n\n");
+        md.push_str("### Documentation liée\n\n");
         md.push_str("> [!NOTE]\n");
-        md.push_str("> External documentation may not reflect the current codebase.\n\n");
+        md.push_str("> La documentation externe peut ne pas refléter le code actuel.\n\n");
         md.push_str("| Document | Source |\n");
         md.push_str("|----------|--------|\n");
         for rag in &ev.global_rag_evidence {
@@ -612,15 +609,13 @@ fn render_process_page(
         md.push('\n');
     }
 
-    md.push_str("<!-- GNX:CLOSING -->\n");
     md
 }
 
 fn render_process_overview(all_evidence: &[(String, ProcessEvidence)]) -> String {
     let mut md = String::with_capacity(4096);
 
-    md.push_str("# Business Processes\n\n");
-    md.push_str("<!-- GNX:LEAD -->\n\n");
+    md.push_str("# Vue des Processus\n\n");
 
     let total = all_evidence.len();
     let fully_traced = all_evidence
@@ -634,18 +629,18 @@ fn render_process_overview(all_evidence: &[(String, ProcessEvidence)]) -> String
     let untraced = total - fully_traced - partially_traced;
 
     md.push_str(&format!(
-        "> This section documents the {} execution flows detected in the codebase.\n\n",
+        "> Cette section documente les {} flux d'exécution détectés dans le codebase.\n\n",
         total
     ));
 
-    md.push_str("| # | Process | Steps | Type | Entry Point | Trace Coverage |\n");
-    md.push_str("|---|---------|-------|------|-------------|----------------|\n");
+    md.push_str("| # | Processus | Étapes | Type | Point d'entrée | Couverture trace |\n");
+    md.push_str("|---|-----------|--------|------|----------------|------------------|\n");
     for (i, (slug, ev)) in all_evidence.iter().enumerate() {
         let ptype = ev
             .process_type
             .map(|t| match t {
                 ProcessType::IntraCommunity => "Intra",
-                ProcessType::CrossCommunity => "Cross",
+                ProcessType::CrossCommunity => "Inter-modules",
             })
             .unwrap_or("-");
         let entry = ev.entry_point_name.as_deref().unwrap_or("-");
@@ -662,16 +657,20 @@ fn render_process_overview(all_evidence: &[(String, ProcessEvidence)]) -> String
     }
     md.push('\n');
 
-    md.push_str("## Trace Coverage Summary\n\n");
-    md.push_str("| Metric | Value |\n");
-    md.push_str("|--------|-------|\n");
-    md.push_str(&format!("| Total Processes | {} |\n", total));
-    md.push_str(&format!("| Fully Traced (100%) | {} |\n", fully_traced));
-    md.push_str(&format!("| Partially Traced | {} |\n", partially_traced));
-    md.push_str(&format!("| Untraced | {} |\n", untraced));
+    md.push_str("## Synthèse de la Traçabilité\n\n");
+    md.push_str("| Indicateur | Valeur |\n");
+    md.push_str("|------------|--------|\n");
+    md.push_str(&format!("| Processus total | {} |\n", total));
+    md.push_str(&format!(
+        "| Entièrement tracés (100 %) | {} |\n",
+        fully_traced
+    ));
+    md.push_str(&format!(
+        "| Partiellement tracés | {} |\n",
+        partially_traced
+    ));
+    md.push_str(&format!("| Non tracés | {} |\n", untraced));
     md.push('\n');
-
-    md.push_str("<!-- GNX:CLOSING -->\n");
     md
 }
 
@@ -699,5 +698,103 @@ fn detect_lang_from_path(path: &str) -> String {
         "go".to_string()
     } else {
         String::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gitnexus_core::process_doc::ProcessStep;
+
+    fn evidence(process_name: &str, process_type: ProcessType, coverage: f64) -> ProcessEvidence {
+        ProcessEvidence {
+            process_id: process_name.to_string(),
+            process_name: process_name.to_string(),
+            process_type: Some(process_type),
+            entry_point_name: Some("start".to_string()),
+            entry_point_file: Some("src/lib.rs".to_string()),
+            terminal_name: Some("finish".to_string()),
+            communities: Vec::new(),
+            steps: Vec::new(),
+            step_evidence: Vec::new(),
+            global_rag_evidence: Vec::new(),
+            entities: Vec::new(),
+            components: Vec::new(),
+            trace_coverage_pct: coverage,
+            dead_code_candidates: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn process_overview_hides_internal_markers_and_uses_french_labels() {
+        let overview = render_process_overview(&[
+            (
+                "alpha".to_string(),
+                evidence("alpha", ProcessType::CrossCommunity, 0.0),
+            ),
+            (
+                "beta".to_string(),
+                evidence("beta", ProcessType::IntraCommunity, 100.0),
+            ),
+        ]);
+
+        assert!(!overview.contains("GNX:"));
+        assert!(!overview.contains("Business Processes"));
+        assert!(!overview.contains("Trace Coverage Summary"));
+        assert!(!overview.contains("Entry Point"));
+        assert!(overview.contains("# Vue des Processus"));
+        assert!(overview.contains("Point d'entrée"));
+        assert!(overview.contains("Inter-modules"));
+        assert!(overview.contains("Synthèse de la Traçabilité"));
+    }
+
+    #[test]
+    fn process_detail_hides_internal_markers_and_uses_french_labels() {
+        let mut ev = evidence("start -> finish", ProcessType::CrossCommunity, 0.0);
+        ev.steps = vec![ProcessStep {
+            step_number: 1,
+            node_id: "N1".to_string(),
+            name: "start".to_string(),
+            class_name: Some("Runner".to_string()),
+            file_path: "src/lib.rs".to_string(),
+            start_line: Some(10),
+            end_line: Some(12),
+            return_type: None,
+            parameter_count: None,
+            is_traced: false,
+            trace_call_count: 0,
+            label: NodeLabel::Function,
+            language: None,
+        }];
+        ev.step_evidence = vec![vec![Evidence {
+            id: "CODE:Function:src/lib.rs:start".to_string(),
+            source: EvidenceSource::Code,
+            content: "fn start() {}".to_string(),
+            file_path: "src/lib.rs".to_string(),
+            start_line: Some(10),
+            end_line: Some(12),
+            confidence: 1.0,
+            staleness_warning: false,
+        }]];
+
+        let page = render_process_page(&ev, &HashMap::new());
+
+        assert!(!page.contains("GNX:"));
+        assert!(!page.contains("# Process:"));
+        assert!(!page.contains("| Property | Value |"));
+        assert!(!page.contains("Process Flow"));
+        assert!(!page.contains("Step-by-Step Breakdown"));
+        assert!(!page.contains("Source Code"));
+        assert!(!page.contains("Quality Metrics"));
+        assert!(!page.contains("References"));
+        assert!(!page.contains("Trace Coverage"));
+        assert!(page.contains("# Processus : start -> finish"));
+        assert!(page.contains("| Propriété | Valeur |"));
+        assert!(page.contains("## Flux d'Exécution"));
+        assert!(page.contains("### Déroulé Étape par Étape"));
+        assert!(page.contains("**Code source**"));
+        assert!(page.contains("## Qualité du Flux"));
+        assert!(page.contains("## Références"));
+        assert!(page.contains("| Couverture trace | 0% | Faible |"));
     }
 }

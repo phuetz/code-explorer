@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use colored::Colorize;
+use regex::Regex;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
 use gitnexus_core::graph::KnowledgeGraph;
 
-use super::markdown::{extract_title_from_md, html_escape, markdown_to_html};
+use super::markdown::{extract_title_from_md, html_escape, markdown_to_html_for_page};
 
 pub(super) fn generate_html_site(
     graph: &KnowledgeGraph,
@@ -35,11 +36,11 @@ pub(super) fn generate_html_site(
         let entry = entry?;
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "md") {
-            let content = std::fs::read_to_string(&path)?;
+            let content = redact_llm_api_keys(&std::fs::read_to_string(&path)?);
             let filename = path.file_stem().unwrap().to_string_lossy().to_string();
             let raw_title = extract_title_from_md(&content).unwrap_or_else(|| filename.clone());
             let title = html_escape(&raw_title);
-            let html = markdown_to_html(&content);
+            let html = markdown_to_html_for_page(&content, &filename);
             pages.insert(filename, (title, html));
         }
     }
@@ -51,12 +52,13 @@ pub(super) fn generate_html_site(
             let entry = entry?;
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "md") {
-                let content = std::fs::read_to_string(&path)?;
+                let content = redact_llm_api_keys(&std::fs::read_to_string(&path)?);
                 let filename = path.file_stem().unwrap().to_string_lossy().to_string();
                 let raw_title = extract_title_from_md(&content).unwrap_or_else(|| filename.clone());
                 let title = html_escape(&raw_title);
-                let html = markdown_to_html(&content);
-                pages.insert(format!("modules/{}", filename), (title, html));
+                let page_id = format!("modules/{}", filename);
+                let html = markdown_to_html_for_page(&content, &page_id);
+                pages.insert(page_id, (title, html));
             }
         }
     }
@@ -68,12 +70,13 @@ pub(super) fn generate_html_site(
             let entry = entry?;
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "md") {
-                let content = std::fs::read_to_string(&path)?;
+                let content = redact_llm_api_keys(&std::fs::read_to_string(&path)?);
                 let filename = path.file_stem().unwrap().to_string_lossy().to_string();
                 let raw_title = extract_title_from_md(&content).unwrap_or_else(|| filename.clone());
                 let title = html_escape(&raw_title);
-                let html = markdown_to_html(&content);
-                pages.insert(format!("processes/{}", filename), (title, html));
+                let page_id = format!("processes/{}", filename);
+                let html = markdown_to_html_for_page(&content, &page_id);
+                pages.insert(page_id, (title, html));
             }
         }
     }
@@ -91,6 +94,14 @@ pub(super) fn generate_html_site(
     let prompt_audit_path = docs_dir.join("_meta").join("prompt-audit.json");
     let prompt_audit_value = load_json_file(&prompt_audit_path, Value::Null)?;
     insert_prompt_audit_page(&mut pages, &mut index_value, &prompt_audit_value);
+    let repaired_links = repair_embedded_internal_links(&mut pages);
+    if repaired_links > 0 {
+        println!(
+            "{} Internal links normalized: {}",
+            "OK".green(),
+            repaired_links
+        );
+    }
 
     // 2. Build sidebar HTML with numbered sections
     let mut sidebar_html = String::new();
@@ -155,7 +166,7 @@ pub(super) fn generate_html_site(
             ""
         };
         sidebar_html.push_str(&format!(
-            "<a href=\"#\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\" class=\"{active}\">{section_num}.{sub_num} {title}</a>\n",
+            "<a href=\"#{id}\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\" class=\"{active}\">{section_num}.{sub_num} {title}</a>\n",
             sub_num = sub_idx + 1
         ));
     }
@@ -173,7 +184,7 @@ pub(super) fn generate_html_site(
         ));
         for (sub_idx, (id, (title, _))) in ctrl_pages.iter().enumerate() {
             sidebar_html.push_str(&format!(
-                "<a href=\"#\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
+                "<a href=\"#{id}\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
                 sub_num = sub_idx + 1
             ));
         }
@@ -192,7 +203,7 @@ pub(super) fn generate_html_site(
         ));
         for (sub_idx, (id, (title, _))) in data_pages.iter().enumerate() {
             sidebar_html.push_str(&format!(
-                "<a href=\"#\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
+                "<a href=\"#{id}\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
                 sub_num = sub_idx + 1
             ));
         }
@@ -211,7 +222,7 @@ pub(super) fn generate_html_site(
         ));
         for (sub_idx, (id, (title, _))) in other_pages.iter().enumerate() {
             sidebar_html.push_str(&format!(
-                "<a href=\"#\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
+                "<a href=\"#{id}\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
                 sub_num = sub_idx + 1
             ));
         }
@@ -230,7 +241,7 @@ pub(super) fn generate_html_site(
         ));
         for (sub_idx, (id, (title, _))) in process_pages.iter().enumerate() {
             sidebar_html.push_str(&format!(
-                "<a href=\"#\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
+                "<a href=\"#{id}\" data-page=\"{id}\" onclick=\"showPage('{id}'); return false;\">{section_num}.{sub_num} {title}</a>\n",
                 sub_num = sub_idx + 1
             ));
         }
@@ -366,6 +377,40 @@ pub(super) fn strip_html_tags(html: &str) -> String {
     }
     // Collapse whitespace
     result.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn redact_llm_api_keys(input: &str) -> String {
+    let redacted = redact_token_prefix(input, "sk-", 24);
+    redact_token_prefix(&redacted, "AIza", 24)
+}
+
+fn redact_token_prefix(input: &str, prefix: &str, min_len: usize) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut cursor = 0;
+
+    while let Some(offset) = input[cursor..].find(prefix) {
+        let start = cursor + offset;
+        out.push_str(&input[cursor..start]);
+
+        let mut end = start + prefix.len();
+        for ch in input[end..].chars() {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                end += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        if end - start >= min_len {
+            out.push_str("[redacted-secret]");
+        } else {
+            out.push_str(&input[start..end]);
+        }
+        cursor = end;
+    }
+
+    out.push_str(&input[cursor..]);
+    out
 }
 
 fn ensure_local_mermaid_asset(docs_dir: &Path) -> Result<()> {
@@ -522,6 +567,178 @@ fn nav_item_page_id(item: &Value) -> Option<String> {
     } else {
         Some(page_id)
     }
+}
+
+fn repair_embedded_internal_links(pages: &mut BTreeMap<String, (String, String)>) -> usize {
+    let page_ids: HashSet<String> = pages.keys().cloned().collect();
+    let link_re =
+        Regex::new(r#"<a\b[^>]*\bdata-page="([^"]+)"[^>]*>"#).expect("valid data-page link regex");
+    let mut total = 0usize;
+
+    for (_, html) in pages.values_mut() {
+        let mut changed = 0usize;
+        let updated = link_re
+            .replace_all(html, |caps: &regex::Captures<'_>| {
+                let tag = caps.get(0).map(|m| m.as_str()).unwrap_or_default();
+                let target = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
+                if page_ids.contains(target) {
+                    return tag.to_string();
+                }
+                let Some(resolved) = resolve_embedded_page_id(target, &page_ids) else {
+                    return tag.to_string();
+                };
+                if resolved == target {
+                    return tag.to_string();
+                }
+
+                changed += 1;
+                let anchor = extract_attr_from_html_tag(tag, "data-anchor")
+                    .or_else(|| extract_href_anchor(tag));
+                let mut repaired = replace_attr_value(tag, "data-page", &resolved);
+                let href = anchor
+                    .as_ref()
+                    .map(|anchor| format!("#{resolved}%23{anchor}"))
+                    .unwrap_or_else(|| format!("#{resolved}"));
+                repaired = replace_attr_value(&repaired, "href", &href);
+                repaired
+            })
+            .into_owned();
+        if changed > 0 {
+            *html = updated;
+            total += changed;
+        }
+    }
+
+    total
+}
+
+fn resolve_embedded_page_id(raw: &str, page_ids: &HashSet<String>) -> Option<String> {
+    let cleaned = normalize_page_path(raw);
+    let mut candidates = Vec::new();
+    push_candidate(&mut candidates, cleaned.clone());
+
+    let mut collapsed = cleaned.clone();
+    while collapsed.contains("modules/modules/") {
+        collapsed = collapsed.replace("modules/modules/", "modules/");
+    }
+    while collapsed.contains("processes/modules/") {
+        collapsed = collapsed.replace("processes/modules/", "modules/");
+    }
+    push_candidate(&mut candidates, collapsed.clone());
+
+    if let Some(rest) = collapsed.strip_prefix("processes/") {
+        push_candidate(&mut candidates, rest.to_string());
+        push_candidate(&mut candidates, format!("modules/{rest}"));
+    }
+    if !collapsed.contains('/') {
+        push_candidate(&mut candidates, format!("modules/{collapsed}"));
+        push_candidate(&mut candidates, format!("processes/{collapsed}"));
+    }
+    if collapsed == "services" || collapsed.ends_with("/services") {
+        push_candidate(&mut candidates, "modules/services".to_string());
+    }
+    if collapsed == "views" || collapsed.ends_with("/views") {
+        push_candidate(&mut candidates, "modules/views".to_string());
+    }
+    if collapsed == "data-entities" || collapsed.ends_with("/data-entities") {
+        if let Some(data_page) = preferred_data_model_page(page_ids) {
+            push_candidate(&mut candidates, data_page);
+        }
+        push_candidate(&mut candidates, "aspnet-data-model".to_string());
+    }
+    if collapsed.starts_with("modules/ctrl-") || collapsed.ends_with("controller") {
+        push_candidate(&mut candidates, "aspnet-controllers".to_string());
+    }
+
+    candidates
+        .into_iter()
+        .find(|candidate| page_ids.contains(candidate))
+}
+
+fn normalize_page_path(raw: &str) -> String {
+    let mut target = raw.trim().replace('\\', "/");
+    if let Some(stripped) = target.strip_prefix('#') {
+        target = stripped.to_string();
+    }
+    if let Some((before, _)) = target.split_once("%23") {
+        target = before.to_string();
+    }
+    if let Some((before, _)) = target.split_once('#') {
+        target = before.to_string();
+    }
+    if let Some(stripped) = target.strip_suffix(".md") {
+        target = stripped.to_string();
+    }
+
+    let mut parts = Vec::new();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            value => parts.push(value),
+        }
+    }
+    parts.join("/")
+}
+
+fn preferred_data_model_page(page_ids: &HashSet<String>) -> Option<String> {
+    let mut candidates: Vec<String> = page_ids
+        .iter()
+        .filter(|id| id.starts_with("modules/data-") && id.ends_with("entities"))
+        .cloned()
+        .collect();
+    candidates.sort_by_key(|id| {
+        let lower = id.to_ascii_lowercase();
+        (
+            lower.contains("audit") || lower.contains("doc"),
+            id.len(),
+            id.clone(),
+        )
+    });
+    candidates.into_iter().next()
+}
+
+fn push_candidate(candidates: &mut Vec<String>, value: String) {
+    if !value.is_empty() && !candidates.contains(&value) {
+        candidates.push(value);
+    }
+}
+
+fn extract_href_anchor(tag: &str) -> Option<String> {
+    let href = extract_attr_from_html_tag(tag, "href")?;
+    if let Some((_, anchor)) = href.split_once("%23") {
+        return Some(sanitize_link_fragment(anchor));
+    }
+    let after_hash = href.strip_prefix('#')?;
+    let (_, anchor) = after_hash.split_once('#')?;
+    Some(sanitize_link_fragment(anchor))
+}
+
+fn extract_attr_from_html_tag(tag: &str, attr: &str) -> Option<String> {
+    let needle = format!(r#"{attr}=""#);
+    let start = tag.find(&needle)? + needle.len();
+    let end = start + tag[start..].find('"')?;
+    Some(tag[start..end].to_string())
+}
+
+fn replace_attr_value(tag: &str, attr: &str, value: &str) -> String {
+    let needle = format!(r#"{attr}=""#);
+    let Some(start) = tag.find(&needle).map(|idx| idx + needle.len()) else {
+        return tag.to_string();
+    };
+    let Some(rel_end) = tag[start..].find('"') else {
+        return tag.to_string();
+    };
+    let end = start + rel_end;
+    format!("{}{}{}", &tag[..start], html_escape(value), &tag[end..])
+}
+
+fn sanitize_link_fragment(raw: &str) -> String {
+    raw.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        .collect()
 }
 
 fn render_prompt_audit_page(audit: &Value) -> String {
@@ -1177,15 +1394,96 @@ fn build_html_template(
       text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
     }}
     .ev-source-item {{
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
       padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
     }}
+    .ev-source-group {{
+      padding: 8px 0;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }}
+    .ev-source-group:first-of-type {{ border-top: 0; padding-top: 0; }}
+    .ev-source-group-title {{
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 650; color: var(--text);
+      margin-bottom: 6px;
+    }}
+    .ev-source-group-title svg {{ width: 14px; height: 14px; color: var(--accent); }}
+    .ev-source-documentation .ev-source-group-title svg {{ color: #4ade80; }}
+    .ev-source-screenshot .ev-source-group-title svg {{ color: #fbbf24; }}
     .ev-source-path {{
       font-family: monospace; font-size: 11px; cursor: pointer;
       color: var(--text-muted);
     }}
     .ev-source-path:hover {{ color: var(--accent); }}
     .ev-source-path.copied {{ color: #4ade80; }}
+    .ev-source-title {{ font-size: 12px; color: var(--text); }}
+    .ev-source-kind {{
+      font-size: 10px; color: var(--text-muted); border: 1px solid var(--border);
+      border-radius: 999px; padding: 1px 6px;
+    }}
+    .ev-source-excerpt {{
+      flex-basis: 100%;
+      margin: 2px 0 4px;
+      padding: 6px 8px;
+      background: var(--bg);
+      border-left: 2px solid var(--border);
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      max-height: 6.5em;
+      overflow: hidden;
+    }}
+    .ev-source-screenshot .ev-source-excerpt {{ border-left-color: #fbbf24; }}
+    .ev-source-documentation .ev-source-excerpt {{ border-left-color: #4ade80; }}
+    .used-sources {{
+      margin: 12px 0 18px;
+      padding: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }}
+    .used-sources-title {{
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }}
+    .used-source-group {{
+      padding: 8px 0;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }}
+    .used-source-group:first-of-type {{ border-top: 0; padding-top: 0; }}
+    .used-source-group-title {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--text);
+      margin-bottom: 6px;
+    }}
+    .used-source-group-title svg {{ width: 14px; height: 14px; color: var(--accent); }}
+    .used-source-screenshot .used-source-group-title svg {{ color: #fbbf24; }}
+    .used-source-documentation .used-source-group-title svg {{ color: #4ade80; }}
+    .used-source-item {{
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      flex-wrap: wrap;
+      padding: 3px 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }}
+    .used-source-item code {{
+      font-size: 11px;
+      color: var(--text);
+      background: var(--bg);
+    }}
     /* Staleness warning */
     .stale-warning {{
       display: flex; align-items: center; gap: 8px;
@@ -1380,7 +1678,7 @@ fn build_html_template(
       const pageId = navPageId(item);
       if (!pageId || !PAGES[pageId]) return;
       const link = document.createElement('a');
-      link.href = '#';
+      link.href = '#' + pageId;
       link.dataset.page = pageId;
       link.onclick = function(e) {{
         e.preventDefault();
@@ -1511,6 +1809,13 @@ fn build_html_template(
       writeClipboard(currentPageUrl(), 'Lien de la page copié');
     }}
 
+    document.addEventListener('click', function(event) {{
+      const link = event.target.closest('#content a[data-page]');
+      if (!link) return;
+      event.preventDefault();
+      showPage(link.dataset.page, link.dataset.anchor || undefined);
+    }});
+
     function showPage(id, anchor, skipHistory = false) {{
       if (window.innerWidth < 900) {{
         var sb = document.querySelector('.sidebar');
@@ -1566,12 +1871,24 @@ fn build_html_template(
             const enrichedAt = new Date(provEntry.enriched_at);
             const ageDays = (Date.now() - enrichedAt) / 86400000;
             const ago = timeSince(enrichedAt);
-            const sourcesCount = (provEntry.evidence_refs || []).length;
+            const evidenceRefs = provEntry.evidence_refs || [];
+            const sourcesCount = evidenceRefs.length;
+            const evidenceCounts = evidenceRefs.reduce((acc, r) => {{
+              if (r.kind === 'RAG DocChunk') acc.docs += 1;
+              else if (r.kind === 'RAG Screenshot') acc.screenshots += 1;
+              else acc.code += 1;
+              return acc;
+            }}, {{ code: 0, docs: 0, screenshots: 0 }});
+            const evidenceMix = [
+              evidenceCounts.code ? evidenceCounts.code + ' code' : '',
+              evidenceCounts.docs ? evidenceCounts.docs + ' doc' + (evidenceCounts.docs > 1 ? 's' : '') : '',
+              evidenceCounts.screenshots ? evidenceCounts.screenshots + ' capture' + (evidenceCounts.screenshots > 1 ? 's' : '') : '',
+            ].filter(Boolean).join(' · ');
             const panelId = 'ev-panel-' + id.replace(/\//g, '-');
             // Build badge
             const badge = document.createElement('div');
             badge.className = 'provenance-badge';
-            badge.title = 'Cliquer pour voir les sources analysées';
+            badge.title = evidenceMix ? 'Cliquer pour voir les sources analysées : ' + evidenceMix : 'Cliquer pour voir les sources analysées';
             badge.onclick = function() {{ toggleEvPanel(panelId); }};
             const badgeIcon = document.createElement('i');
             badgeIcon.setAttribute('data-lucide', 'cpu');
@@ -1580,7 +1897,7 @@ fn build_html_template(
             modelCode.textContent = model;
             const detail = document.createElement('span');
             detail.className = 'provenance-detail';
-            detail.textContent = sourcesCount + ' source' + (sourcesCount !== 1 ? 's' : '');
+            detail.textContent = evidenceMix || (sourcesCount + ' source' + (sourcesCount !== 1 ? 's' : ''));
             badge.appendChild(badgeIcon);
             badge.appendChild(document.createTextNode(' Enrichi par '));
             badge.appendChild(modelCode);
@@ -1596,18 +1913,55 @@ fn build_html_template(
             panelTitle.className = 'ev-panel-title';
             panelTitle.textContent = 'Sources analysées (' + sourcesCount + ')';
             panel.appendChild(panelTitle);
-            (provEntry.evidence_refs || []).forEach(function(r) {{
-              const item = document.createElement('div');
-              item.className = 'ev-source-item';
-              const loc = r.start_line ? ':L' + r.start_line : '';
-              const span = document.createElement('span');
-              span.className = 'ev-source-path';
-              span.textContent = (r.file_path || '') + loc;
-              span.title = 'Cliquer pour copier';
-              span.dataset.path = (r.file_path || '') + loc;
-              span.onclick = function() {{ copyPath(this.dataset.path); }};
-              item.appendChild(span);
-              panel.appendChild(item);
+            const evidenceGroups = [
+              {{ key: 'code', label: 'Code', icon: 'code-2', accepts: function(r) {{ return r.kind !== 'RAG DocChunk' && r.kind !== 'RAG Screenshot'; }} }},
+              {{ key: 'documentation', label: 'Documentation', icon: 'book-open', accepts: function(r) {{ return r.kind === 'RAG DocChunk'; }} }},
+              {{ key: 'screenshot', label: 'Captures / OCR', icon: 'image', accepts: function(r) {{ return r.kind === 'RAG Screenshot'; }} }},
+            ];
+            evidenceGroups.forEach(function(group) {{
+              const groupRefs = evidenceRefs.filter(group.accepts);
+              if (!groupRefs.length) return;
+              const groupEl = document.createElement('div');
+              groupEl.className = 'ev-source-group ev-source-' + group.key;
+              const groupTitle = document.createElement('div');
+              groupTitle.className = 'ev-source-group-title';
+              const groupIcon = document.createElement('i');
+              groupIcon.setAttribute('data-lucide', group.icon);
+              groupTitle.appendChild(groupIcon);
+              groupTitle.appendChild(document.createTextNode(group.label + ' (' + groupRefs.length + ')'));
+              groupEl.appendChild(groupTitle);
+              groupRefs.forEach(function(r) {{
+                const item = document.createElement('div');
+                item.className = 'ev-source-item';
+                const loc = r.start_line ? ':L' + r.start_line + (r.end_line && r.end_line !== r.start_line ? '-L' + r.end_line : '') : '';
+                const path = (r.file_path || '') + loc;
+                const span = document.createElement('span');
+                span.className = 'ev-source-path';
+                span.textContent = path;
+                span.title = 'Cliquer pour copier';
+                span.dataset.path = path;
+                span.onclick = function() {{ copyPath(this.dataset.path); }};
+                item.appendChild(span);
+                const title = document.createElement('span');
+                title.className = 'ev-source-title';
+                title.textContent = r.title || r.id || '';
+                item.appendChild(title);
+                if (r.kind) {{
+                  const kind = document.createElement('span');
+                  kind.className = 'ev-source-kind';
+                  kind.textContent = r.kind;
+                  item.appendChild(kind);
+                }}
+                if (r.excerpt) {{
+                  const excerpt = document.createElement('div');
+                  excerpt.className = 'ev-source-excerpt';
+                  const text = String(r.excerpt);
+                  excerpt.textContent = text.length > 420 ? text.slice(0, 420) + '\u2026' : text;
+                  item.appendChild(excerpt);
+                }}
+                groupEl.appendChild(item);
+              }});
+              panel.appendChild(groupEl);
             }});
             content.insertBefore(panel, badge.nextSibling);
             if (ageDays > 30) {{
@@ -1631,7 +1985,8 @@ fn build_html_template(
             if (!targetPage) return;
             const a = document.createElement('a');
             a.className = 'related-page-card';
-            a.href = '#';
+            a.href = '#' + pageId;
+            a.dataset.page = pageId;
             a.textContent = targetPage.title || pageId;
             a.title = pageId;
             a.onclick = function(e) {{
@@ -1759,7 +2114,7 @@ fn build_html_template(
       const breadcrumb = document.createElement('div');
       breadcrumb.className = 'breadcrumb';
       const home = document.createElement('a');
-      home.href = '#';
+      home.href = '#' + PAGE_ORDER[0];
       home.textContent = 'Documentation';
       home.onclick = function(e) {{
         e.preventDefault();
@@ -1792,7 +2147,7 @@ fn build_html_template(
       if (idx === -1) return nav;
       const appendNavLink = function(pageId, label, isNext) {{
         const a = document.createElement('a');
-        a.href = '#';
+        a.href = '#' + pageId;
         if (isNext) a.className = 'nav-next';
         a.onclick = function(e) {{
           e.preventDefault();
@@ -2661,7 +3016,7 @@ fn build_html_template(
         results.forEach(r => {{
           const a = document.createElement('a');
           a.className = 'search-result';
-          a.href = '#';
+          a.href = '#' + r.id;
           a.onclick = function() {{
             showPage(r.id);
             document.getElementById('search-overlay').classList.add('hidden');
@@ -2783,6 +3138,271 @@ fn build_html_template(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_test_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("gitnexus-{name}-{}-{nanos}", std::process::id()))
+    }
+
+    #[test]
+    fn generate_html_site_writes_navigable_redacted_fixture() {
+        let root = unique_test_dir("html-fixture");
+        let repo = root.join("sample-repo");
+        let docs = repo.join(".gitnexus").join("docs");
+        fs::create_dir_all(docs.join("modules")).expect("modules dir");
+        fs::create_dir_all(docs.join("processes")).expect("processes dir");
+        fs::create_dir_all(docs.join("_meta")).expect("meta dir");
+
+        let openai_key = ["sk", "proj", "live1234567890abcdef123456"].join("-");
+        let gemini_key = format!("{}{}", "AIza", "SyD9liveExampleKeyValue1234567890");
+
+        fs::write(
+            docs.join("overview.md"),
+            format!(
+                "# Overview First\n\nSee [Service](modules/service.md) and [Flux](./processes/letter_generation.md).\n\n```mermaid\nflowchart TD\n  A[Start] --> B[End]\n```\n\nSecret: {openai_key}\n"
+            ),
+        )
+        .expect("overview md");
+        fs::write(
+            docs.join("modules").join("service.md"),
+            "# Service Module\n\nHandles service logic.\n\n[Back](./../overview.md) and [Flux](./../processes/letter_generation.md).\n",
+        )
+        .expect("module md");
+        fs::write(
+            docs.join("processes").join("letter_generation.md"),
+            format!(
+                "# Flux Courrier\n\nSee [Service](../modules/service.md).\n\nToken: {gemini_key}\n"
+            ),
+        )
+        .expect("process md");
+        fs::write(
+            docs.join("_index.json"),
+            r#"{
+              "generatedAt": "2026-05-10T16:00:00+02:00",
+              "pages": [
+                {"id":"overview","path":"overview.md","title":"Overview First","icon":"home"},
+                {"id":"modules","title":"Modules","children":[
+                  {"id":"service","path":"modules/service.md","title":"Service Module","icon":"server"}
+                ]},
+                {"id":"processes","title":"Processus","children":[
+                  {"id":"letter_generation","path":"processes/letter_generation.md","title":"Flux Courrier","icon":"workflow"}
+                ]}
+              ]
+            }"#,
+        )
+        .expect("index json");
+        fs::write(
+            docs.join("_meta").join("provenance.json"),
+            r#"[
+              {
+                "page_id": "overview",
+                "model": "gpt-5.5",
+                "enriched_at": "2026-05-10T16:00:00+02:00",
+                "evidence_refs": [
+                  {
+                    "id": "E1",
+                    "file_path": "src/overview.rs",
+                    "start_line": 4,
+                    "end_line": 8,
+                    "excerpt": "fn overview() {}",
+                    "title": "Overview handler",
+                    "kind": "Method"
+                  },
+                  {
+                    "id": "RAG1",
+                    "file_path": "docs/overview.md",
+                    "start_line": null,
+                    "end_line": null,
+                    "excerpt": "Documentation métier",
+                    "title": "Guide overview",
+                    "kind": "RAG DocChunk"
+                  },
+                  {
+                    "id": "RAG2",
+                    "file_path": "captures/overview.png",
+                    "start_line": null,
+                    "end_line": null,
+                    "excerpt": "[Capture/OCR RAG]\nBouton aperçu",
+                    "title": "Overview capture",
+                    "kind": "RAG Screenshot"
+                  }
+                ],
+                "validation": { "is_valid": true, "issues": [] },
+                "content_hash": "fixture"
+              }
+            ]"#,
+        )
+        .expect("provenance json");
+
+        generate_html_site(&KnowledgeGraph::new(), &repo, &docs).expect("html generation");
+        let html = fs::read_to_string(docs.join("index.html")).expect("index html");
+
+        assert!(html.contains("<h1>Overview First</h1>"));
+        assert!(html.contains(
+            "const PAGE_ORDER = [\"overview\",\"modules/service\",\"processes/letter_generation\"]"
+        ));
+        assert!(html.contains("processes/letter_generation"));
+        assert!(html.contains("Flux Courrier"));
+        assert!(html.contains("href=\\\"#modules/service\\\" data-page=\\\"modules/service\\\""));
+        assert!(html.contains(
+            "href=\\\"#processes/letter_generation\\\" data-page=\\\"processes/letter_generation\\\""
+        ));
+        assert!(html.contains("href=\\\"#overview\\\" data-page=\\\"overview\\\""));
+        assert_generated_internal_links_are_valid(&html);
+        assert!(html.contains("function renderMermaid()"));
+        assert!(html.contains(r#"class="language-mermaid""#));
+        assert!(html.contains(r#"id="search-input""#));
+        assert!(html.contains("ev-source-documentation"));
+        assert!(html.contains("ev-source-screenshot"));
+        assert!(html.contains("Captures / OCR"));
+        assert!(html.contains("evidenceCounts.code + ' code'"));
+        assert!(html.contains("evidenceCounts.docs + ' doc'"));
+        assert!(html.contains("evidenceCounts.screenshots + ' capture'"));
+        assert!(html.contains("RAG Screenshot"));
+        assert!(html.contains("captures/overview.png"));
+        assert!(html.contains("ev-source-excerpt"));
+        assert!(html.contains("Bouton aperçu"));
+        assert!(html.contains("[redacted-secret]"));
+        assert!(!html.contains(&openai_key));
+        assert!(!html.contains(&gemini_key));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn assert_generated_internal_links_are_valid(html: &str) {
+        let pages = generated_pages_json(html);
+        let pages_obj = pages.as_object().expect("PAGES object");
+        let page_ids: HashSet<String> = pages_obj.keys().cloned().collect();
+        let mut checked_links = 0usize;
+
+        for (source_id, page) in pages_obj {
+            let fragment = page.get("html").and_then(Value::as_str).unwrap_or_default();
+            assert!(
+                !fragment.contains("onclick=\"showPage"),
+                "page {source_id} contains legacy inline showPage onclick"
+            );
+
+            for tag in anchor_tags(fragment) {
+                let href = extract_attr_from_tag(tag, "href").unwrap_or_default();
+                assert!(
+                    !href.contains(".md") && !href.contains(".."),
+                    "page {source_id} contains suspicious href {href}"
+                );
+
+                let Some(target) = extract_attr_from_tag(tag, "data-page") else {
+                    continue;
+                };
+                checked_links += 1;
+                assert!(
+                    page_ids.contains(&target),
+                    "page {source_id} links to missing page {target}"
+                );
+                assert!(
+                    !target.contains(".md") && !target.contains(".."),
+                    "page {source_id} contains suspicious data-page {target}"
+                );
+
+                let expected_href = if let Some(anchor) = extract_attr_from_tag(tag, "data-anchor")
+                {
+                    format!("#{target}%23{anchor}")
+                } else {
+                    format!("#{target}")
+                };
+                assert_eq!(
+                    href, expected_href,
+                    "page {source_id} has mismatched href for data-page {target}"
+                );
+            }
+        }
+
+        assert!(checked_links > 0, "fixture should contain internal links");
+    }
+
+    fn generated_pages_json(html: &str) -> Value {
+        let start_marker = "const PAGES = ";
+        let end_marker = ";\n    const PAGE_ORDER = ";
+        let start = html.find(start_marker).expect("PAGES declaration") + start_marker.len();
+        let end = html[start..].find(end_marker).expect("PAGE_ORDER marker") + start;
+        serde_json::from_str(&html[start..end]).expect("valid PAGES JSON")
+    }
+
+    fn anchor_tags(fragment: &str) -> Vec<&str> {
+        let mut tags = Vec::new();
+        let mut rest = fragment;
+        while let Some(start) = rest.find("<a ") {
+            let after_start = &rest[start..];
+            let Some(end) = after_start.find('>') else {
+                break;
+            };
+            tags.push(&after_start[..=end]);
+            rest = &after_start[end + 1..];
+        }
+        tags
+    }
+
+    fn extract_attr_from_tag(tag: &str, attr: &str) -> Option<String> {
+        let needle = format!("{attr}=\"");
+        let start = tag.find(&needle)? + needle.len();
+        let rest = &tag[start..];
+        let end = rest.find('"')?;
+        Some(rest[..end].to_string())
+    }
+
+    #[test]
+    fn repair_embedded_internal_links_resolves_relative_and_alias_targets() {
+        let mut pages = BTreeMap::from([
+            ("architecture".to_string(), ("Architecture".to_string(), String::new())),
+            (
+                "aspnet-controllers".to_string(),
+                ("Controllers".to_string(), String::new()),
+            ),
+            (
+                "modules/data-alisev2entities".to_string(),
+                ("Data".to_string(), String::new()),
+            ),
+            (
+                "modules/services".to_string(),
+                ("Services".to_string(), String::new()),
+            ),
+            (
+                "modules/views".to_string(),
+                ("Views".to_string(), String::new()),
+            ),
+            (
+                "modules/ctrl-commissioncontroller".to_string(),
+                (
+                    "CommissionController".to_string(),
+                    r##"<a href="#modules/modules/services%23courriersservice" data-page="modules/modules/services" data-anchor="courriersservice">CourriersService</a>
+<a href="#processes/modules/views%23details-cshtml" data-page="processes/modules/views" data-anchor="details-cshtml">Details</a>
+<a href="#modules/data-entities%23CMCAS" data-page="modules/data-entities" data-anchor="CMCAS">CMCAS</a>
+<a href="#../architecture" data-page="../architecture">architecture</a>
+<a href="#modules/ctrl-rootcontroller" data-page="modules/ctrl-rootcontroller">RootController</a>"##
+                        .to_string(),
+                ),
+            ),
+        ]);
+
+        let repaired = repair_embedded_internal_links(&mut pages);
+        let html = &pages["modules/ctrl-commissioncontroller"].1;
+
+        assert_eq!(repaired, 5);
+        assert!(html.contains(
+            r##"href="#modules/services%23courriersservice" data-page="modules/services""##
+        ));
+        assert!(
+            html.contains(r##"href="#modules/views%23details-cshtml" data-page="modules/views""##)
+        );
+        assert!(html.contains(
+            r##"href="#modules/data-alisev2entities%23CMCAS" data-page="modules/data-alisev2entities""##
+        ));
+        assert!(html.contains(r##"href="#architecture" data-page="architecture""##));
+        assert!(html.contains(r##"href="#aspnet-controllers" data-page="aspnet-controllers""##));
+    }
 
     #[test]
     fn script_json_escapes_script_end_tags() {
@@ -3127,6 +3747,27 @@ mod tests {
         assert!(html.contains("writeClipboard(text, 'Chemin copié')"));
         assert!(html.contains("writeClipboard(pre.textContent || '', 'Code copié')"));
         assert!(html.contains("writeClipboard(src, 'Source Mermaid copiée')"));
+    }
+
+    #[test]
+    fn html_template_navigation_uses_page_hashes() {
+        let html = build_html_template(
+            "sample",
+            "1 node",
+            "",
+            "<h1>Overview</h1>",
+            "{}",
+            "[]",
+            "[]",
+            r#"{"generatedAt":"2026-05-06T20:00:00+02:00","pages":[]}"#,
+            "[]",
+            "{}",
+        );
+
+        assert!(html.contains("link.href = '#' + pageId;"));
+        assert!(html.contains("home.href = '#' + PAGE_ORDER[0];"));
+        assert!(html.contains("a.href = '#' + pageId;"));
+        assert!(html.contains("a.href = '#' + r.id;"));
     }
 
     #[test]

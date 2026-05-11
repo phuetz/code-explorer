@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Check, Code2, Copy, Download, Loader2, Maximize2, X } from 'lucide-react';
 import { copyTextToClipboard } from '../../utils/clipboard';
+import { repairMermaidSource } from '../../utils/mermaid';
 
 /**
  * Renders a Mermaid diagram from raw text.
@@ -61,7 +62,8 @@ export function MermaidBlock({ text }: Props) {
           fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
           securityLevel: 'strict',
         });
-        const { svg: rendered } = await mermaid.render(svgId, text.trim());
+        const renderText = repairMermaidSource(text);
+        const { svg: rendered } = await mermaid.render(svgId, renderText.trim());
         if (cancelled) return;
         const purified = DOMPurify.sanitize(rendered, {
           USE_PROFILES: { svg: true, svgFilters: true },
@@ -185,10 +187,10 @@ export function MermaidBlock({ text }: Props) {
           <SourceBlock text={text} />
         </div>
       ) : (
-        <div className="flex min-h-28 justify-center overflow-x-auto p-4">
+        <div className="flex min-h-28 justify-start overflow-x-auto p-4">
           {svg ? (
             <div
-              className="min-w-max text-neutral-100 [&_svg]:max-w-none"
+              className="min-w-[860px] text-neutral-100 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-none [&_svg]:min-w-[860px]"
               dangerouslySetInnerHTML={{ __html: svg }}
             />
           ) : (
@@ -230,7 +232,7 @@ export function MermaidBlock({ text }: Props) {
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
           <div
-            className="max-h-[88vh] max-w-[94vw] overflow-auto rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100 shadow-2xl [&_svg]:max-w-none"
+            className="max-h-[88vh] max-w-[94vw] overflow-auto rounded-lg border border-neutral-800 bg-neutral-950 p-6 text-neutral-100 shadow-2xl [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-none [&_svg]:min-w-[1100px]"
             onClick={(event) => event.stopPropagation()}
             dangerouslySetInnerHTML={{ __html: svg }}
           />

@@ -74,6 +74,11 @@ pub fn hint_for(tool_name: &str) -> &'static str {
              Use `analyze_execution_trace` for a chronological view, \
              or `context` on a key entity to explore its implementation."
         }
+        "search_processes" => {
+            "Use the process IDs/names to ask for a focused explanation, \
+             then call `query` or `search_code` on key steps to retrieve \
+             implementation evidence."
+        }
         "analyze_execution_trace" => {
             "Review the timeline of the execution trace and the provided source code for each step. \
              Use this information to write a comprehensive business process documentation, or use `context` \
@@ -164,6 +169,7 @@ mod tests {
             "diagram",
             "report",
             "business",
+            "search_processes",
             "analyze_execution_trace",
             "search_code",
             "read_file",

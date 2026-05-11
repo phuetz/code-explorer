@@ -12,7 +12,7 @@ use gitnexus_core::graph::types::{NodeLabel, RelationshipType};
 use gitnexus_core::graph::KnowledgeGraph;
 use gitnexus_core::storage::repo_manager::{self, registry_entry_id, RegistryEntry};
 use gitnexus_db::inmemory::cypher::GraphIndexes;
-use gitnexus_db::inmemory::fts::{FtsIndex, FtsResult};
+use gitnexus_db::inmemory::fts::{fts_result_to_json, FtsIndex, FtsResult};
 use gitnexus_db::pool::ConnectionPool;
 use gitnexus_db::query;
 use gitnexus_git::coupling::CouplingError;
@@ -53,6 +53,19 @@ fn git_history_required_error(tool: &str) -> McpError {
 
 fn clamp_limit(raw: Option<u64>, default: usize, max: usize) -> usize {
     raw.map(|v| v as usize).unwrap_or(default).clamp(1, max)
+}
+
+fn normalize_repo_lookup_key(raw: &str) -> String {
+    let mut key = raw.trim().replace('\\', "/").to_lowercase();
+    if let Some(rest) = key.strip_prefix("//?/unc/") {
+        key = format!("//{}", rest);
+    } else if let Some(rest) = key.strip_prefix("//?/") {
+        key = rest.to_string();
+    }
+    while key.ends_with('/') {
+        key.pop();
+    }
+    key
 }
 
 impl LocalBackend {
@@ -214,7 +227,7 @@ impl LocalBackend {
                 }
             }
             Some(name_or_path) => {
-                let lower = name_or_path.to_lowercase();
+                let lookup_key = normalize_repo_lookup_key(name_or_path);
                 self.registry
                     .iter()
                     .find(|e| {
@@ -225,14 +238,14 @@ impl LocalBackend {
                         // boundary. Without the segment guard, "foo" would
                         // also match "/repos/myfoo", silently selecting the
                         // wrong repo for any name that's a tail substring.
-                        if e.name.to_lowercase() == lower {
+                        if e.name.to_lowercase() == lookup_key {
                             return true;
                         }
-                        let path_lower = e.path.to_lowercase().replace('\\', "/");
-                        if path_lower == lower {
+                        let path_key = normalize_repo_lookup_key(&e.path);
+                        if path_key == lookup_key {
                             return true;
                         }
-                        path_lower.ends_with(&format!("/{}", lower))
+                        !lookup_key.contains('/') && path_key.ends_with(&format!("/{}", lookup_key))
                     })
                     .ok_or_else(|| McpError::RepoNotFound(name_or_path.to_string()))
             }
@@ -256,6 +269,7 @@ impl LocalBackend {
             "diagram" => self.tool_diagram(args).await,
             "report" => self.tool_report(args).await,
             "business" => self.tool_business(args).await,
+            "search_processes" => self.tool_search_processes(args).await,
             "analyze_execution_trace" => self.tool_analyze_execution_trace(args).await,
             "search_code" => self.tool_search_code(args).await,
             "read_file" => self.tool_read_file(args).await,
@@ -331,25 +345,17 @@ impl LocalBackend {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        let (db_path, snap_path) = {
+        let snap_path = {
             let entry = self.resolve_repo(repo_name)?;
-            (
-                std::path::Path::new(&entry.storage_path).join("db"),
-                std::path::Path::new(&entry.storage_path).join("graph.bin"),
-            )
+            std::path::Path::new(&entry.storage_path).join("graph.bin")
         };
 
-        let results = {
-            let adapter = self.pool.get_or_open(&db_path).map_err(McpError::Db)?;
-            gitnexus_search::search(&adapter, query_text, limit).map_err(McpError::Db)?
-        };
+        let (graph, _indexes, fts) = self.load_cached_indexes(&snap_path)?;
+        let results = fts.search(&graph, query_text, None, limit);
 
-        // Opt-out path: flat results, matches pre-grouped behavior byte-for-byte.
+        // Opt-out path: flat results, using the same snapshot FTS data as CLI search.
         if !group_by_process {
-            let results_json: Vec<Value> = results
-                .iter()
-                .map(|r| serde_json::to_value(r).unwrap_or_default())
-                .collect();
+            let results_json: Vec<Value> = results.iter().map(fts_result_to_json).collect();
             return Ok(json!({
                 "content": [{
                     "type": "text",
@@ -364,65 +370,58 @@ impl LocalBackend {
 
         // Group by Process using the snapshot's STEP_IN_PROCESS edges.
         // Symbols with no process parent go to `definitions` (fallback bucket).
-        let graph_opt = self.load_cached_snapshot(&snap_path).ok();
         let mut processes_map: HashMap<String, Value> = HashMap::new();
         let mut process_symbols: Vec<Value> = Vec::new();
         let mut definitions: Vec<Value> = Vec::new();
 
-        if let Some(graph) = graph_opt.as_ref() {
-            // Pre-index: node_id → Vec<(process_id, step_index)>
-            let mut symbol_to_processes: HashMap<String, Vec<(String, Option<u32>)>> =
-                HashMap::new();
-            let mut process_step_counts: HashMap<String, u32> = HashMap::new();
-            for rel in graph.iter_relationships() {
-                if rel.rel_type == RelationshipType::StepInProcess {
-                    symbol_to_processes
-                        .entry(rel.source_id.clone())
-                        .or_default()
-                        .push((rel.target_id.clone(), rel.step));
-                    *process_step_counts
-                        .entry(rel.target_id.clone())
-                        .or_insert(0) += 1;
-                }
+        // Pre-index: node_id → Vec<(process_id, step_index)>
+        let mut symbol_to_processes: HashMap<String, Vec<(String, Option<u32>)>> = HashMap::new();
+        let mut process_step_counts: HashMap<String, u32> = HashMap::new();
+        for rel in graph.iter_relationships() {
+            if rel.rel_type == RelationshipType::StepInProcess {
+                symbol_to_processes
+                    .entry(rel.source_id.clone())
+                    .or_default()
+                    .push((rel.target_id.clone(), rel.step));
+                *process_step_counts
+                    .entry(rel.target_id.clone())
+                    .or_insert(0) += 1;
             }
+        }
 
-            for r in &results {
-                let base = serde_json::to_value(r).unwrap_or_default();
-                if let Some(parents) = symbol_to_processes.get(&r.node_id) {
-                    for (proc_id, step_idx) in parents {
-                        let mut enriched = base.clone();
-                        enriched["process_id"] = json!(proc_id);
-                        enriched["step_index"] = json!(step_idx);
-                        process_symbols.push(enriched);
+        for r in &results {
+            let base = fts_result_to_json(r);
+            if let Some(parents) = symbol_to_processes.get(&r.node_id) {
+                for (proc_id, step_idx) in parents {
+                    let mut enriched = base.clone();
+                    enriched["process_id"] = json!(proc_id);
+                    enriched["step_index"] = json!(step_idx);
+                    process_symbols.push(enriched);
 
-                        processes_map.entry(proc_id.clone()).or_insert_with(|| {
-                            if let Some(pn) = graph.get_node(proc_id) {
-                                let proc_type = pn
-                                    .properties
-                                    .process_type
-                                    .as_ref()
-                                    .map(|t| format!("{t:?}"))
-                                    .unwrap_or_else(|| "unknown".into());
-                                json!({
-                                    "process_id": proc_id,
-                                    "name": pn.properties.name,
-                                    "description": pn.properties.description,
-                                    "process_type": proc_type,
-                                    "step_count": process_step_counts.get(proc_id).copied().unwrap_or(0),
-                                })
-                            } else {
-                                json!({"process_id": proc_id})
-                            }
-                        });
-                    }
-                } else {
-                    definitions.push(base);
+                    processes_map.entry(proc_id.clone()).or_insert_with(|| {
+                        if let Some(pn) = graph.get_node(proc_id) {
+                            let proc_type = pn
+                                .properties
+                                .process_type
+                                .as_ref()
+                                .map(|t| format!("{t:?}"))
+                                .unwrap_or_else(|| "unknown".into());
+                            let name = pn.properties.name.clone();
+                            let description = pn.properties.description.clone();
+                            json!({
+                                "process_id": proc_id,
+                                "name": name,
+                                "description": description,
+                                "process_type": proc_type,
+                                "step_count": process_step_counts.get(proc_id).copied().unwrap_or(0),
+                            })
+                        } else {
+                            json!({"process_id": proc_id})
+                        }
+                    });
                 }
-            }
-        } else {
-            // No snapshot — surface everything as flat definitions.
-            for r in &results {
-                definitions.push(serde_json::to_value(r).unwrap_or_default());
+            } else {
+                definitions.push(base);
             }
         }
 
@@ -1813,6 +1812,108 @@ impl LocalBackend {
             }],
             "_meta": {
                 "hint": hints::hint_for("analyze_execution_trace")
+            }
+        }))
+    }
+
+    async fn tool_search_processes(&mut self, args: &Value) -> Result<Value> {
+        struct ProcessSearchRow {
+            value: Value,
+            step_count: u32,
+            name: String,
+        }
+
+        let query_text = args
+            .get("query")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let query_lower = query_text.to_lowercase();
+        let repo_name = args.get("repo").and_then(|v| v.as_str());
+        let limit = clamp_limit(
+            args.get("limit").and_then(|v| v.as_u64()),
+            10,
+            MAX_QUERY_LIMIT,
+        );
+
+        let snap_path = {
+            let entry = self.resolve_repo(repo_name)?;
+            std::path::Path::new(&entry.storage_path).join("graph.bin")
+        };
+        let graph = self.load_cached_snapshot(&snap_path)?;
+
+        let mut process_step_counts: HashMap<String, u32> = HashMap::new();
+        for rel in graph.iter_relationships() {
+            if rel.rel_type == RelationshipType::StepInProcess {
+                *process_step_counts
+                    .entry(rel.target_id.clone())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        let mut rows: Vec<ProcessSearchRow> = graph
+            .iter_nodes()
+            .filter(|node| matches!(node.label, NodeLabel::Process))
+            .filter(|node| {
+                if query_lower.is_empty() {
+                    return true;
+                }
+                node.properties.name.to_lowercase().contains(&query_lower)
+                    || node
+                        .properties
+                        .description
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&query_lower)
+            })
+            .map(|node| {
+                let step_count = process_step_counts.get(&node.id).copied().unwrap_or(0);
+                let process_type = node
+                    .properties
+                    .process_type
+                    .as_ref()
+                    .map(|t| format!("{t:?}"));
+                let process_id = node.id.clone();
+                let name = node.properties.name.clone();
+                let description = node.properties.description.clone();
+                let entry_point_id = node.properties.entry_point_id.clone();
+                let terminal_id = node.properties.terminal_id.clone();
+                let communities = node.properties.communities.clone();
+                ProcessSearchRow {
+                    step_count,
+                    name: name.clone(),
+                    value: json!({
+                        "processId": process_id,
+                        "name": name,
+                        "description": description,
+                        "processType": process_type,
+                        "stepCount": step_count,
+                        "entryPointId": entry_point_id,
+                        "terminalId": terminal_id,
+                        "communities": communities,
+                    }),
+                }
+            })
+            .collect();
+
+        rows.sort_by(|a, b| {
+            b.step_count
+                .cmp(&a.step_count)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        rows.truncate(limit);
+        let result_count = rows.len();
+        let processes: Vec<Value> = rows.into_iter().map(|row| row.value).collect();
+
+        Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": serde_json::to_string_pretty(&processes).unwrap_or_else(|_| "[]".to_string())
+            }],
+            "_meta": {
+                "hint": hints::hint_for("search_processes"),
+                "resultCount": result_count
             }
         }))
     }
@@ -3546,6 +3647,23 @@ mod tests {
 
         assert_eq!(resolved.name, "gitnexus-rs");
         assert_eq!(resolved.path, "D:/Repos/gitnexus-rs");
+    }
+
+    #[test]
+    fn test_resolve_repo_accepts_windows_verbatim_path_equivalent() {
+        let mut backend = LocalBackend::new();
+        backend.registry.push(RegistryEntry {
+            name: "sample-repo".to_string(),
+            path: r"\\?\C:\repos\sample-repo".to_string(),
+            storage_path: r"\\?\C:\repos\sample-repo\.gitnexus".to_string(),
+            indexed_at: "2024-01-01".to_string(),
+            last_commit: "abc123".to_string(),
+            stats: None,
+        });
+
+        let resolved = backend.resolve_repo(Some(r"C:\repos\sample-repo")).unwrap();
+
+        assert_eq!(resolved.name, "sample-repo");
     }
 
     #[tokio::test]

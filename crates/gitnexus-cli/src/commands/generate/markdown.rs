@@ -2,6 +2,16 @@
 
 /// Convert Markdown content to HTML (basic, no external dependencies).
 pub(super) fn markdown_to_html(md: &str) -> String {
+    markdown_to_html_with_page_id(md, None)
+}
+
+/// Convert Markdown content to HTML, resolving relative `.md` links from the
+/// page that owns the content.
+pub(super) fn markdown_to_html_for_page(md: &str, page_id: &str) -> String {
+    markdown_to_html_with_page_id(md, Some(page_id))
+}
+
+fn markdown_to_html_with_page_id(md: &str, current_page_id: Option<&str>) -> String {
     let mut html = String::new();
     let mut in_code_block = false;
     let mut code_lang = String::new();
@@ -28,6 +38,12 @@ pub(super) fn markdown_to_html(md: &str) -> String {
         // Handle the small HTML subset emitted by GitNexus' own generators.
         // Unsafe raw HTML is displayed as text so repository-controlled docs
         // cannot smuggle active script into the generated site.
+        if let Some(converted) = convert_legacy_show_page_anchor(line) {
+            html.push_str(&converted);
+            html.push('\n');
+            continue;
+        }
+
         if is_passthrough_html_line(line) {
             if is_safe_passthrough_html_line(line) {
                 html.push_str(line);
@@ -78,7 +94,7 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                      <div class=\"callout-title\">{}</div>\n",
                     css_class,
                     icon,
-                    inline_md(title)
+                    inline_md_with_page_id(title, current_page_id)
                 ));
                 in_callout = true;
             }
@@ -182,7 +198,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
             let tag = if table_has_body { "td" } else { "th" };
             html.push_str("<tr>");
             for cell in cells {
-                html.push_str(&format!("<{tag}>{}</{tag}>", inline_md(cell.trim())));
+                html.push_str(&format!(
+                    "<{tag}>{}</{tag}>",
+                    inline_md_with_page_id(cell.trim(), current_page_id)
+                ));
             }
             html.push_str("</tr>\n");
             continue;
@@ -206,7 +225,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                 html.push_str("</ol>\n");
                 in_ordered_list = false;
             }
-            html.push_str(&format!("<h3>{}</h3>\n", inline_md(rest)));
+            html.push_str(&format!(
+                "<h3>{}</h3>\n",
+                inline_md_with_page_id(rest, current_page_id)
+            ));
             continue;
         }
         if let Some(rest) = line.strip_prefix("## ") {
@@ -218,7 +240,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                 html.push_str("</ol>\n");
                 in_ordered_list = false;
             }
-            html.push_str(&format!("<h2>{}</h2>\n", inline_md(rest)));
+            html.push_str(&format!(
+                "<h2>{}</h2>\n",
+                inline_md_with_page_id(rest, current_page_id)
+            ));
             continue;
         }
         if let Some(rest) = line.strip_prefix("# ") {
@@ -230,7 +255,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                 html.push_str("</ol>\n");
                 in_ordered_list = false;
             }
-            html.push_str(&format!("<h1>{}</h1>\n", inline_md(rest)));
+            html.push_str(&format!(
+                "<h1>{}</h1>\n",
+                inline_md_with_page_id(rest, current_page_id)
+            ));
             continue;
         }
 
@@ -259,7 +287,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                 html.push_str("<ul>\n");
                 in_list = true;
             }
-            html.push_str(&format!("<li>{}</li>\n", inline_md(&line[2..])));
+            html.push_str(&format!(
+                "<li>{}</li>\n",
+                inline_md_with_page_id(&line[2..], current_page_id)
+            ));
             continue;
         }
         // Indented sub-items (2 or 4 spaces + dash)
@@ -267,7 +298,7 @@ pub(super) fn markdown_to_html(md: &str) -> String {
             let content = line.trim_start().trim_start_matches("- ");
             html.push_str(&format!(
                 "<li style=\"margin-left:16px\">{}</li>\n",
-                inline_md(content)
+                inline_md_with_page_id(content, current_page_id)
             ));
             continue;
         }
@@ -285,7 +316,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                         html.push_str("<ol>\n");
                         in_ordered_list = true;
                     }
-                    html.push_str(&format!("<li>{}</li>\n", inline_md(rest)));
+                    html.push_str(&format!(
+                        "<li>{}</li>\n",
+                        inline_md_with_page_id(rest, current_page_id)
+                    ));
                     continue;
                 }
             }
@@ -334,7 +368,7 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                  </div>\n",
                 callout_type,
                 icon,
-                inline_md(text)
+                inline_md_with_page_id(text, current_page_id)
             ));
             continue;
         }
@@ -349,7 +383,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
                 html.push_str("</ol>\n");
                 in_ordered_list = false;
             }
-            html.push_str(&format!("<blockquote>{}</blockquote>\n", inline_md(rest)));
+            html.push_str(&format!(
+                "<blockquote>{}</blockquote>\n",
+                inline_md_with_page_id(rest, current_page_id)
+            ));
             continue;
         }
 
@@ -375,7 +412,10 @@ pub(super) fn markdown_to_html(md: &str) -> String {
             html.push_str("</ol>\n");
             in_ordered_list = false;
         }
-        html.push_str(&format!("<p>{}</p>\n", inline_md(line)));
+        html.push_str(&format!(
+            "<p>{}</p>\n",
+            inline_md_with_page_id(line, current_page_id)
+        ));
     }
 
     // Close any open blocks
@@ -397,7 +437,17 @@ pub(super) fn markdown_to_html(md: &str) -> String {
 }
 
 /// Process inline Markdown formatting: bold, italic, code, links.
+#[cfg(test)]
 pub(super) fn inline_md(text: &str) -> String {
+    inline_md_with_page_id(text, None)
+}
+
+#[cfg(test)]
+pub(super) fn inline_md_for_page(text: &str, page_id: &str) -> String {
+    inline_md_with_page_id(text, Some(page_id))
+}
+
+fn inline_md_with_page_id(text: &str, current_page_id: Option<&str>) -> String {
     let mut s = text.to_string();
 
     // Extract inline code spans up-front and replace each with a sentinel
@@ -525,32 +575,32 @@ pub(super) fn inline_md(text: &str) -> String {
                 if let Some(paren_end) = after_paren.find(')') {
                     let url = &after_paren[..paren_end];
                     // Transform .md links to JavaScript page navigation for HTML site
-                    let replacement = if url.contains(".md") {
+                    let replacement = if is_internal_markdown_link(url) {
                         // Handle anchors: ./modules/file.md#ENTITY → page='modules/file', anchor='ENTITY'
                         let (md_part, anchor) = if let Some(hash_idx) = url.find('#') {
                             (&url[..hash_idx], Some(&url[hash_idx + 1..]))
                         } else {
                             (url, None)
                         };
-                        let page_id = md_part.trim_start_matches("./").trim_end_matches(".md");
                         // page_id and anchor_id are interpolated into JS string
                         // literals delimited by single quotes, then into HTML
                         // attributes. They must be safe for both contexts. We
                         // restrict to a conservative whitelist of identifier
                         // characters and reject anything that contains quotes,
                         // backslashes, control chars, or HTML metacharacters.
-                        let safe_page_id = sanitize_id(page_id);
+                        let safe_page_id = resolve_markdown_page_id(md_part, current_page_id);
                         if let Some(anchor_id) = anchor {
                             let safe_anchor_id = sanitize_id(anchor_id);
-                            // Navigate to page AND scroll to + open the entity details
+                            let href = html_escape(&format!("#{safe_page_id}%23{safe_anchor_id}"));
                             format!(
-                                "<a href=\"#\" onclick=\"showPage('{}'); setTimeout(function(){{ var el=document.getElementById('{}'); if(el){{ el.open=true; el.scrollIntoView({{behavior:'smooth'}}); }} }}, 100); return false;\">{}</a>",
-                                safe_page_id, safe_anchor_id, link_text
+                                "<a href=\"{}\" data-page=\"{}\" data-anchor=\"{}\">{}</a>",
+                                href, safe_page_id, safe_anchor_id, link_text
                             )
                         } else {
+                            let href = html_escape(&format!("#{safe_page_id}"));
                             format!(
-                                "<a href=\"#\" onclick=\"showPage('{}'); return false;\">{}</a>",
-                                safe_page_id, link_text
+                                "<a href=\"{}\" data-page=\"{}\">{}</a>",
+                                href, safe_page_id, link_text
                             )
                         }
                     } else if is_safe_link_url(url) {
@@ -575,6 +625,47 @@ pub(super) fn inline_md(text: &str) -> String {
     }
 
     s
+}
+
+fn is_internal_markdown_link(url: &str) -> bool {
+    let trimmed = url.trim();
+    if !trimmed.contains(".md") || trimmed.starts_with("//") {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    !(lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:"))
+}
+
+fn resolve_markdown_page_id(md_part: &str, current_page_id: Option<&str>) -> String {
+    let target = md_part.trim().replace('\\', "/");
+    let target = target.strip_suffix(".md").unwrap_or(&target);
+    let root_relative =
+        target.starts_with('/') || (!target.starts_with('.') && target.contains('/'));
+    let mut segments: Vec<String> = if root_relative {
+        Vec::new()
+    } else {
+        current_page_id
+            .and_then(|id| id.rsplit_once('/').map(|(base, _)| base))
+            .map(|base| {
+                base.split('/')
+                    .filter(|part| !part.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            value => segments.push(value.to_string()),
+        }
+    }
+
+    sanitize_id(&segments.join("/"))
 }
 
 /// Split a markdown pipe row into cells, dropping only the leading and
@@ -646,6 +737,63 @@ fn is_passthrough_html_line(line: &str) -> bool {
         || trimmed.starts_with("<a ")
         || trimmed.starts_with("</a>")
         || trimmed.starts_with("<img")
+}
+
+fn convert_legacy_show_page_anchor(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("<a ") {
+        return None;
+    }
+
+    let onclick_prefix = "onclick=\"showPage('";
+    let page_start = trimmed.find(onclick_prefix)? + onclick_prefix.len();
+    let page_rest = &trimmed[page_start..];
+    let page_end = page_rest.find("')")?;
+    let page_id = sanitize_id(&page_rest[..page_end]);
+    if page_id.is_empty() {
+        return None;
+    }
+
+    let label_start = trimmed.find('>')? + 1;
+    let label_end = trimmed.rfind("</a>")?;
+    if label_end < label_start {
+        return None;
+    }
+
+    let class_attr = extract_attr_value(trimmed, "class")
+        .map(|value| sanitize_class_tokens(&value))
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(" class=\"{}\"", html_escape(&value)))
+        .unwrap_or_default();
+    let href = html_escape(&format!("#{page_id}"));
+    let label = html_escape(&html_unescape_basic(&trimmed[label_start..label_end]));
+
+    Some(format!(
+        "<a{class_attr} href=\"{href}\" data-page=\"{page_id}\">{label}</a>"
+    ))
+}
+
+fn sanitize_class_tokens(value: &str) -> String {
+    value
+        .split_whitespace()
+        .map(|token| {
+            token
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+                .collect::<String>()
+        })
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn html_unescape_basic(value: &str) -> String {
+    value
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 }
 
 fn is_safe_passthrough_html_line(line: &str) -> bool {
@@ -811,8 +959,34 @@ mod tests {
     #[test]
     fn test_inline_md_link() {
         let result = inline_md("See [docs](./overview.md)");
-        assert!(result.contains("showPage"));
-        assert!(result.contains("overview"));
+        assert!(result.contains("href=\"#overview\""));
+        assert!(result.contains("data-page=\"overview\""));
+    }
+
+    #[test]
+    fn test_inline_md_for_page_resolves_relative_links() {
+        let result = inline_md_for_page(
+            "See [prev](./../getting-started.md), [next](./backend.md), [root](modules/commands.md), [anchor](./backend.md#Service)",
+            "modules/analytics",
+        );
+
+        assert!(result.contains("href=\"#getting-started\" data-page=\"getting-started\""));
+        assert!(result.contains("href=\"#modules/backend\" data-page=\"modules/backend\""));
+        assert!(result.contains("href=\"#modules/commands\" data-page=\"modules/commands\""));
+        assert!(result.contains(
+            "href=\"#modules/backend%23Service\" data-page=\"modules/backend\" data-anchor=\"Service\""
+        ));
+    }
+
+    #[test]
+    fn legacy_show_page_anchor_is_converted_to_safe_data_page_link() {
+        let md = "<a class=\"related-page-card\" href=\"#\" onclick=\"showPage('overview'); return false;\">overview</a>\n";
+        let html = markdown_to_html(md);
+
+        assert!(html.contains(
+            "<a class=\"related-page-card\" href=\"#overview\" data-page=\"overview\">overview</a>"
+        ));
+        assert!(!html.contains("onclick"));
     }
 
     #[test]

@@ -142,7 +142,7 @@ pub(super) fn source_files_section(files: &[&str]) -> String {
     if files.is_empty() {
         return String::new();
     }
-    let mut s = String::from("\n<details>\n<summary>Relevant source files</summary>\n\n");
+    let mut s = String::from("\n<details>\n<summary>Fichiers source pertinents</summary>\n\n");
     for f in files.iter().take(15) {
         s.push_str(&format!("- `{}`\n", f));
     }

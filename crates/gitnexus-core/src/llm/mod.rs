@@ -21,7 +21,12 @@ When you return a Mermaid diagram, use a fenced block whose opening line is \
 exactly ```mermaid and whose closing line is exactly ```. Do not label Mermaid \
 blocks as text, markdown, graph, diagram, or any other language. Never write a \
 bare Mermaid graph in prose: `flowchart TD`, `sequenceDiagram`, `classDiagram`, \
-`erDiagram`, and `stateDiagram` must always appear inside that fenced block.";
+`erDiagram`, and `stateDiagram` must always appear inside that fenced block. \
+For flowchart labels that contain punctuation such as parentheses, commas, \
+angle brackets, or colons, quote the label inside the node brackets, for example \
+`A[\"CreerCourrier(..., sauver=false)\"]`; do not write unquoted labels such as \
+`A[CreerCourrier(...,)]`. For workflow, process, or algorithm answers, place the \
+Mermaid block before the prose summary.";
 
 /// Wrap repository-derived context before it is appended to a user message.
 ///

@@ -92,7 +92,6 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
             .unwrap_or(0);
 
     writeln!(f, "# Santé du Projet")?;
-    writeln!(f, "<!-- GNX:LEAD -->")?;
     writeln!(f)?;
     writeln!(f, "> Vue d'ensemble de la santé structurelle du codebase, ")?;
     writeln!(
@@ -103,7 +102,6 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
 
     // ── Key Metrics Table ──
     writeln!(f, "## Métriques Clés")?;
-    writeln!(f, "<!-- GNX:INTRO:metriques-cles -->")?;
     writeln!(f)?;
     writeln!(f, "| Indicateur | Valeur | Interprétation |")?;
     writeln!(f, "|-----------|--------|----------------|")?;
@@ -186,22 +184,22 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
     writeln!(f, "| Type | Nombre |")?;
     writeln!(f, "|------|--------|")?;
     if fn_count > 0 {
-        writeln!(f, "| Functions | {} |", fn_count)?;
+        writeln!(f, "| Fonctions | {} |", fn_count)?;
     }
     if class_count > 0 {
         writeln!(f, "| Classes | {} |", class_count)?;
     }
     if method_count > 0 {
-        writeln!(f, "| Methods | {} |", method_count)?;
+        writeln!(f, "| Méthodes | {} |", method_count)?;
     }
     if ctrl_count > 0 {
-        writeln!(f, "| Controllers | {} |", ctrl_count)?;
+        writeln!(f, "| Contrôleurs | {} |", ctrl_count)?;
     }
     if action_count > 0 {
-        writeln!(f, "| Controller Actions | {} |", action_count)?;
+        writeln!(f, "| Actions de contrôleur | {} |", action_count)?;
     }
     if svc_count > 0 {
-        writeln!(f, "| Services/Repositories | {} |", svc_count)?;
+        writeln!(f, "| Services / dépôts | {} |", svc_count)?;
     }
     // Show remaining non-zero labels
     let shown_labels: HashSet<NodeLabel> = [
@@ -224,13 +222,12 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         .collect();
     other_labels.sort_by(|a, b| b.1.cmp(a.1));
     for (label, count) in other_labels.iter().take(10) {
-        writeln!(f, "| {} | {} |", label.as_str(), count)?;
+        writeln!(f, "| {} | {} |", label_display_fr(label), count)?;
     }
     writeln!(f)?;
 
     // ── Top 10 Most Connected Nodes ──
     writeln!(f, "## Top 10 — Composants les plus connectés")?;
-    writeln!(f, "<!-- GNX:INTRO:top-connected -->")?;
     writeln!(f)?;
     writeln!(
         f,
@@ -256,7 +253,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
                 f,
                 "| `{}` | {} | {} | `{}` |",
                 node.properties.name,
-                node.label.as_str(),
+                label_display_fr(&node.label),
                 degree,
                 node.properties.file_path
             )?;
@@ -288,7 +285,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         let dominant = label_map
             .iter()
             .max_by_key(|(_, c)| *c)
-            .map(|(l, _)| l.as_str())
+            .map(|(l, _)| label_display_fr(l))
             .unwrap_or("-");
         writeln!(f, "| `{}` | {} | {} |", file_path, sym_count, dominant)?;
     }
@@ -444,7 +441,6 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         .collect();
     if !todos.is_empty() {
         writeln!(f, "\n## Marqueurs de dette technique")?;
-        writeln!(f, "<!-- GNX:INTRO:dette-technique -->")?;
         writeln!(f)?;
         let mut by_kind: std::collections::HashMap<&str, Vec<_>> = Default::default();
         for t in &todos {
@@ -481,7 +477,6 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         }
     }
 
-    writeln!(f, "<!-- GNX:CLOSING -->")?;
     writeln!(f, "---")?;
     writeln!(
         f,
@@ -490,4 +485,107 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
 
     println!("  {} project-health.md", "OK".green());
     Ok(())
+}
+
+fn label_display_fr(label: &NodeLabel) -> &'static str {
+    match label {
+        NodeLabel::Project => "Projet",
+        NodeLabel::Package => "Paquet",
+        NodeLabel::Module => "Module",
+        NodeLabel::Folder => "Dossier",
+        NodeLabel::File => "Fichier",
+        NodeLabel::Function => "Fonction",
+        NodeLabel::Class => "Classe",
+        NodeLabel::Method => "Méthode",
+        NodeLabel::Variable => "Variable",
+        NodeLabel::Constructor => "Constructeur",
+        NodeLabel::Property => "Propriété",
+        NodeLabel::Decorator => "Décorateur",
+        NodeLabel::Import => "Import",
+        NodeLabel::Type => "Type",
+        NodeLabel::CodeElement => "Élément de code",
+        NodeLabel::Community => "Communauté",
+        NodeLabel::Controller => "Contrôleur",
+        NodeLabel::ControllerAction => "Action de contrôleur",
+        NodeLabel::ApiEndpoint => "Endpoint API",
+        NodeLabel::Service => "Service",
+        NodeLabel::Repository => "Dépôt",
+        NodeLabel::ExternalService => "Service externe",
+        NodeLabel::View => "Vue",
+        NodeLabel::ViewModel => "ViewModel",
+        NodeLabel::DbEntity => "Entité BD",
+        NodeLabel::DbContext => "Contexte BD",
+        NodeLabel::Area => "Zone MVC",
+        NodeLabel::Filter => "Filtre",
+        NodeLabel::WebConfig => "Configuration web",
+        NodeLabel::PartialView => "Vue partielle",
+        NodeLabel::ScriptFile => "Script",
+        NodeLabel::AjaxCall => "Appel AJAX",
+        NodeLabel::UiComponent => "Composant UI",
+        NodeLabel::Interface => "Interface",
+        NodeLabel::Enum => "Énumération",
+        NodeLabel::Struct => "Structure",
+        NodeLabel::Macro => "Macro",
+        NodeLabel::Typedef => "Définition de type",
+        NodeLabel::Union => "Union",
+        NodeLabel::Namespace => "Espace de noms",
+        NodeLabel::Trait => "Trait",
+        NodeLabel::Impl => "Implémentation",
+        NodeLabel::TypeAlias => "Alias de type",
+        NodeLabel::Const => "Constante",
+        NodeLabel::Static => "Statique",
+        NodeLabel::Record => "Record",
+        NodeLabel::Delegate => "Delegate",
+        NodeLabel::Annotation => "Annotation",
+        NodeLabel::Template => "Template",
+        NodeLabel::Section => "Section",
+        NodeLabel::Route => "Route",
+        NodeLabel::Tool => "Outil",
+        NodeLabel::Library => "Bibliothèque",
+        NodeLabel::Document => "Document",
+        NodeLabel::DocChunk => "Fragment documentaire",
+        NodeLabel::Process => "Processus",
+        NodeLabel::TodoMarker => "Marqueur de dette",
+        NodeLabel::DbColumn => "Colonne BD",
+        NodeLabel::EnvVar => "Variable d'environnement",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(id: &str, label: NodeLabel, name: &str, file_path: &str) -> GraphNode {
+        GraphNode {
+            id: id.to_string(),
+            label,
+            properties: NodeProperties {
+                name: name.to_string(),
+                file_path: file_path.to_string(),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn project_health_page_hides_internal_markers_and_uses_french_labels() {
+        let root = std::env::temp_dir().join(format!("gitnexus-health-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("docs dir");
+
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(node("F1", NodeLabel::File, "lib.rs", "src/lib.rs"));
+        graph.add_node(node("FN1", NodeLabel::Function, "run", "src/lib.rs"));
+        graph.add_node(node("P1", NodeLabel::Property, "name", "src/lib.rs"));
+
+        generate_project_health(&root, &graph).expect("project health");
+
+        let page = std::fs::read_to_string(root.join("project-health.md")).expect("health md");
+        assert!(!page.contains("GNX:"));
+        assert!(!page.contains("| Functions |"));
+        assert!(!page.contains("| Property |"));
+        assert!(page.contains("| Fonctions | 1 |"));
+        assert!(page.contains("| Propriété | 1 |"));
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
 }
