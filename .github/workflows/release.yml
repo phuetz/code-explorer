@@ -28,9 +28,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             asset: code-explorer-macos-aarch64.tar.gz
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            asset: code-explorer-macos-x86_64.tar.gz
+          # x86_64-apple-darwin (Intel Mac) omitted: ort/ONNX Runtime ships no
+          # prebuilt for that target, so the embeddings feature can't link.
+          # Intel Mac users build from source; Apple Silicon is covered above.
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             asset: code-explorer-windows-x86_64.zip
