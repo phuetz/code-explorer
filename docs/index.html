@@ -168,6 +168,13 @@ cargo build --release -p code-explorer-cli
     </div>
   </section>
 
+  <section id="ui">
+    <h2>A React UI, powered by an LLM</h2>
+    <p class="lead">Code Explorer ships a desktop app (Tauri + React) and a web chat. The chat is <b>LLM-powered</b> — bring your own key (Ollama for free/local, or OpenAI · Anthropic · OpenRouter · Gemini). For each question it pulls only the relevant graph context and sends that to the model, so it can <b>interrogate your code</b> and <b>generate documentation</b> precisely and cheaply — Q&amp;A, deep research, feature-dev and review modes.</p>
+    <img src="img/chat-llm.png" alt="Code Explorer — LLM-powered chat over the code graph" style="width:100%;border:1px solid var(--border);border-radius:14px;margin-top:6px" />
+    <p class="lead" style="font-size:13px;margin-top:10px">The same LLM layer powers <code>code-explorer generate docs/wiki/html</code> — turning a repository into a full documentation site grounded in the graph.</p>
+  </section>
+
   <section id="about">
     <h2>About</h2>
     <div class="about">

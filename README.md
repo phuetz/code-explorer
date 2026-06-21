@@ -171,11 +171,13 @@ code-explorer impact GenerateHandler --direction both # the blast-radius query, 
 
 ## In action
 
-The desktop app turns the graph into a code-health cockpit — score, hotspots, coupling, ownership, coverage, and the most-connected symbols, all from the same index your agent queries:
+Code Explorer ships a **React UI** — a desktop app (Tauri) and a web chat — that turns the graph into an **LLM-powered workspace**: interrogate your code in natural language and generate documentation, with the graph keeping the model's context lean.
 
 <p align="center">
-  <img src="Captures/20-dashboard-enriched.png" alt="Code Explorer analytics dashboard" width="900"/>
+  <img src="docs/img/chat-llm.png" alt="Code Explorer — LLM-powered chat over the code graph" width="900"/>
 </p>
+
+The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic, OpenRouter, Gemini). For each question it pulls just the relevant graph context and sends only that to the model — so answers are precise and cheap, with modes for Q&A, deep research, feature-dev and review. The same LLM layer powers `code-explorer generate docs/wiki/html` to turn a repo into a full documentation site.
 
 ---
 
