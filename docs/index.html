@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Code Explorer — code intelligence for AI agents</title>
+<meta name="description" content="A Rust engine that maps your whole codebase into a knowledge graph and serves it over MCP, so Claude, Codex and Cursor answer structural questions with ~40x less context." />
+<meta property="og:title" content="Code Explorer" />
+<meta property="og:description" content="Graph-powered code intelligence for AI agents. ~40x less context per query — measured. Up to 164x on Kubernetes." />
+<meta property="og:type" content="website" />
+<style>
+  :root{
+    --bg:#0b0f1a; --bg2:#121829; --card:#151c30; --border:#243049;
+    --t0:#f1f5f9; --t1:#cbd5e1; --t2:#94a3b8; --t3:#64748b;
+    --accent:#6366f1; --accent2:#8b5cf6; --green:#22c55e; --amber:#f59e0b;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--t1);font-family:var(--sans);line-height:1.6;
+    background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(99,102,241,.18),transparent 60%);}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px 0}
+  .logo{font-weight:800;font-size:18px;color:var(--t0);letter-spacing:-.02em}
+  .logo span{color:var(--accent)}
+  nav a{color:var(--t2);margin-left:20px;font-size:14px}
+  /* hero */
+  .hero{text-align:center;padding:64px 0 36px}
+  .hero h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:0 0 16px;color:var(--t0);
+    letter-spacing:-.03em;font-weight:850}
+  .hero h1 .grad{background:linear-gradient(100deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.sub{font-size:clamp(16px,2.4vw,21px);color:var(--t1);max-width:760px;margin:0 auto 14px}
+  .hero p.sub b{color:var(--t0)}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:18px 0 26px}
+  .badge{font-family:var(--mono);font-size:12px;color:var(--t2);background:var(--bg2);
+    border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;padding:12px 22px;border-radius:10px;font-weight:650;font-size:15px}
+  .btn.primary{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff}
+  .btn.primary:hover{text-decoration:none;filter:brightness(1.08)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--t0)}
+  .btn.ghost:hover{text-decoration:none;border-color:var(--accent)}
+  /* big stat strip */
+  .stat-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:40px 0}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;text-align:center}
+  .stat .n{font-size:30px;font-weight:820;color:var(--t0);font-family:var(--mono)}
+  .stat .n.g{color:var(--green)}
+  .stat .l{font-size:13px;color:var(--t2);margin-top:4px}
+  section{padding:40px 0;border-top:1px solid var(--border)}
+  h2{font-size:clamp(22px,3.4vw,30px);color:var(--t0);letter-spacing:-.02em;margin:0 0 8px}
+  .lead{color:var(--t2);max-width:760px;margin:0 0 24px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .feat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px}
+  .feat h3{margin:0 0 6px;color:var(--t0);font-size:16px}
+  .feat p{margin:0;color:var(--t2);font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px;display:block;overflow-x:auto}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  thead th{color:var(--t3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td.win{color:var(--green);font-weight:700;font-family:var(--mono)}
+  tr.big td{background:rgba(99,102,241,.08)}
+  pre{background:#0a0e17;border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+    overflow-x:auto;font-family:var(--mono);font-size:13.5px;color:var(--t1)}
+  pre .c{color:var(--t3)}
+  pre .k{color:var(--accent)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+  .works{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .works span{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;color:var(--t1)}
+  .about{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+  .about p{margin:0 0 10px;color:var(--t1)}
+  footer{border-top:1px solid var(--border);padding:28px 0 48px;color:var(--t3);font-size:13px;text-align:center}
+  @media(max-width:720px){.stat-strip,.grid3,.two{grid-template-columns:1fr}nav{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">🧭 Code&nbsp;<span>Explorer</span></div>
+    <nav>
+      <a href="#why">Why</a>
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="#start">Quick start</a>
+      <a href="https://github.com/phuetz/code-explorer">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <h1>The code-intelligence<br/>layer for <span class="grad">AI agents</span></h1>
+    <p class="sub"><b>Give Claude Code, Codex, Cursor and any MCP agent a persistent, queryable map of your <i>entire</i> codebase</b> — so they stop re-reading files and start <i>knowing</i> your code.</p>
+    <p class="sub">A Rust engine that turns a repository into a knowledge graph and serves it over <a href="https://modelcontextprotocol.io/">MCP</a>. One query answers “what calls this?” or “what breaks if I change this?” in milliseconds — for a fraction of the context.</p>
+    <div class="badges">
+      <span class="badge">Rust</span>
+      <span class="badge">14 languages</span>
+      <span class="badge">MCP · 29 tools</span>
+      <span class="badge">100% local</span>
+      <span class="badge">PolyForm Noncommercial</span>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/phuetz/code-explorer">★ View on GitHub</a>
+      <a class="btn ghost" href="#start">Quick start</a>
+    </div>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat"><div class="n g">~40×</div><div class="l">less context per structural query (median ~36×)</div></div>
+    <div class="stat"><div class="n g">164×</div><div class="l">on Kubernetes — 3.6M lines, the largest tested</div></div>
+    <div class="stat"><div class="n">&lt;1 s</div><div class="l">blast-radius queries, after a one-time index</div></div>
+  </div>
+
+  <section id="why">
+    <h2>Why it pays off for your LLM</h2>
+    <p class="lead">AI assistants read files one at a time and fill their context window with raw source. Code Explorer pre-indexes the whole codebase into a graph and returns only the relevant relationships — the agent already knows the structure instead of rebuilding it every conversation.</p>
+    <div class="grid3">
+      <div class="feat"><h3>Instant relationships</h3><p>Pre-computed graph: callers, callees, inheritance, impact — no file-reading to discover who calls what.</p></div>
+      <div class="feat"><h3>Scales past the context window</h3><p>Thousands of files indexed and queryable in one command. A 42.8M-token repo (Kubernetes) fits in no model — the graph does.</p></div>
+      <div class="feat"><h3>Persistent &amp; local</h3><p>The graph lives on disk and across sessions. 100% local — your code never leaves the machine, no API key to index.</p></div>
+    </div>
+  </section>
+
+  <section id="benchmarks">
+    <h2>Measured, not claimed</h2>
+    <p class="lead">Each row: <code>code-explorer demo &lt;repo&gt;</code> on a hub symbol — the context an agent burns to answer <i>“what’s affected if I change this?”</i>, with vs without Code Explorer. <b>The bigger the codebase, the bigger the win.</b></p>
+    <table>
+      <thead><tr><th>Repo</th><th>Lang</th><th>Files</th><th>🐌 Without</th><th>⚡ With</th><th>Saved</th></tr></thead>
+      <tbody>
+        <tr class="big"><td>kubernetes</td><td>Go</td><td>17,280</td><td>3.88M tok</td><td>24K tok</td><td class="win">164×</td></tr>
+        <tr><td>TypeScript</td><td>TS</td><td>707</td><td>821K tok</td><td>12K tok</td><td class="win">67×</td></tr>
+        <tr><td>mastodon</td><td>Ruby</td><td>4,055</td><td>266K tok</td><td>5K tok</td><td class="win">54×</td></tr>
+        <tr><td>whisper.cpp</td><td>C++</td><td>887</td><td>526K tok</td><td>11K tok</td><td class="win">49×</td></tr>
+        <tr><td>django</td><td>Python</td><td>3,031</td><td>3.04M tok</td><td>79K tok</td><td class="win">39×</td></tr>
+        <tr><td>ollama</td><td>Go</td><td>863</td><td>1.93M tok</td><td>53K tok</td><td class="win">36×</td></tr>
+        <tr><td>tokio</td><td>Rust</td><td>781</td><td>39K tok</td><td>1.3K tok</td><td class="win">29×</td></tr>
+        <tr><td>laravel</td><td>PHP</td><td>2,960</td><td>1.84M tok</td><td>100K tok</td><td class="win">18×</td></tr>
+      </tbody>
+    </table>
+    <p class="lead" style="margin-top:14px;font-size:13px">Tokens ≈ chars/4. “Without” = the files the affected symbols live in (what an agent must read to trace the same impact). Reproduce any row with <code>code-explorer demo &lt;repo&gt;</code>. <a href="https://github.com/phuetz/code-explorer#benchmarks-with-vs-without">Full table &amp; method →</a></p>
+  </section>
+
+  <section id="start">
+    <h2>Quick start</h2>
+    <div class="two">
+      <div>
+        <pre><span class="c"># 1. Build (one static binary, ~64 MB)</span>
+git clone https://github.com/phuetz/code-explorer
+cd code-explorer
+cargo build --release -p code-explorer-cli
+
+<span class="c"># 2. Index a project, then ask the graph</span>
+<span class="k">code-explorer</span> analyze /path/to/project
+<span class="k">code-explorer</span> impact PaymentService
+<span class="k">code-explorer</span> demo            <span class="c"># see the context savings</span></pre>
+      </div>
+      <div>
+        <pre><span class="c"># Use it with your AI agent (MCP)</span>
+<span class="k">code-explorer</span> mcp install   <span class="c"># Claude Code</span>
+<span class="c"># or point any MCP client at:</span>
+<span class="k">code-explorer</span> mcp           <span class="c"># stdio</span>
+<span class="k">code-explorer</span> serve --http 8080</pre>
+        <p style="color:var(--t2);font-size:14px;margin-top:4px">Works with:</p>
+        <div class="works">
+          <span>Claude Code</span><span>Codex</span><span>Cursor</span><span>VS Code</span><span>any MCP agent</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="about">
+    <h2>About</h2>
+    <div class="about">
+      <p>Code Explorer is designed and built by <b>Patrice Huetz</b> — developer, software architect, and author — at <a href="https://www.agile-up.com">agile-up.com</a>.</p>
+      <p>It’s the code-intelligence <b>companion to <a href="https://github.com/phuetz/code-buddy">Code Buddy</a></b>, the multi-provider AI coding agent: Code Buddy is the <i>hand</i> that writes code, Code Explorer is the <i>brain</i> that knows the codebase. Together, an agent acts on a repo it actually understands.</p>
+      <p>Patrice also writes books — discover them at <a href="https://www.patricehuetz.fr">patricehuetz.fr</a>.</p>
+    </div>
+  </section>
+
+</div>
+<footer>
+  <div class="wrap">
+    Built in Rust · MCP-native · <a href="https://github.com/phuetz/code-explorer">github.com/phuetz/code-explorer</a><br/>
+    © Patrice Huetz · <a href="https://www.agile-up.com">agile-up.com</a> · companion to <a href="https://github.com/phuetz/code-buddy">Code Buddy</a> · PolyForm Noncommercial 1.0.0
+  </div>
+</footer>
+</body>
+</html>

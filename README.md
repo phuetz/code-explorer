@@ -306,6 +306,8 @@ It's the code-intelligence **companion to [Code Buddy](https://github.com/phuetz
 
 Patrice also **writes books** — discover them at **[patricehuetz.fr](https://www.patricehuetz.fr)**.
 
+🌐 **Website:** [phuetz.github.io/code-explorer](https://phuetz.github.io/code-explorer/)
+
 ---
 
 ## License
