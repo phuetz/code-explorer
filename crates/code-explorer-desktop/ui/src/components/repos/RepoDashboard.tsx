@@ -20,7 +20,7 @@ import { useAppStore } from "../../stores/app-store";
 import { useI18n } from "../../hooks/use-i18n";
 import { CodeHealthCard } from "../health/CodeHealthCard";
 import { commands } from "../../lib/tauri-commands";
-import type { CytoNode, CytoEdge, GraphPayload } from "../../lib/tauri-commands";
+import type { CytoNode, CytoEdge, GraphPayload, IndexMetrics, RepoOverview } from "../../lib/tauri-commands";
 import {
   AnimatedCard,
   AnimatedCounter,
@@ -120,6 +120,10 @@ interface MetricDef {
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
   color: string;
   getValue: (nodes: CytoNode[], edges: CytoEdge[]) => number;
+  /** Real full-graph count from indexed stats, when available. The loaded node
+   *  list is capped at 10k by importance, so countByLabel under-counts whole-graph
+   *  types (File/Process/Module…). Prefer this; fall back to getValue. */
+  getReal?: (ctx: { metrics: IndexMetrics | null | undefined; overview: RepoOverview | undefined }) => number | undefined;
 }
 
 const METRICS: MetricDef[] = [
@@ -129,6 +133,7 @@ const METRICS: MetricDef[] = [
     icon: Files,
     color: "#565f89",
     getValue: (nodes) => countByLabel(nodes, "File"),
+    getReal: ({ overview, metrics }) => overview?.fileCount ?? metrics?.files,
   },
   {
     key: "functions",
@@ -136,6 +141,7 @@ const METRICS: MetricDef[] = [
     icon: Code2,
     color: "var(--accent)",
     getValue: (nodes) => countByLabel(nodes, "Function"),
+    getReal: ({ overview }) => overview?.functionCount,
   },
   {
     key: "classes",
@@ -143,6 +149,7 @@ const METRICS: MetricDef[] = [
     icon: Boxes,
     color: "#bb9af7",
     getValue: (nodes) => countByLabel(nodes, "Class"),
+    getReal: ({ overview }) => overview?.classCount,
   },
   {
     key: "modules",
@@ -157,6 +164,7 @@ const METRICS: MetricDef[] = [
     icon: ArrowRightLeft,
     color: "#7dcfff",
     getValue: (_nodes, edges) => edges.length,
+    getReal: ({ overview, metrics }) => overview?.edgeCount ?? metrics?.edges,
   },
   {
     key: "languages",
@@ -164,6 +172,7 @@ const METRICS: MetricDef[] = [
     icon: Languages,
     color: "var(--green)",
     getValue: (nodes) => uniqueLanguages(nodes),
+    getReal: ({ overview }) => overview?.languageBreakdown?.length,
   },
   {
     key: "entryPoints",
@@ -180,6 +189,7 @@ const METRICS: MetricDef[] = [
     icon: GitBranch,
     color: "#ff9e64",
     getValue: (nodes) => countByLabel(nodes, "Process"),
+    getReal: ({ metrics }) => metrics?.processes,
   },
   {
     key: "traced",
@@ -188,6 +198,7 @@ const METRICS: MetricDef[] = [
     color: "#73daca",
     getValue: (nodes) =>
       nodes.filter((n) => n.isTraced === true).length,
+    getReal: ({ overview }) => overview?.tracedCount,
   },
 ];
 
@@ -260,6 +271,19 @@ export const RepoDashboard = memo(function RepoDashboard() {
     enabled: !!activeRepo,
     staleTime: 60_000,
   });
+
+  // Whole-graph per-type counts (the loaded node list is capped at 10k by
+  // importance, so the metric cards must read real counts from here, not the sample).
+  const { data: overviewList } = useQuery({
+    queryKey: ["repos-overview-dashboard"],
+    queryFn: () => commands.reposOverview(),
+    enabled: !!activeRepo,
+    staleTime: 60_000,
+  });
+  const overview = useMemo(
+    () => overviewList?.find((r) => r.name === activeRepo),
+    [overviewList, activeRepo],
+  );
 
   const nodes = useMemo(() => data?.nodes ?? [], [data?.nodes]);
   const edges = useMemo(() => data?.edges ?? [], [data?.edges]);
@@ -434,7 +458,8 @@ export const RepoDashboard = memo(function RepoDashboard() {
         }}
       >
         {METRICS.map((m) => {
-          const value = m.getValue(nodes, edges);
+          const real = m.getReal?.({ metrics, overview });
+          const value = real ?? m.getValue(nodes, edges);
           const Icon = m.icon;
           return (
             <StaggerItem key={m.key}>
