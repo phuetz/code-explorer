@@ -56,7 +56,7 @@ export function ClonesView() {
                 fontSize: 12,
                 border: "1px solid var(--surface-border)",
                 borderRadius: "var(--radius-md)",
-                background: "var(--bg-1)",
+                background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                 color: "var(--text-0)",
               }}
             />
@@ -76,7 +76,7 @@ export function ClonesView() {
                 fontSize: 12,
                 border: "1px solid var(--surface-border)",
                 borderRadius: "var(--radius-md)",
-                background: "var(--bg-1)",
+                background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                 color: "var(--text-0)",
               }}
             />
@@ -111,7 +111,7 @@ export function ClonesView() {
           style={{
             color: "var(--green)",
             padding: 16,
-            background: "var(--bg-1)",
+            background: "var(--surface)", boxShadow: "var(--shadow-sm)",
             borderRadius: "var(--radius-lg)",
           }}
         >
@@ -133,7 +133,7 @@ export function ClonesView() {
                   border: "1px solid var(--surface-border)",
                   borderRadius: "var(--radius-lg)",
                   padding: 14,
-                  background: "var(--bg-1)",
+                  background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                 }}
               >
                 <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
@@ -184,15 +184,15 @@ export function ClonesView() {
                       >
                         {m.name}
                       </button>
-                      <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
                         {m.filePath}:{m.startLine ?? "?"}–{m.endLine ?? "?"}
                       </div>
-                      <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
                         {m.tokenCount} {t("clones.tokens")}
                       </div>
                       <pre
                         style={{
-                          fontSize: 10,
+                          fontSize: 11,
                           color: "var(--text-2)",
                           background: "var(--bg-2)",
                           padding: "6px 8px",

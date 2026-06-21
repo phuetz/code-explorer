@@ -62,7 +62,7 @@ export const ModeBar = memo(function ModeBar() {
 
   return (
     <div
-      className={`flex flex-col items-start py-2 h-full shrink-0 bg-bg-0 border-r border-surface-border transition-[width] duration-280 ease-out overflow-hidden ${
+      className={`flex flex-col items-stretch px-1.5 py-2 h-full shrink-0 bg-bg-0 border-r border-surface-border transition-[width] duration-280 ease-out overflow-hidden ${
         expanded ? "w-[180px]" : "w-12"
       }`}
     >
@@ -91,7 +91,7 @@ export const ModeBar = memo(function ModeBar() {
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`relative flex items-center w-full mb-0.5 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none h-10 gap-2.5 mx-1 border-none cursor-pointer ${
+            className={`relative flex items-center w-full mb-0.5 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none h-10 gap-2.5 border-none cursor-pointer ${
               active ? "text-accent bg-accent-subtle shadow-[var(--glow-accent)]" : "text-text-3 bg-transparent"
             } ${expanded ? "pl-3.5 pr-2.5 justify-start" : "justify-center"}`}
             aria-label={`${label}${shortcut ? ` (${shortcut})` : ""}`}
@@ -135,7 +135,7 @@ export const ModeBar = memo(function ModeBar() {
       <Tooltip content={`${t("mode.commandPalette")} (Ctrl+K)`} placement="right">
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className={`flex items-center w-full rounded-lg transition-colors h-9 gap-2.5 mx-1 mb-0.5 border-none cursor-pointer text-text-3 bg-transparent ${
+          className={`flex items-center w-full rounded-lg transition-colors h-9 gap-2.5 mb-0.5 border-none cursor-pointer text-text-3 bg-transparent ${
             expanded ? "pl-3.5 pr-2.5 justify-start" : "justify-center"
           }`}
           aria-label={t("mode.commandPalette")}
@@ -154,7 +154,7 @@ export const ModeBar = memo(function ModeBar() {
       <Tooltip content={expanded ? t("mode.collapse") : t("mode.expand")} placement="right">
         <button
           onClick={toggleSidebar}
-          className={`flex items-center w-full rounded-lg transition-colors h-8 gap-2 mx-1 mb-1 border-none cursor-pointer text-text-4 bg-transparent ${
+          className={`flex items-center w-full rounded-lg transition-colors h-8 gap-2 mb-1 border-none cursor-pointer text-text-4 bg-transparent ${
             expanded ? "pl-3.5 justify-start" : "justify-center"
           }`}
           aria-label={expanded ? t("mode.collapse") : t("mode.expand")}

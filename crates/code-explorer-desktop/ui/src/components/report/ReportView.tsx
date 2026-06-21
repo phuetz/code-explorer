@@ -70,18 +70,18 @@ export function ReportView() {
             <thead>
               <tr style={{ background: "var(--bg-2)" }}>
                 <th style={th}>{t("report.file")}</th>
-                <th style={th}>{t("report.commits")}</th>
-                <th style={th}>{t("report.churn")}</th>
-                <th style={th}>{t("report.score")}</th>
+                <th style={thNum}>{t("report.commits")}</th>
+                <th style={thNum}>{t("report.churn")}</th>
+                <th style={thNum}>{t("report.score")}</th>
               </tr>
             </thead>
             <tbody>
               {hotspots.slice(0, 10).map((h) => (
                 <tr key={h.path} style={{ borderTop: "1px solid var(--surface-border)" }}>
                   <td style={{ ...td, fontFamily: "var(--font-mono)", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.path}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{h.commitCount}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{h.churn}</td>
-                  <td style={{ ...td, textAlign: "center" }}>
+                  <td style={tdNum}>{h.commitCount}</td>
+                  <td style={tdNum}>{h.churn}</td>
+                  <td style={tdNum}>
                     <ScoreBadge value={h.score} />
                   </td>
                 </tr>
@@ -99,8 +99,8 @@ export function ReportView() {
               <tr style={{ background: "var(--bg-2)" }}>
                 <th style={th}>{t("report.fileA")}</th>
                 <th style={th}>{t("report.fileB")}</th>
-                <th style={th}>{t("report.shared")}</th>
-                <th style={th}>{t("report.strength")}</th>
+                <th style={thNum}>{t("report.shared")}</th>
+                <th style={thNum}>{t("report.strength")}</th>
               </tr>
             </thead>
             <tbody>
@@ -108,8 +108,8 @@ export function ReportView() {
                 <tr key={`${c.fileA}-${c.fileB}`} style={{ borderTop: "1px solid var(--surface-border)" }}>
                   <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: 11 }}>{c.fileA}</td>
                   <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: 11 }}>{c.fileB}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{c.sharedCommits}</td>
-                  <td style={{ ...td, textAlign: "center" }}>
+                  <td style={tdNum}>{c.sharedCommits}</td>
+                  <td style={tdNum}>
                     <ScoreBadge value={c.couplingStrength} />
                   </td>
                 </tr>
@@ -127,8 +127,8 @@ export function ReportView() {
               <tr style={{ background: "var(--bg-2)" }}>
                 <th style={th}>{t("report.file")}</th>
                 <th style={th}>{t("report.primaryAuthor")}</th>
-                <th style={th}>{t("report.authors")}</th>
-                <th style={th}>{t("report.ownership")}</th>
+                <th style={thNum}>{t("report.authors")}</th>
+                <th style={thNum}>{t("report.ownership")}</th>
               </tr>
             </thead>
             <tbody>
@@ -136,8 +136,8 @@ export function ReportView() {
                 <tr key={o.path} style={{ borderTop: "1px solid var(--surface-border)" }}>
                   <td style={{ ...td, fontFamily: "var(--font-mono)", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.path}</td>
                   <td style={td}>{o.primaryAuthor}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{o.authorCount}</td>
-                  <td style={{ ...td, textAlign: "center" }}>{Math.round(o.ownershipPct)}%</td>
+                  <td style={tdNum}>{o.authorCount}</td>
+                  <td style={tdNum}>{Math.round(o.ownershipPct)}%</td>
                 </tr>
               ))}
             </tbody>
@@ -150,6 +150,8 @@ export function ReportView() {
 
 const th: React.CSSProperties = { padding: "8px 12px", textAlign: "left", color: "var(--text-2)", fontWeight: 500 };
 const td: React.CSSProperties = { padding: "6px 12px", color: "var(--text-0)" };
+const thNum: React.CSSProperties = { ...th, textAlign: "right" };
+const tdNum: React.CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -181,7 +183,7 @@ function ScoreBadge({ value }: { value: number }) {
         borderRadius: 99,
         fontSize: 11,
         fontWeight: 600,
-        background: `${color}20`,
+        background: `color-mix(in srgb, ${color} 14%, transparent)`,
         color,
       }}
     >

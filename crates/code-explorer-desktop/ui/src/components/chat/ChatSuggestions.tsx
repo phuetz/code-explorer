@@ -67,13 +67,13 @@ export function ChatSuggestions({ onSelect }: Props) {
       icon: Share2,
       textKey: "chat.suggestion.diagram",
       fallback: "Generate a Mermaid diagram of the architecture",
-      color: "#bb9af7",
+      color: "var(--purple, #bb9af7)",
     },
     ...(hotspots && hotspots.length > 5 ? [{
       icon: Flame,
       textKey: "chat.suggestion.hotspots",
       fallback: "What are the main hotspots (most changed files) in the code?",
-      color: "#ff9e64",
+      color: "var(--orange, #ff9e64)",
     }] : [])
   ].slice(0, 4); // Keep at most 4 suggestions to fit grid
 
@@ -197,8 +197,8 @@ export function ChatSuggestions({ onSelect }: Props) {
                 className="flex items-start gap-3 w-full rounded-xl transition-all"
                 style={{
                   padding: "14px 16px",
-                  background: "var(--surface)",
-                  border: "1px solid var(--surface-border)",
+                  background: "var(--surface)", boxShadow: "var(--shadow-sm)",
+              border: "1px solid var(--surface-border)",
                   cursor: "pointer",
                   textAlign: "left",
                   color: "inherit",
@@ -262,8 +262,8 @@ export function ChatSuggestions({ onSelect }: Props) {
                   className="flex items-center gap-2 rounded-lg transition-all"
                   style={{
                     padding: "8px 10px",
-                    background: "var(--surface)",
-                    border: "1px solid var(--surface-border)",
+                    background: "var(--surface)", boxShadow: "var(--shadow-sm)",
+              border: "1px solid var(--surface-border)",
                     cursor: "pointer",
                     textAlign: "left",
                     fontSize: 11,

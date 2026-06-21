@@ -76,7 +76,7 @@ export function TodosView() {
       {!isLoading && filtered.length === 0 && (
         <div
           className="flex items-center gap-2"
-          style={{ color: "var(--green)", padding: 16, background: "var(--bg-1)", borderRadius: "var(--radius-lg)" }}
+          style={{ color: "var(--green)", padding: 16, background: "var(--surface)", boxShadow: "var(--shadow-sm)", borderRadius: "var(--radius-lg)" }}
         >
           <CheckCircle size={16} />
           {t("todos.none")}
@@ -171,7 +171,7 @@ function KindBadge({ kind }: { kind: string }) {
         letterSpacing: 0.5,
         padding: "2px 8px",
         borderRadius: "var(--radius-sm)",
-        background: `${color}22`,
+        background: `color-mix(in srgb, ${color} 13%, transparent)`,
         color,
         fontFamily: "var(--font-mono)",
       }}

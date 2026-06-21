@@ -42,7 +42,7 @@ export function ComplexityView() {
           margin: 24,
           color: "var(--text-2)",
           padding: 16,
-          background: "var(--bg-1)",
+          background: "var(--surface)", boxShadow: "var(--shadow-sm)",
           borderRadius: "var(--radius-lg)",
         }}
       >
@@ -176,7 +176,7 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
         padding: "12px 14px",
         borderRadius: "var(--radius-lg)",
         border: "1px solid var(--surface-border)",
-        background: "var(--bg-1)",
+        background: "var(--surface)", boxShadow: "var(--shadow-sm)",
       }}
     >
       <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>{label}</div>
@@ -193,8 +193,8 @@ function SeverityTile({ label, value, color }: { label: string; value: number; c
       style={{
         padding: "12px 14px",
         borderRadius: "var(--radius-lg)",
-        border: `1px solid ${color}44`,
-        background: `${color}11`,
+        border: `1px solid color-mix(in srgb, ${color} 27%, transparent)`,
+        background: `color-mix(in srgb, ${color} 7%, transparent)`,
       }}
     >
       <div style={{ fontSize: 10, color, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
@@ -222,7 +222,7 @@ function SeverityBadge({ severity }: { severity: string }) {
         textTransform: "uppercase",
         padding: "2px 8px",
         borderRadius: "var(--radius-sm)",
-        background: `${color}22`,
+        background: `color-mix(in srgb, ${color} 13%, transparent)`,
         color,
         letterSpacing: 0.5,
       }}

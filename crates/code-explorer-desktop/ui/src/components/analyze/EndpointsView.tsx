@@ -64,7 +64,7 @@ export function EndpointsView() {
               fontSize: 12,
               border: "1px solid var(--surface-border)",
               borderRadius: "var(--radius-md)",
-              background: "var(--bg-1)",
+              background: "var(--surface)", boxShadow: "var(--shadow-sm)",
               color: "var(--text-0)",
               width: 220,
             }}
@@ -101,7 +101,7 @@ export function EndpointsView() {
       {!isLoading && filtered.length === 0 && (
         <div
           className="flex items-center gap-2"
-          style={{ color: "var(--text-2)", padding: 16, background: "var(--bg-1)", borderRadius: "var(--radius-lg)" }}
+          style={{ color: "var(--text-2)", padding: 16, background: "var(--surface)", boxShadow: "var(--shadow-sm)", borderRadius: "var(--radius-lg)" }}
         >
           <Info size={16} />
           {t("endpoints.none")}
@@ -189,7 +189,7 @@ function MethodBadge({ method }: { method: string }) {
         letterSpacing: 0.5,
         padding: "2px 8px",
         borderRadius: "var(--radius-sm)",
-        background: `${color}22`,
+        background: `color-mix(in srgb, ${color} 13%, transparent)`,
         color,
         fontFamily: "var(--font-mono)",
       }}

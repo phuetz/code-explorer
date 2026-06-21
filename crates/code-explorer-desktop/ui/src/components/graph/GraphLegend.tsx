@@ -79,7 +79,7 @@ export function GraphLegend({
             </button>
           </div>
           <div
-            className="space-y-1 max-h-[calc(8*28px)] overflow-y-auto"
+            className="space-y-1 max-h-[calc(8*34px)] overflow-y-auto"
             style={{ maxWidth: "180px" }}
           >
             {sortedEntries.map(([type, count]) => (
@@ -87,7 +87,7 @@ export function GraphLegend({
                 key={type}
                 className="w-full flex items-center gap-2 cursor-pointer hover:bg-white/5 px-1 py-0.5 rounded transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                 style={{
-                  padding: "4px 4px",
+                  padding: "6px 8px",
                   opacity: highlightedNodeType && highlightedNodeType !== type ? 0.4 : 1,
                   backgroundColor: highlightedNodeType === type ? "var(--bg-3)" : "transparent",
                   border: "none",

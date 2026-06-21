@@ -315,8 +315,8 @@ export function SymbolAutocomplete({
                   padding: "2px 6px",
                   borderRadius: 4,
                   color: labelColor(item.label),
-                  background: `${labelColor(item.label)}18`,
-                  border: `1px solid ${labelColor(item.label)}30`,
+                  background: `color-mix(in srgb, ${labelColor(item.label)} 10%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${labelColor(item.label)} 19%, transparent)`,
                   whiteSpace: "nowrap",
                 }}
               >

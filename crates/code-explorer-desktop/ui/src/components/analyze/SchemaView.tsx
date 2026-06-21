@@ -55,7 +55,7 @@ export function SchemaView() {
       {!isLoading && tables.length === 0 && (
         <div
           className="flex items-center gap-2"
-          style={{ color: "var(--text-2)", padding: 16, background: "var(--bg-1)", borderRadius: "var(--radius-lg)" }}
+          style={{ color: "var(--text-2)", padding: 16, background: "var(--surface)", boxShadow: "var(--shadow-sm)", borderRadius: "var(--radius-lg)" }}
         >
           <Info size={16} />
           {t("schema.none")}
@@ -77,7 +77,7 @@ export function SchemaView() {
                     borderRadius: "var(--radius-lg)",
                     border: "1px solid var(--surface-border)",
                     overflow: "hidden",
-                    background: "var(--bg-1)",
+                    background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                   }}
                 >
                   <button

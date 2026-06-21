@@ -59,7 +59,7 @@ export function CyclesView() {
           style={{
             color: "var(--green)",
             padding: 16,
-            background: "var(--bg-1)",
+            background: "var(--surface)", boxShadow: "var(--shadow-sm)",
             borderRadius: "var(--radius-lg)",
           }}
         >
@@ -81,7 +81,7 @@ export function CyclesView() {
                   border: "1px solid var(--surface-border)",
                   borderRadius: "var(--radius-lg)",
                   padding: 14,
-                  background: "var(--bg-1)",
+                  background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                 }}
               >
                 <div className="flex items-center gap-3" style={{ marginBottom: 8 }}>
@@ -175,7 +175,7 @@ function SeverityBadge({ severity }: { severity: string }) {
         textTransform: "uppercase",
         padding: "2px 8px",
         borderRadius: "var(--radius-sm)",
-        background: `${color}22`,
+        background: `color-mix(in srgb, ${color} 13%, transparent)`,
         color,
         letterSpacing: 0.5,
       }}

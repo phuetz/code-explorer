@@ -222,7 +222,7 @@ function Stat({
         borderRadius: 6,
       }}
     >
-      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
         {label}
       </div>
       <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-display)", color: accent ?? "var(--text-0)" }}>
@@ -343,7 +343,7 @@ function RepoRow({
                     borderRadius: 4,
                     color: "var(--rose)",
                     cursor: "pointer",
-                    fontSize: 9,
+                    fontSize: 11,
                     fontWeight: 600,
                     flexShrink: 0,
                   }}
@@ -390,7 +390,7 @@ function RepoRow({
                 background: "var(--bg-3)",
                 border: "1px solid var(--surface-border)",
                 borderRadius: 4,
-                fontSize: 9,
+                fontSize: 11,
                 color: "var(--text-2)",
               }}
             >

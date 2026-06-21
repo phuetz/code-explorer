@@ -440,7 +440,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
             <StaggerItem key={m.key}>
               <AnimatedCard
                 style={{
-                  background: "var(--bg-1)",
+                  background: "var(--surface)", boxShadow: "var(--shadow-sm)",
                   border: "1px solid var(--surface-border)",
                   borderRadius: 12,
                   padding: "16px 18px",
@@ -455,7 +455,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
                     width: 40,
                     height: 40,
                     borderRadius: 10,
-                    background: `${m.color}18`,
+                    background: `color-mix(in srgb, ${m.color} 12%, transparent)`,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -498,7 +498,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
         {distribution.length > 0 && (
           <div
             style={{
-              background: "var(--bg-1)",
+              background: "var(--surface)", boxShadow: "var(--shadow-sm)",
               border: "1px solid var(--surface-border)",
               borderRadius: 12,
               padding: "16px 18px",
@@ -531,7 +531,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
         {healthData && (
           <div
             style={{
-              background: "var(--bg-1)",
+              background: "var(--surface)", boxShadow: "var(--shadow-sm)",
               border: "1px solid var(--surface-border)",
               borderRadius: 12,
               padding: "16px 18px",
@@ -558,7 +558,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
       {topNodes.length > 0 && (
         <div
           style={{
-            background: "var(--bg-1)",
+            background: "var(--surface)", boxShadow: "var(--shadow-sm)",
             border: "1px solid var(--surface-border)",
             borderRadius: 12,
             padding: "16px 18px",
@@ -633,7 +633,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
                       fontWeight: 600,
                       padding: "2px 8px",
                       borderRadius: 10,
-                      background: `${labelColor}20`,
+                      background: `color-mix(in srgb, ${labelColor} 14%, transparent)`,
                       color: labelColor,
                       textTransform: "uppercase",
                       letterSpacing: "0.04em",
@@ -690,7 +690,7 @@ export const RepoDashboard = memo(function RepoDashboard() {
 
         return (
           <AnimatedCard>
-            <div style={{ padding: "16px 20px", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", background: "var(--bg-1)" }}>
+            <div style={{ padding: "16px 20px", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "var(--shadow-sm)" }}>
               <h3 className="text-sm font-semibold" style={{ color: "var(--text-0)", marginBottom: 12 }}>
                 {t("dashboard.mostComplexFunctions")}
               </h3>

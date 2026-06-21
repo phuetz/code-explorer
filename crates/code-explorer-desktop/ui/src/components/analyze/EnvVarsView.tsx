@@ -80,7 +80,7 @@ export function EnvVarsView() {
       {!isLoading && filtered.length === 0 && (
         <div
           className="flex items-center gap-2"
-          style={{ color: "var(--text-2)", padding: 16, background: "var(--bg-1)", borderRadius: "var(--radius-lg)" }}
+          style={{ color: "var(--text-2)", padding: 16, background: "var(--surface)", boxShadow: "var(--shadow-sm)", borderRadius: "var(--radius-lg)" }}
         >
           <Info size={16} />
           {t("envvars.none")}
@@ -172,7 +172,7 @@ function StatusBadge({
         letterSpacing: 0.5,
         padding: "2px 8px",
         borderRadius: "var(--radius-sm)",
-        background: `${color}22`,
+        background: `color-mix(in srgb, ${color} 13%, transparent)`,
         color,
         fontFamily: "var(--font-mono)",
       }}

@@ -128,7 +128,7 @@ export function CommunitiesPanel() {
             <button
               key={feat.id}
               onClick={(e) => handleClick(feat.name, e)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all group"
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-all group"
               aria-pressed={isSelected}
               style={{
                 background: isSelected ? `${color}15` : "transparent",

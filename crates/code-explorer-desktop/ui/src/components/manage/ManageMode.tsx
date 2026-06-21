@@ -217,7 +217,7 @@ export function ManageMode() {
           </Suspense>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-6" style={{ maxWidth: 900, margin: "0 auto", width: "100%" }}>
+        <div className="flex-1 overflow-auto p-6" style={{ maxWidth: 1080, margin: "0 auto", width: "100%" }}>
           {tab === "repos" && (
             <>
               <Section icon={Database} title={t("manage.multiRepoOverview")}>

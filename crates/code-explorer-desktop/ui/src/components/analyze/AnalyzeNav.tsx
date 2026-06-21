@@ -58,7 +58,7 @@ export const AnalyzeNav = memo(function AnalyzeNav() {
 
   return (
     <div
-      className="flex flex-col h-full shrink-0 py-3"
+      className="flex flex-col h-full shrink-0 py-4"
       style={{
         width: isCompact ? 48 : 160,
         background: "var(--glass-bg)",
@@ -74,7 +74,7 @@ export const AnalyzeNav = memo(function AnalyzeNav() {
           </h2>
         </div>
       )}
-      <nav className="flex flex-col gap-0.5 px-2" aria-label={t("analyze.nav.title")}>
+      <nav className="flex flex-col gap-1 px-2" aria-label={t("analyze.nav.title")}>
         {visibleItems.map(({ view, icon: Icon, i18nKey }) => {
           const label = t(i18nKey);
           return (
@@ -92,8 +92,8 @@ export const AnalyzeNav = memo(function AnalyzeNav() {
               background: analyzeView === view ? "var(--accent-subtle)" : "transparent",
               color: analyzeView === view ? "var(--accent)" : "var(--text-2)",
               fontFamily: "var(--font-body)",
-              fontWeight: analyzeView === view ? 500 : 400,
-              boxShadow: analyzeView === view ? "inset 2px 0 0 var(--accent)" : "none",
+              fontWeight: analyzeView === view ? 600 : 400,
+              boxShadow: analyzeView === view ? "inset 3px 0 0 var(--accent)" : "none",
             }}
           >
             <Icon size={16} />

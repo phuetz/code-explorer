@@ -549,7 +549,7 @@ function StepCard({
       <div
         style={{
           padding: "5px 10px",
-          background: `${color}14`,
+          background: `color-mix(in srgb, ${color} 8%, transparent)`,
           borderBottom: "1px solid var(--surface-border)",
           display: "flex",
           alignItems: "center",
