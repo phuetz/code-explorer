@@ -87,11 +87,10 @@ pub fn chunk_markdown(source_path: &str, content: &str) -> Result<Vec<DocChunk>>
             // oversized-chunk splitter (split_oversized) can find them.
             // Without this, pulldown_cmark drops the inter-paragraph newlines
             // and the whole section body merges into one undelimited blob.
-            Event::End(Tag::Paragraph) => {
-                if !current_content.is_empty() && !current_content.ends_with("\n\n") {
+            Event::End(Tag::Paragraph)
+                if !current_content.is_empty() && !current_content.ends_with("\n\n") => {
                     current_content.push_str("\n\n");
                 }
-            }
             _ => {}
         }
     }

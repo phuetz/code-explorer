@@ -185,7 +185,7 @@ impl App {
                 });
             }
         }
-        all_symbols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        all_symbols.sort_by_key(|a| a.name.to_lowercase());
 
         // Build communities list
         let mut communities: Vec<CommunityItem> = Vec::new();
@@ -372,7 +372,7 @@ impl App {
         }
 
         self.symbols
-            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            .sort_by_key(|a| a.name.to_lowercase());
         self.load_details_for_selected_symbol();
     }
 
@@ -538,7 +538,7 @@ impl App {
             }
         }
         self.community_members
-            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            .sort_by_key(|a| a.name.to_lowercase());
     }
 
     fn load_process_steps(&mut self) {

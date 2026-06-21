@@ -137,7 +137,7 @@ fn write_docx_package(
 
     // 6. word/document.xml (main content) and collect hyperlinks + images
     let (document_xml, links, images) =
-        generate_document_xml(project_name, &md_files, &stats, &brand, &profile);
+        generate_document_xml(project_name, md_files, stats, brand, &profile);
     zip.start_file("word/document.xml", options)?;
     zip.write_all(document_xml.as_bytes())?;
 
@@ -162,19 +162,19 @@ fn write_docx_package(
 
     // 7. word/header1.xml (rId3 — first page suppressed via <w:titlePg/>)
     zip.start_file("word/header1.xml", options)?;
-    zip.write_all(generate_header_xml(project_name, &brand).as_bytes())?;
+    zip.write_all(generate_header_xml(project_name, brand).as_bytes())?;
 
     // 8. word/footer1.xml (rId4 — paginated via PAGE / NUMPAGES fields)
     zip.start_file("word/footer1.xml", options)?;
-    zip.write_all(generate_footer_xml(&brand).as_bytes())?;
+    zip.write_all(generate_footer_xml(brand).as_bytes())?;
 
     // 9. docProps/core.xml (Word "Fichier > Propriétés" core metadata)
     zip.start_file("docProps/core.xml", options)?;
-    zip.write_all(generate_core_props_xml(project_name, &brand).as_bytes())?;
+    zip.write_all(generate_core_props_xml(project_name, brand).as_bytes())?;
 
     // 10. docProps/app.xml (Application + Company in Détails panel)
     zip.start_file("docProps/app.xml", options)?;
-    zip.write_all(generate_app_props_xml(&brand).as_bytes())?;
+    zip.write_all(generate_app_props_xml(brand).as_bytes())?;
 
     zip.finish()?;
     Ok(())

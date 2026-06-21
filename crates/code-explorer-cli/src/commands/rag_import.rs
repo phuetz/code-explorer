@@ -65,14 +65,13 @@ pub fn run(docs_dir: &str, repo_path_str: Option<&str>) -> Result<()> {
             | NodeLabel::Interface
             | NodeLabel::Service
             | NodeLabel::Controller
-            | NodeLabel::Struct => {
-                if node.properties.name.len() >= MIN_SYMBOL_NAME_LEN {
+            | NodeLabel::Struct
+                if node.properties.name.len() >= MIN_SYMBOL_NAME_LEN => {
                     let pattern = format!(r"\b{}\b", regex::escape(&node.properties.name));
                     if let Ok(re) = Regex::new(&pattern) {
                         known_symbols.push((node.id.clone(), re));
                     }
                 }
-            }
             _ => {}
         }
     }

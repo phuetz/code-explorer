@@ -79,7 +79,7 @@ pub fn detect_communities(graph: &mut KnowledgeGraph) -> Result<usize, crate::In
 
     // Create Community nodes and MEMBER_OF edges
     let mut sorted_communities: Vec<_> = communities.into_iter().collect();
-    sorted_communities.sort_by(|(a, _), (b, _)| a.cmp(b));
+    sorted_communities.sort_by_key(|(a, _)| *a);
     for (idx, (_, members)) in sorted_communities.iter().enumerate() {
         let community_name = generate_heuristic_label(graph, members);
         let community_id = generate_id("Community", &format!("community_{idx}"));

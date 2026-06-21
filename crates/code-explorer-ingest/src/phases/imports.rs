@@ -280,8 +280,8 @@ fn propagate_script_re_exported_module_aliases(
         let mut changed = false;
         for (file_path, alias, target_file) in additions {
             let aliases = module_alias_map.entry(file_path).or_default();
-            if !aliases.contains_key(&alias) {
-                aliases.insert(alias, target_file);
+            if let std::collections::hash_map::Entry::Vacant(e) = aliases.entry(alias) {
+                e.insert(target_file);
                 changed = true;
             }
         }

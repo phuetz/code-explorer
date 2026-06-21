@@ -424,13 +424,12 @@ fn append_responses_text(event: &serde_json::Value, output: &mut String) {
                 output.push_str(delta);
             }
         }
-        "response.output_text.done" => {
-            if output.is_empty() {
+        "response.output_text.done"
+            if output.is_empty() => {
                 if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
                     output.push_str(text);
                 }
             }
-        }
         "response.completed" if output.is_empty() => {
             if let Some(items) = event
                 .get("response")

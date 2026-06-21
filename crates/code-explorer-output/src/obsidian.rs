@@ -166,8 +166,7 @@ fn yaml_string(value: &str) -> String {
     value
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
-        .replace('\r', " ")
-        .replace('\n', " ")
+        .replace(['\r', '\n'], " ")
 }
 
 pub fn generate_obsidian_vault(

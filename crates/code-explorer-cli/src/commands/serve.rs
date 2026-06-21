@@ -749,7 +749,7 @@ fn validate_workdoc_export_payload(
             "Le livrable Markdown à exporter est vide.".to_string(),
         ));
     }
-    let markdown_bytes = payload.markdown.as_bytes().len();
+    let markdown_bytes = payload.markdown.len();
     if markdown_bytes > MAX_WORKDOC_EXPORT_MARKDOWN_BYTES {
         return Err((
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -786,10 +786,10 @@ fn upsert_workdoc_state_at(
     let metadata = validate_workdoc_state_document(document)?;
     let document_json = serde_json::to_string(document)
         .map_err(|err| format!("Document de travail invalide: {err}"))?;
-    if document_json.as_bytes().len() > MAX_WORKDOC_STATE_BYTES {
+    if document_json.len() > MAX_WORKDOC_STATE_BYTES {
         return Err(format!(
             "Document de travail trop volumineux ({} octets, max {}).",
-            document_json.as_bytes().len(),
+            document_json.len(),
             MAX_WORKDOC_STATE_BYTES
         ));
     }
@@ -1039,7 +1039,7 @@ async fn workdoc_temp_output_path(extension: &str) -> Result<PathBuf, String> {
 pub(crate) fn extract_workdoc_questions(markdown: &str) -> Vec<WorkdocQuestion> {
     let lines: Vec<String> = markdown
         .lines()
-        .map(|line| normalize_workdoc_line(line))
+        .map(normalize_workdoc_line)
         .collect();
 
     let candidates = collect_workdoc_question_candidates(&lines);
@@ -1047,7 +1047,7 @@ pub(crate) fn extract_workdoc_questions(markdown: &str) -> Vec<WorkdocQuestion> 
     let mut seen = HashSet::new();
     let mut questions = Vec::new();
     for (candidate_index, (line_index, label, text)) in candidates.iter().enumerate() {
-        let dedupe_key = normalize_question_key(&text);
+        let dedupe_key = normalize_question_key(text);
         if dedupe_key.is_empty() || !seen.insert(dedupe_key) {
             continue;
         }
@@ -1276,7 +1276,7 @@ fn following_workdoc_question_text(lines: &[String], start: usize) -> Option<Str
 
 fn is_plausible_workdoc_question_text(text: &str) -> bool {
     let chars = text.chars().count();
-    chars >= 6 && chars <= 800
+    (6..=800).contains(&chars)
 }
 
 fn is_french_question_text(text: &str) -> bool {

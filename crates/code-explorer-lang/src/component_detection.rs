@@ -270,8 +270,8 @@ impl ComponentDetector {
                             });
                         }
                     }
-                    PatternType::ProjectReference => {
-                        if content.contains(&pattern.value) {
+                    PatternType::ProjectReference
+                        if content.contains(&pattern.value) => {
                             detected.push(DetectedComponent {
                                 library_name: lib.name.clone(),
                                 vendor: lib.vendor.clone(),
@@ -282,9 +282,8 @@ impl ComponentDetector {
                                 detected_version: None,
                             });
                         }
-                    }
-                    PatternType::PackagesConfig => {
-                        if content.contains(&pattern.value) {
+                    PatternType::PackagesConfig
+                        if content.contains(&pattern.value) => {
                             detected.push(DetectedComponent {
                                 library_name: lib.name.clone(),
                                 vendor: lib.vendor.clone(),
@@ -295,7 +294,6 @@ impl ComponentDetector {
                                 detected_version: None,
                             });
                         }
-                    }
                     _ => {} // Other pattern types don't apply to .csproj
                 }
             }

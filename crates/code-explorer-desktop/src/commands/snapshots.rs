@@ -165,7 +165,7 @@ pub async fn snapshot_create(
 fn enforce_cap_and_save(storage: &str, idx: &mut SnapshotIndex) -> Result<(), String> {
     if idx.snapshots.len() > MAX_SNAPSHOTS {
         idx.snapshots
-            .sort_by(|a, b| a.created_at.cmp(&b.created_at));
+            .sort_by_key(|a| a.created_at);
         let drop = idx.snapshots.len() - MAX_SNAPSHOTS;
         for evicted in idx.snapshots.drain(0..drop) {
             let _ = std::fs::remove_file(snapshot_file_path(storage, &evicted.id));

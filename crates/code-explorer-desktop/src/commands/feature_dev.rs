@@ -557,8 +557,8 @@ fn parse_blueprint_from_markdown(md: &str) -> Blueprint {
                     None => paragraph,
                 });
             }
-            Some("seq") => {
-                if trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ") {
+            Some("seq")
+                if (trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ")) => {
                     let cleaned = trimmed
                         .trim_start_matches(|c: char| {
                             c.is_ascii_digit() || c == '.' || c == ' ' || c == '-'
@@ -568,7 +568,6 @@ fn parse_blueprint_from_markdown(md: &str) -> Blueprint {
                         bp.build_sequence.push(cleaned);
                     }
                 }
-            }
             _ => {}
         }
     }
@@ -646,13 +645,12 @@ fn parse_review_from_markdown(md: &str) -> Review {
                     review.verdict = "needs_revisions".into();
                 }
             }
-            Some("issues") => {
-                if trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ") {
+            Some("issues")
+                if (trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ")) => {
                     if let Some(issue) = parse_issue_line(trimmed) {
                         review.issues.push(issue);
                     }
                 }
-            }
             Some("impact") => {
                 if !impact_buf.is_empty() {
                     impact_buf.push(' ');

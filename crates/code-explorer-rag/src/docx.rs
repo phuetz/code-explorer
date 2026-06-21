@@ -453,11 +453,11 @@ fn color_family_and_label(value: &str) -> (String, String) {
 }
 
 fn attr_value(e: &quick_xml::events::BytesStart, name: &[u8]) -> Option<String> {
-    let bare_name = name.split(|byte| *byte == b':').last().unwrap_or(name);
+    let bare_name = name.split(|byte| *byte == b':').next_back().unwrap_or(name);
     for attr_res in e.attributes() {
         let Ok(attr) = attr_res else { continue };
         let key = attr.key.as_ref();
-        let key_bare = key.split(|byte| *byte == b':').last().unwrap_or(key);
+        let key_bare = key.split(|byte| *byte == b':').next_back().unwrap_or(key);
         if key == name || key_bare == bare_name {
             return Some(String::from_utf8_lossy(attr.value.as_ref()).to_string());
         }
