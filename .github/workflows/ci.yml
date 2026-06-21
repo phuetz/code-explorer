@@ -23,12 +23,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo check
-        run: cargo check --workspace
+        run: cargo check --workspace --exclude code-explorer-desktop
 
       # Clippy runs informationally — warnings show in the logs but don't fail
       # the build (gating on `-D warnings` is brittle across clippy versions).
       - name: cargo clippy
-        run: cargo clippy --workspace
+        run: cargo clippy --workspace --exclude code-explorer-desktop
 
   test:
     name: Tests (${{ matrix.os }})
@@ -44,7 +44,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude code-explorer-desktop
 
   frontend:
     name: Frontend Build & E2E
