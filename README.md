@@ -192,14 +192,16 @@ git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 cargo build --release -p code-explorer-cli
 #   → binary at target/release/code-explorer  (code-explorer.exe on Windows)
+#   put it on your PATH so `code-explorer` works anywhere.
 
-# 2. Index a project
-code-explorer analyze /path/to/your/project
+# 2. Index your project (writes a .codeexplorer/ graph inside it)
+cd /path/to/your/project
+code-explorer analyze .
 
-# 3. Ask the graph
+# 3. Ask the graph — from the project directory
 code-explorer context  handleLogin          # 360° view: callers, callees, imports, hierarchy
 code-explorer impact   PaymentService       # blast radius, upstream + downstream
-code-explorer search   "where do we verify auth"
+code-explorer query    "where do we verify auth"   # full-text + symbol search
 code-explorer cypher   "MATCH (n:Function) RETURN n.name LIMIT 10"
 ```
 
