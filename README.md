@@ -7,6 +7,7 @@
 ### The code-intelligence layer for AI coding agents
 
 <p align="center">
+  <a href="https://github.com/phuetz/code-explorer/actions/workflows/ci.yml"><img src="https://github.com/phuetz/code-explorer/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-3b82f6?style=flat-square" alt="License: PolyForm Noncommercial"/></a>
   <img src="https://img.shields.io/badge/Rust-1.75+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
   <img src="https://img.shields.io/badge/languages-14-22c55e?style=flat-square" alt="14 languages"/>
@@ -184,7 +185,9 @@ The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic,
 ## Quick Start
 
 ```bash
-# 1. Clone & build the CLI (release: ~64 MB static binary)
+# 1. Get the binary — either grab a prebuilt one (no Rust toolchain needed):
+#      https://github.com/phuetz/code-explorer/releases   (Linux / macOS / Windows)
+#    …or build from source (release: ~64 MB static binary):
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 cargo build --release -p code-explorer-cli
@@ -211,7 +214,7 @@ Code Explorer is an **MCP server** — connect it once and your agent gains 29 c
 **Claude Code**
 
 ```bash
-code-explorer mcp install            # auto-configures the MCP server
+code-explorer mcp-install            # auto-configures the MCP server
 # or manually point your client at:  code-explorer mcp   (stdio transport)
 ```
 

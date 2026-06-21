@@ -1,0 +1,63 @@
+name: Release
+
+# Cut a release by pushing a tag, e.g.:  git tag v0.1.0 && git push origin v0.1.0
+# This builds prebuilt `code-explorer` binaries for Linux/macOS/Windows and
+# attaches them to the GitHub Release, so users don't need a Rust toolchain.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: code-explorer-linux-x86_64.tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: code-explorer-macos-aarch64.tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset: code-explorer-macos-x86_64.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: code-explorer-windows-x86_64.zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release -p code-explorer-cli --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: tar -czf "${{ matrix.asset }}" -C "target/${{ matrix.target }}/release" code-explorer
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "target/${{ matrix.target }}/release/code-explorer.exe" -DestinationPath "${{ matrix.asset }}"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true

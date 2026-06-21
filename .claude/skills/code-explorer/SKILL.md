@@ -117,7 +117,7 @@ code-explorer mcp                                  # Start MCP server (stdio, JS
 #   ownership, coverage, diagram, report, analyze_execution_trace, get_complexity,
 #   list_todos, list_endpoints, list_db_tables, list_env_vars, get_endpoint_handler,
 #   get_insights, save_memory
-code-explorer mcp install                          # Auto-configure the MCP server for Claude Code
+code-explorer mcp-install                          # Auto-configure the MCP server for Claude Code
 ```
 
 ### 12. HTTP server (REST API)

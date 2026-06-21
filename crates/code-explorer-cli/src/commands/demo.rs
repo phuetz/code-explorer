@@ -152,10 +152,21 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
         println!("    for a complete, instant, reusable answer.");
     }
     println!();
-    println!(
-        "  Whole repo ≈ {} tokens — exceeds every model's context window.",
-        fmt(corpus_tokens).bold()
-    );
+    // A generous modern context window for an honest comparison (Claude ~200K).
+    const WINDOW: usize = 200_000;
+    if corpus_tokens >= WINDOW {
+        let times = corpus_tokens as f64 / WINDOW as f64;
+        println!(
+            "  Whole repo ≈ {} tokens — about {} a 200K-token context window.",
+            fmt(corpus_tokens).bold(),
+            format!("{times:.0}×").bold()
+        );
+    } else {
+        println!(
+            "  Whole repo ≈ {} tokens — Code Explorer still answers from the relevant slice, not the whole file set.",
+            fmt(corpus_tokens).bold()
+        );
+    }
     println!(
         "  {}",
         format!("Code Explorer distills it into a {total_nodes}-node graph you query in one command.")
