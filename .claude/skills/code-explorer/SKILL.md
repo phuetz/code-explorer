@@ -112,7 +112,7 @@ code-explorer shell                           # REPL with tab completion
 
 ```bash
 code-explorer mcp                                  # Start MCP server (stdio, JSON-RPC 2.0)
-# 29 tools, including: list_repos, query, context, impact, detect_changes, rename,
+# 30 tools, including: list_repos, query, context, impact, detect_changes, rename,
 #   cypher, search_code, read_file, find_cycles, find_similar_code, hotspots, coupling,
 #   ownership, coverage, diagram, report, analyze_execution_trace, get_complexity,
 #   list_todos, list_endpoints, list_db_tables, list_env_vars, get_endpoint_handler,

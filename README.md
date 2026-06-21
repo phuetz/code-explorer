@@ -11,7 +11,7 @@
   <a href="#license"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-3b82f6?style=flat-square" alt="License: PolyForm Noncommercial"/></a>
   <img src="https://img.shields.io/badge/Rust-1.75+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
   <img src="https://img.shields.io/badge/languages-14-22c55e?style=flat-square" alt="14 languages"/>
-  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-29_tools-a855f7?style=flat-square" alt="MCP server"/></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-30_tools-a855f7?style=flat-square" alt="MCP server"/></a>
   <img src="https://img.shields.io/badge/tests-1007-16a34a?style=flat-square" alt="1007 tests"/>
   <img src="https://img.shields.io/badge/runs-100%25_local-0ea5e9?style=flat-square" alt="100% local"/>
 </p>
@@ -60,7 +60,7 @@ code-explorer demo /path/to/ollama        # or just: code-explorer demo  (in any
 
 AI coding assistants read files **one at a time, on demand**. On a real-world project (800+ files) they must read dozens of files to follow a single call chain, they start from scratch every conversation, and they fill their context window with raw source code that leaves no room to think.
 
-Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of relationships — 50+ node types, typed edges, persisted to disk — and exposes it through **29 MCP tools**. Your agent asks a question; Code Explorer returns just the relevant relationships. The agent gets a "brain" that already knows the structure, instead of rebuilding it from raw text every time.
+Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of relationships — 50+ node types, typed edges, persisted to disk — and exposes it through **30 MCP tools**. Your agent asks a question; Code Explorer returns just the relevant relationships. The agent gets a "brain" that already knows the structure, instead of rebuilding it from raw text every time.
 
 > It's the difference between asking someone to **read a book** versus handing them the **index and table of contents**.
 
@@ -211,7 +211,7 @@ No internet, no API key needed for indexing or graph queries. (LLM features like
 
 ## Use it with your agent
 
-Code Explorer is an **MCP server** — connect it once and your agent gains 29 code-intelligence tools.
+Code Explorer is an **MCP server** — connect it once and your agent gains 30 code-intelligence tools.
 
 **Claude Code**
 
@@ -232,6 +232,7 @@ Once connected, the agent can call:
 | **Analytics** | `hotspots`, `coupling`, `ownership`, `coverage`, `diagram`, `report`, `get_complexity`, `analyze_execution_trace` |
 | **Introspection** | `list_repos`, `list_todos`, `list_endpoints`, `list_db_tables`, `list_env_vars`, `get_endpoint_handler` |
 | **Agent support** | `get_insights`, `save_memory` |
+| **Doc authoring** | `list_sfd_pages`, `write_sfd_draft`, `validate_sfd` |
 
 There's also a built-in **`/code-explorer` Claude Code skill** that auto-invokes the graph on natural-language questions during a conversation.
 
@@ -243,7 +244,7 @@ There's also a built-in **`/code-explorer` Claude Code skill** that auto-invokes
 |---|---|
 | **Knowledge Graph** | 50+ node types, 27 typed relationship kinds (calls, imports, inheritance, ownership), O(1) lookup, persisted snapshots |
 | **14 Languages** | JS, TS, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor — tree-sitter parsers with per-language structural nesting & call resolution |
-| **MCP Server** | 29 tools, stdio + HTTP transports, JSON-RPC 2.0 — works with any MCP agent |
+| **MCP Server** | 30 tools, stdio + HTTP transports, JSON-RPC 2.0 — works with any MCP agent |
 | **Hybrid Search** | BM25 lexical + optional ONNX semantic embeddings, fused via Reciprocal Rank Fusion; optional LLM reranker |
 | **Impact / Blast Radius** | Upstream callers, downstream callees, transitive reach of any symbol |
 | **Git Analytics** | Hotspots (churn), temporal coupling, ownership, single-score health report (A–E) |
@@ -258,7 +259,7 @@ There's also a built-in **`/code-explorer` Claude Code skill** that auto-invokes
 
 ```
 code-explorer (CLI)
- ├── code-explorer-mcp        MCP server — 29 tools, stdio/HTTP, JSON-RPC 2.0
+ ├── code-explorer-mcp        MCP server — 30 tools, stdio/HTTP, JSON-RPC 2.0
  ├── code-explorer-search     Hybrid search: BM25 + ONNX semantic + RRF
  ├── code-explorer-db         Storage: in-memory (Cypher + FTS) or KuzuDB
  ├── code-explorer-ingest     Parallel ingestion pipeline (rayon) + 14 language post-passes
