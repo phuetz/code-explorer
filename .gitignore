@@ -1,0 +1,67 @@
+# Rust
+/target
+# Codex build tree — mirrors target/ under a different name, created by
+# Codex sessions sharing this workspace. Contains tree-sitter generated
+# `flag_check.c`, tokenizer tables, and thousands of artifacts that
+# pollute `code-explorer analyze` if indexed.
+/target-codex
+/.codex-target
+# Session artefacts: omx Codex output + playwright MCP cache
+/.omx
+/.playwright-mcp
+/.codex/config.toml
+
+# Tauri generated schemas
+/nexus-brain/src-tauri/gen/
+/crates/code-explorer-desktop/gen/
+
+# Code Explorer generated
+.codeexplorer/
+.gitnexus/
+wiki/
+skills/
+
+# Transient working notes
+/CODEX_BRIEF_ts_resolver.md
+!.claude/skills/
+!.codex/skills/
+AGENTS.md
+
+# Binaries
+*.exe
+*.pdb
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Local notes / scratch (not part of the project)
+/next-steps.md
+/questions/
+/.claude/settings.local.json
+
+# Local agent / editor state (not product)
+.claude/settings.local.json
+.omc/
+/result.md
+/crates/code-explorer-desktop/gen/

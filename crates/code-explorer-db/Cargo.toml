@@ -1,0 +1,32 @@
+[package]
+name = "code-explorer-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Database adapter (KuzuDB), CSV generation, and schema for Code Explorer"
+
+[features]
+default = []
+kuzu-backend = ["kuzu"]
+
+[dependencies]
+code-explorer-core.workspace = true
+tokio.workspace = true
+csv.workspace = true
+dashmap.workspace = true
+lru.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+kuzu = { workspace = true, optional = true }
+
+[build-dependencies]
+# Force cxx-build version to match kuzu's pinned cxx = "=1.0.138" runtime.
+# Without this, cxx-build resolves to latest (1.0.194+) which embeds version
+# numbers in CXX bridge symbol names, causing LNK2019 on Windows MSVC.
+# See: https://github.com/dtolnay/cxx/issues/1507
+cxx-build = { workspace = true }
+
+[dev-dependencies]

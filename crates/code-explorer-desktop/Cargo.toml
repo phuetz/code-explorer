@@ -1,0 +1,39 @@
+[package]
+name = "code-explorer-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Code Explorer desktop application (Tauri v2 + React)"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+code-explorer-core.workspace = true
+code-explorer-db.workspace = true
+code-explorer-ingest.workspace = true
+code-explorer-mcp.workspace = true
+code-explorer-rag.workspace = true
+code-explorer-search = { workspace = true, features = ["reranker-llm", "embeddings"] }
+code-explorer-git.workspace = true
+code-explorer-output.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+thiserror.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+chrono.workspace = true
+base64 = "0.22"
+once_cell.workspace = true
+zip.workspace = true
+uuid.workspace = true
+regex.workspace = true
+ignore.workspace = true

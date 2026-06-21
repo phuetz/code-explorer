@@ -1,0 +1,169 @@
+# DevExpress UI component libraries
+# Covers: ASP.NET MVC Extensions, ASP.NET Core Controls, Blazor, DevExtreme
+
+# ── DevExpress ASP.NET MVC Extensions ────────────────────────────────────────
+
+[[libraries]]
+name = "DevExpress ASP.NET MVC Extensions"
+vendor = "DevExpress"
+category = "ASP.NET MVC UI Controls"
+
+[[libraries.versions]]
+from = "12.2"
+to = "19.2"
+notes = "MVC Extensions (classic, pre-Core)"
+
+[[libraries.versions]]
+from = "20.1"
+notes = "ASP.NET Core support added"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExpress.Web.Mvc5"
+confidence = 1.0
+description = "NuGet package for ASP.NET MVC 5"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExpress.AspNetCore"
+confidence = 1.0
+description = "NuGet package for ASP.NET Core"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExpress.Web.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "DevExpress.Web.Mvc.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "DevExpress.AspNetCore.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "dx-"
+confidence = 0.85
+description = "DevExtreme Angular/Vue/React component prefix"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "dx-"
+confidence = 0.7
+description = "DevExpress CSS class prefix"
+
+[[libraries.detection_patterns]]
+pattern_type = "assembly_binding"
+value = "DevExpress.Web"
+confidence = 0.9
+
+# ── DevExtreme (JavaScript UI widgets) ───────────────────────────────────────
+
+[[libraries]]
+name = "DevExtreme"
+vendor = "DevExpress"
+category = "JavaScript UI Widgets"
+
+[[libraries.versions]]
+from = "14.2"
+notes = "First DevExtreme release"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExtreme.AspNet.Core"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExtreme.AspNet.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "devextreme"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "js_global"
+value = "DevExpress"
+confidence = 0.8
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "dx-"
+confidence = 0.85
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "dx-widget"
+confidence = 0.9
+
+# ── DevExpress Blazor Components ─────────────────────────────────────────────
+
+[[libraries]]
+name = "DevExpress Blazor"
+vendor = "DevExpress"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "19.2"
+notes = "First Blazor preview"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "DevExpress.Blazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "DevExpress.Blazor.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxChart"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxTextBox"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxScheduler"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxPopup"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxDataGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxFormLayout"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DxRichEdit"
+confidence = 0.95

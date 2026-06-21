@@ -1,0 +1,31 @@
+services:
+  chat:
+    build: .
+    image: code-explorer-chat:latest
+    ports:
+      - "8080:80"
+    environment:
+      CODE_EXPLORER_BACKEND: http://code-explorer-mcp:3000
+    depends_on:
+      - code-explorer-mcp
+    restart: unless-stopped
+
+  # Backend code-explorer-mcp.
+  # Cible le binaire compilé du repo code-explorer (à monter en volume
+  # ou à packager dans une image dédiée — V1.4).
+  code-explorer-mcp:
+    image: code-explorer-mcp:latest
+    # build:
+    #   context: ../code-explorer
+    #   dockerfile: Dockerfile.mcp
+    ports:
+      - "3000:3000"
+    volumes:
+      - code-explorer-data:/data
+    environment:
+      RUST_LOG: info
+      # CODE_EXPLORER_HTTP_TOKEN: changeme  # auth Bearer optionnelle
+    restart: unless-stopped
+
+volumes:
+  code-explorer-data:

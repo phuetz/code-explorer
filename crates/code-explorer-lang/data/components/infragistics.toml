@@ -1,0 +1,142 @@
+# Infragistics UI component libraries
+# Covers: Ignite UI for Angular/React/Blazor, ASP.NET controls (Ultimate UI)
+
+# ── Infragistics ASP.NET MVC (Ultimate UI) ───────────────────────────────────
+
+[[libraries]]
+name = "Infragistics Ultimate UI for ASP.NET MVC"
+vendor = "Infragistics"
+category = "ASP.NET MVC UI Controls"
+
+[[libraries.versions]]
+from = "12.2"
+notes = "NetAdvantage for ASP.NET MVC era"
+
+[[libraries.versions]]
+from = "15.1"
+notes = "Rebranded to Ignite UI"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "IgniteUI.MVC"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Infragistics.Web.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Infragistics.Web.Mvc.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "IgniteUI.*"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "ig-"
+confidence = 0.85
+description = "Ignite UI component prefix"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "ig-"
+confidence = 0.7
+
+[[libraries.detection_patterns]]
+pattern_type = "assembly_binding"
+value = "Infragistics"
+confidence = 0.8
+
+# ── Ignite UI for Blazor ─────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Ignite UI for Blazor"
+vendor = "Infragistics"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "21.1"
+notes = "First Blazor release"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "IgniteUI.Blazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "IgniteUI.Blazor.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "IgbDataGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "IgbCategoryChart"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "IgbButton"
+confidence = 0.9
+
+# ── Ignite UI for Angular ────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Ignite UI for Angular"
+vendor = "Infragistics"
+category = "Angular UI Components"
+
+[[libraries.versions]]
+from = "5.0"
+notes = "Angular native components"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "igniteui-angular"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "igx-"
+confidence = 0.95
+description = "Ignite UI for Angular prefix"
+
+# ── ComponentOne (GrapeCity, often used alongside Infragistics) ──────────────
+
+[[libraries]]
+name = "ComponentOne Studio"
+vendor = "GrapeCity"
+category = "ASP.NET MVC UI Controls"
+
+[[libraries.versions]]
+from = "2012.1"
+notes = "ComponentOne for ASP.NET MVC"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "C1.AspNetCore.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "C1.Web.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "C1.Web.Mvc.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "c1-"
+confidence = 0.85

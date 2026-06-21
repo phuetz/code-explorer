@@ -1,0 +1,8 @@
+interface:
+  display_name: "Code Explorer CLI"
+  short_description: "Graph-backed code intelligence from the CLI"
+  brand_color: "#7aa2f7"
+  default_prompt: "Use $code-explorer to map this repository with Code Explorer before editing."
+
+policy:
+  allow_implicit_invocation: true

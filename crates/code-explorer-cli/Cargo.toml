@@ -1,0 +1,63 @@
+[package]
+name = "code-explorer-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "CLI binary for Code Explorer"
+default-run = "code-explorer"
+
+[[bin]]
+name = "code-explorer"
+path = "src/main.rs"
+
+[features]
+default = []
+kuzu-backend = ["code-explorer-db/kuzu-backend"]
+
+[dependencies]
+code-explorer-core.workspace = true
+code-explorer-ingest.workspace = true
+code-explorer-db.workspace = true
+code-explorer-search = { workspace = true, features = ["reranker-llm", "embeddings"] }
+code-explorer-mcp.workspace = true
+code-explorer-git.workspace = true
+code-explorer-output.workspace = true
+code-explorer-rag.workspace = true
+tokio.workspace = true
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = "0.3"
+clap.workspace = true
+indicatif.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+rustyline.workspace = true
+colored.workspace = true
+regex.workspace = true
+glob.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+notify.workspace = true
+notify-debouncer-mini.workspace = true
+zip.workspace = true
+rusqlite.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+# JSON repair fallback for malformed LLM responses (phase 3 enrichment hardening)
+jsonrepair = "0.1"
+
+# OAuth Authorization Code + PKCE flow for "code-explorer login" — lets users
+# authenticate with their ChatGPT Pro / Plus subscription and consume the
+# OpenAI API through that quota instead of paying per-token.
+base64 = "0.22"
+rand = "0.9"
+sha2 = { workspace = true }
+webbrowser = "1.0"
+thiserror = { workspace = true }

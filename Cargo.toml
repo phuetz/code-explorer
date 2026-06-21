@@ -1,0 +1,137 @@
+[workspace]
+members = ["crates/*"]
+exclude = ["crates/code-explorer-lsp", "crates/code-explorer-storage", "crates/code-explorer-types"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "PolyForm-Noncommercial-1.0.0"
+rust-version = "1.75"
+repository = "https://github.com/phuetz/code-explorer"
+homepage = "https://github.com/phuetz/code-explorer"
+authors = ["Patrick Huetz"]
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Parallelism
+rayon = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+sha2 = "0.10"
+
+# PEG parser
+pest = "2"
+pest_derive = "2"
+
+# Graph
+petgraph = "0.6"
+
+# Caching
+lru = "0.12"
+once_cell = "1"
+
+# Streaming iterator (used by tree-sitter query API)
+streaming-iterator = "0.1"
+
+# Concurrent collections
+dashmap = "6"
+
+# File system
+walkdir = "2"
+ignore = "0.4"
+glob = "0.3"
+
+# CSV
+csv = "1"
+
+# Configuration
+toml = "0.8"
+
+# Graph database
+kuzu = "0.11"
+# Pin cxx-build to match kuzu's cxx = "=1.0.138" — cxx-build 1.0.160+ encodes
+# the patch version into CXX bridge symbol names, causing LNK2019 on Windows when
+# cxx-build (e.g. 1.0.194 → symbols contain "$194$") mismatches the cxx runtime
+# (1.0.138 → expects symbols without version). See dtolnay/cxx#1507, #1665.
+cxx-build = "=1.0.138"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+rustyline = "17"
+colored = "3"
+ratatui = "0.29"
+crossterm = "0.28"
+notify = "7"
+notify-debouncer-mini = "0.5"
+chrono = "0.4"
+
+# HTTP
+axum = "0.7"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls", "stream"], default-features = false }
+futures-util = "0.3"
+
+# Tree-sitter
+tree-sitter = "0.24"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-java = "0.23"
+tree-sitter-c = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-rust = "0.23"
+tree-sitter-php = "0.23"
+tree-sitter-ruby = "0.23"
+tree-sitter-kotlin-ng = "1.1"
+tree-sitter-swift = "0.7"
+
+# DOCX generation (Open XML via ZIP)
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Local persistence
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# ONNX Runtime
+ort = "2.0.0-rc.12"
+ndarray = "0.16"
+
+# HuggingFace tokenizer (for MiniLM / BGE embedding tokenization)
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+# Internal crates
+code-explorer-core = { path = "crates/code-explorer-core" }
+code-explorer-lang = { path = "crates/code-explorer-lang" }
+code-explorer-ingest = { path = "crates/code-explorer-ingest" }
+code-explorer-db = { path = "crates/code-explorer-db" }
+code-explorer-search = { path = "crates/code-explorer-search" }
+code-explorer-mcp = { path = "crates/code-explorer-mcp" }
+code-explorer-query = { path = "crates/code-explorer-query" }
+code-explorer-git = { path = "crates/code-explorer-git" }
+code-explorer-output = { path = "crates/code-explorer-output" }
+code-explorer-rag = { path = "crates/code-explorer-rag" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3

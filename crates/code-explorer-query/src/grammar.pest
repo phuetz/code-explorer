@@ -1,0 +1,148 @@
+// CQL — Code Query Language (Cypher-like) PEG grammar for pest
+//
+// Supports:
+//   MATCH (n:Function) WHERE n.name = 'foo' RETURN n
+//   MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a.name, b.name
+//   CALL QUERY_FTS_INDEX('symbols', 'search term')
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// ─── Top-level ────────────────────────────────────────────────────────
+
+query = { SOI ~ statement ~ EOI }
+
+statement = { call_statement | match_statement }
+
+// ─── CALL statement ───────────────────────────────────────────────────
+
+call_statement = { ^"CALL" ~ function_call }
+function_call  = { identifier ~ "(" ~ arg_list? ~ ")" }
+arg_list       = { expression ~ ("," ~ expression)* }
+
+// ─── MATCH statement ──────────────────────────────────────────────────
+
+match_statement = {
+    match_clause
+    ~ where_clause?
+    ~ return_clause
+    ~ order_clause?
+    ~ limit_clause?
+}
+
+match_clause  = { ^"MATCH" ~ pattern_list }
+where_clause  = { ^"WHERE" ~ expression }
+return_clause = { ^"RETURN" ~ return_items }
+order_clause  = { ^"ORDER" ~ ^"BY" ~ order_items }
+limit_clause  = { ^"LIMIT" ~ integer }
+
+// ─── Patterns ─────────────────────────────────────────────────────────
+
+pattern_list = { pattern ~ ("," ~ pattern)* }
+pattern      = { node_pattern ~ (rel_pattern ~ node_pattern)* }
+
+node_pattern = { "(" ~ variable? ~ label_filter? ~ prop_filter? ~ ")" }
+variable     = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+label_filter = { ":" ~ identifier }
+prop_filter  = { "{" ~ prop_pair ~ ("," ~ prop_pair)* ~ "}" }
+prop_pair    = { identifier ~ ":" ~ atom }
+
+rel_pattern = {
+      "-" ~ "[" ~ rel_inner? ~ "]" ~ "->"    // directed right
+    | "<-" ~ "[" ~ rel_inner? ~ "]" ~ "-"     // directed left
+    | "-" ~ "[" ~ rel_inner? ~ "]" ~ "-"      // undirected
+}
+rel_inner   = { variable? ~ rel_type? ~ length_spec? }
+rel_type    = { ":" ~ identifier }
+length_spec = { "*" ~ (integer ~ ".." ~ integer)? }
+
+// ─── Expressions ──────────────────────────────────────────────────────
+
+expression = { or_expr }
+or_expr    = { and_expr ~ (or_op ~ and_expr)* }
+and_expr   = { not_expr ~ (and_op ~ not_expr)* }
+not_expr   = { not_op? ~ comparison }
+comparison = { add_expr ~ (comp_op ~ add_expr)? }
+add_expr   = { atom ~ (add_op ~ atom)* }
+
+or_op  = _{ or_kw }
+and_op = _{ and_kw }
+not_op = { not_kw }
+add_op = { "+" | "-" }
+
+or_kw  = @{ ^"OR" ~ !(ASCII_ALPHANUMERIC | "_") }
+and_kw = @{ ^"AND" ~ !(ASCII_ALPHANUMERIC | "_") }
+not_kw = @{ ^"NOT" ~ !(ASCII_ALPHANUMERIC | "_") }
+
+comp_op = {
+      ">="
+    | "<="
+    | "<>"
+    | "!="
+    | "=~"
+    | ">"
+    | "<"
+    | "="
+    | contains_kw
+    | starts_with
+    | ends_with
+    | in_kw
+}
+contains_kw = @{ ^"CONTAINS" ~ !(ASCII_ALPHANUMERIC | "_") }
+in_kw       = @{ ^"IN" ~ !(ASCII_ALPHANUMERIC | "_") }
+starts_with = { starts_kw ~ with_kw }
+ends_with   = { ends_kw ~ with_kw }
+starts_kw   = @{ ^"STARTS" ~ !(ASCII_ALPHANUMERIC | "_") }
+ends_kw     = @{ ^"ENDS" ~ !(ASCII_ALPHANUMERIC | "_") }
+with_kw     = @{ ^"WITH" ~ !(ASCII_ALPHANUMERIC | "_") }
+
+// ─── Atoms (values) ──────────────────────────────────────────────────
+
+atom = {
+      aggregation
+    | func_call_expr
+    | float
+    | integer
+    | boolean
+    | null
+    | string_literal
+    | property_access
+    | list_literal
+    | paren_expr
+    | variable
+}
+
+paren_expr      = { "(" ~ expression ~ ")" }
+func_call_expr  = { identifier ~ "(" ~ arg_list? ~ ")" }
+property_access = { identifier ~ "." ~ identifier }
+list_literal    = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
+
+// ─── Return / Order ──────────────────────────────────────────────────
+
+return_items = { return_item ~ ("," ~ return_item)* }
+return_item  = { expression ~ alias? }
+alias        = { ^"AS" ~ identifier }
+
+order_items = { order_item ~ ("," ~ order_item)* }
+order_item  = { expression ~ order_dir? }
+order_dir   = { ^"ASC" | ^"DESC" }
+
+// ─── Aggregation ─────────────────────────────────────────────────────
+
+aggregation = { agg_func ~ "(" ~ (distinct? ~ expression | star) ~ ")" }
+agg_func    = { ^"count" | ^"collect" | ^"sum" | ^"avg" | ^"min" | ^"max" }
+distinct    = { ^"DISTINCT" }
+star        = { "*" }
+
+// ─── Literals ────────────────────────────────────────────────────────
+
+string_literal = { "'" ~ inner_single ~ "'" | "\"" ~ inner_double ~ "\"" }
+inner_single   = @{ (!"'" ~ ANY)* }
+inner_double   = @{ (!"\"" ~ ANY)* }
+integer        = @{ ASCII_DIGIT+ }
+float          = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+boolean        = { true_kw | false_kw }
+null           = { null_kw }
+true_kw        = @{ ^"true" ~ !(ASCII_ALPHANUMERIC | "_") }
+false_kw       = @{ ^"false" ~ !(ASCII_ALPHANUMERIC | "_") }
+null_kw        = @{ ^"null" ~ !(ASCII_ALPHANUMERIC | "_") }
+identifier     = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
