@@ -534,7 +534,15 @@ Un serveur [Model Context Protocol](https://modelcontextprotocol.io/) standard e
 code-explorer mcp          # transport stdio
 code-explorer serve        # transport HTTP (port 3010)
 code-explorer setup        # Configuration automatique dans votre éditeur
+code-explorer mcp-install --client claude --scope project  # Claude Code
+code-explorer mcp-install --client codex --scope global    # Codex
+code-explorer mcp-install --client both --scope project    # Claude projet + Codex utilisateur
+code-explorer mcp-install --client cursor --scope project  # Cursor
+code-explorer mcp-install --client vscode --scope project  # VS Code
+code-explorer mcp-install --client all --scope project     # Claude/Cursor/VS Code projet + Codex utilisateur
 ```
+
+Guide complet : [`docs/agent-install.md`](docs/agent-install.md).
 
 ### 3. API LLM (`--enrich` et `ask`)
 

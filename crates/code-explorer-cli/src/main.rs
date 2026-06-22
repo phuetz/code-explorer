@@ -181,12 +181,15 @@ enum Commands {
     },
     /// Configure MCP for supported editors (VS Code, Cursor, etc.)
     Setup,
-    /// Install Code Explorer as an MCP server for Claude Code (writes .mcp.json)
+    /// Install Code Explorer as an MCP server for supported clients
     #[command(name = "mcp-install")]
     McpInstall {
-        /// Installation scope: "project" (default, writes .mcp.json in CWD) or "global" (writes ~/.mcp.json)
+        /// Installation scope: "project" (default) or "global"
         #[arg(long, default_value = "project")]
         scope: String,
+        /// Client to configure: "claude", "codex", "claude-desktop", "cursor", "vscode", "both", or "all"
+        #[arg(long, default_value = "claude")]
+        client: String,
     },
     /// Launch interactive REPL shell for exploring the knowledge graph
     Shell {
@@ -541,7 +544,7 @@ async fn main() -> anyhow::Result<()> {
             commands::cypher_cmd::run(&query, repo.as_deref()).await
         }
         Commands::Setup => commands::setup::run(),
-        Commands::McpInstall { scope } => commands::mcp_install::run(&scope),
+        Commands::McpInstall { scope, client } => commands::mcp_install::run(&scope, &client),
         Commands::Shell { path } => commands::shell::run(path.as_deref()).await,
         Commands::Generate {
             what,

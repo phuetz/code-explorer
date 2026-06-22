@@ -216,13 +216,41 @@ Code Explorer is an **MCP server** — connect it once and your agent gains 30 c
 **Claude Code**
 
 ```bash
-code-explorer mcp-install            # auto-configures the MCP server
-# or manually point your client at:  code-explorer mcp   (stdio transport)
+cd /path/to/your/project
+code-explorer analyze .
+code-explorer mcp-install --client claude --scope project
+# writes .mcp.json for Claude Code, then restart Claude Code
 ```
 
 **What Claude gains:** instead of reading dozens of files — and filling its context window — to answer *"what calls `PaymentService`?"* or *"what breaks if I change this?"*, Claude calls one tool and gets the answer in **~990 tokens (~40× less context — [see benchmarks](#benchmarks-with-vs-without))**. The graph persists on disk, so Claude doesn't re-learn your codebase every session, and the freed-up context goes to actual reasoning instead of file-reading. Same applies to Codex, Cursor, and any MCP agent.
 
-**Codex / Cursor / VS Code / any MCP client** — add an MCP server that runs `code-explorer mcp` (stdio), or `code-explorer serve --http 8080` for the HTTP transport.
+**Codex**
+
+```bash
+cd /path/to/your/project
+code-explorer analyze .
+code-explorer mcp-install --client codex --scope global
+# writes the Codex user config, then restart Codex
+```
+
+Codex CLI reads MCP servers from the Codex user config (`~/.codex/config.toml` on macOS/Linux, `%USERPROFILE%\.codex\config.toml` on Windows, or `$CODEX_HOME/config.toml`). Use `--client both` when you want Claude Code project config and Codex user config from the same command.
+
+```bash
+code-explorer mcp-install --client both --scope project
+```
+
+**More clients**
+
+```bash
+code-explorer mcp-install --client cursor --scope project          # writes .cursor/mcp.json
+code-explorer mcp-install --client vscode --scope project          # writes .vscode/mcp.json
+code-explorer mcp-install --client claude-desktop --scope global   # writes Claude Desktop user config
+code-explorer mcp-install --client all --scope project             # Claude Code + Cursor + VS Code project configs, Codex user config
+```
+
+**Any MCP client** — point it at `code-explorer mcp` (stdio), or `code-explorer serve --port 3010` for the HTTP transport.
+
+Full setup guide: [docs/agent-install.md](docs/agent-install.md).
 
 Once connected, the agent can call:
 
@@ -234,7 +262,7 @@ Once connected, the agent can call:
 | **Agent support** | `get_insights`, `save_memory` |
 | **Doc authoring** | `list_sfd_pages`, `write_sfd_draft`, `validate_sfd` |
 
-There's also a built-in **`/code-explorer` Claude Code skill** that auto-invokes the graph on natural-language questions during a conversation.
+There are also bundled skills for **Claude Code** (`.claude/skills/code-explorer`) and **Codex** (`.codex/skills/code-explorer`) so the agent knows when to reach for the graph on natural-language code questions.
 
 ---
 

@@ -83,6 +83,7 @@
     <nav>
       <a href="#why">Why</a>
       <a href="#benchmarks">Benchmarks</a>
+      <a href="#agents">Agents</a>
       <a href="#start">Quick start</a>
       <a href="https://github.com/phuetz/code-explorer">GitHub</a>
     </nav>
@@ -140,6 +141,30 @@
     <p class="lead" style="margin-top:14px;font-size:13px">Tokens ≈ chars/4. “Without” = the files the affected symbols live in (what an agent must read to trace the same impact). Reproduce any row with <code>code-explorer demo &lt;repo&gt;</code>. <a href="https://github.com/phuetz/code-explorer#benchmarks-with-vs-without">Full table &amp; method →</a></p>
   </section>
 
+  <section id="agents">
+    <h2>Connect Claude Code, Codex, Cursor and VS Code</h2>
+    <p class="lead">Code Explorer ships a local MCP server plus bundled agent skills. Index the repo once, install the MCP config, restart your agent, then ask structural questions in natural language.</p>
+    <div class="two">
+      <div>
+        <pre><span class="c"># Claude Code project install</span>
+<span class="k">code-explorer</span> analyze .
+<span class="k">code-explorer</span> mcp-install --client claude --scope project
+
+<span class="c"># Writes .mcp.json, then restart Claude Code</span></pre>
+      </div>
+      <div>
+        <pre><span class="c"># Codex global install</span>
+<span class="k">code-explorer</span> analyze .
+<span class="k">code-explorer</span> mcp-install --client codex --scope global
+
+<span class="c"># Writes ~/.codex/config.toml, then restart Codex</span></pre>
+      </div>
+    </div>
+    <pre><span class="c"># Configure project clients plus Codex user config</span>
+<span class="k">code-explorer</span> mcp-install --client all --scope project</pre>
+    <p class="lead" style="font-size:14px">Ask: <b>What calls PaymentService?</b> · <b>What breaks if I change handleLogin?</b> · <b>Which files implement authentication?</b> Full guide: <a href="https://github.com/phuetz/code-explorer/blob/main/docs/agent-install.md">docs/agent-install.md</a>.</p>
+  </section>
+
   <section id="start">
     <h2>Quick start</h2>
     <div class="two">
@@ -156,10 +181,11 @@ cargo build --release -p code-explorer-cli
       </div>
       <div>
         <pre><span class="c"># Use it with your AI agent (MCP)</span>
-<span class="k">code-explorer</span> mcp-install   <span class="c"># Claude Code</span>
+<span class="k">code-explorer</span> mcp-install --client all --scope project
+<span class="c"># Codex is written to the user config; others are project-local</span>
 <span class="c"># or point any MCP client at:</span>
 <span class="k">code-explorer</span> mcp           <span class="c"># stdio</span>
-<span class="k">code-explorer</span> serve --http 8080</pre>
+<span class="k">code-explorer</span> serve --port 3010</pre>
         <p style="color:var(--t2);font-size:14px;margin-top:4px">Works with:</p>
         <div class="works">
           <span>Claude Code</span><span>Codex</span><span>Cursor</span><span>VS Code</span><span>any MCP agent</span>
