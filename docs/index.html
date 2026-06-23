@@ -82,6 +82,7 @@
     <div class="logo">🧭 Code&nbsp;<span>Explorer</span></div>
     <nav>
       <a href="#why">Why</a>
+      <a href="#companion">Companion</a>
       <a href="#benchmarks">Benchmarks</a>
       <a href="#agents">Agents</a>
       <a href="#start">Quick start</a>
@@ -120,6 +121,23 @@
       <div class="feat"><h3>Scales past the context window</h3><p>Thousands of files indexed and queryable in one command. A 42.8M-token repo (Kubernetes) fits in no model — the graph does.</p></div>
       <div class="feat"><h3>Persistent &amp; local</h3><p>The graph lives on disk and across sessions. 100% local — your code never leaves the machine, no API key to index.</p></div>
     </div>
+  </section>
+
+  <section id="companion">
+    <h2>Two complementary repositories</h2>
+    <p class="lead"><a href="https://github.com/phuetz/code-explorer">Code Explorer</a> and <a href="https://github.com/phuetz/lm-resizer">lm-resizer</a> solve two different context problems for Claude Code, Codex and MCP agents. Code Explorer prevents the agent from wasting context rediscovering the structure of the repository. lm-resizer prevents the agent from wasting context on noisy command output once it starts working.</p>
+    <div class="grid3">
+      <div class="feat"><h3><a href="https://github.com/phuetz/code-explorer">Code Explorer</a></h3><p>Maps files, symbols, calls, dependencies and impact so the agent knows where to look before changing code.</p></div>
+      <div class="feat"><h3><a href="https://github.com/phuetz/lm-resizer">lm-resizer</a></h3><p>Compresses logs, diffs, search results, JSON and provider payloads so the agent keeps more room for reasoning.</p></div>
+      <div class="feat"><h3>Better together</h3><p>Use Code Explorer for structural questions, then route noisy execution output through lm-resizer with recoverable raw evidence.</p></div>
+    </div>
+    <pre style="margin-top:16px"><span class="c"># Give the agent a map of the repo</span>
+<span class="k">code-explorer</span> analyze .
+<span class="k">code-explorer</span> mcp-install --client both --scope project
+
+<span class="c"># Keep command output small and useful</span>
+<span class="k">lm-resizer</span> init-native-hooks --client all --project-dir . --force
+<span class="k">lm-resizer</span> exec --stream -- cargo test</pre>
   </section>
 
   <section id="benchmarks">
@@ -161,8 +179,8 @@
       </div>
     </div>
     <pre><span class="c"># Configure project clients plus Codex user config</span>
-<span class="k">code-explorer</span> mcp-install --client all --scope project</pre>
-    <p class="lead" style="font-size:14px">Ask: <b>What calls PaymentService?</b> · <b>What breaks if I change handleLogin?</b> · <b>Which files implement authentication?</b> Full guide: <a href="https://github.com/phuetz/code-explorer/blob/main/docs/agent-install.md">docs/agent-install.md</a>.</p>
+<span class="k">code-explorer</span> mcp-install --client both --scope project</pre>
+    <p class="lead" style="font-size:14px">Ask: <b>What calls PaymentService?</b> · <b>What breaks if I change handleLogin?</b> · <b>Which files implement authentication?</b> Full guide: <a href="https://github.com/phuetz/code-explorer/blob/main/docs/agent-install.md">docs/agent-install.md</a>. Pair with lm-resizer for compressed JSON, diffs, logs, search results, and source snippets, with CCR retrieval when offload applies: <a href="https://github.com/phuetz/code-explorer/blob/main/docs/lm-resizer-integration.md">lm-resizer integration</a>.</p>
   </section>
 
   <section id="start">
@@ -181,11 +199,12 @@ cargo build --release -p code-explorer-cli
       </div>
       <div>
         <pre><span class="c"># Use it with your AI agent (MCP)</span>
-<span class="k">code-explorer</span> mcp-install --client all --scope project
-<span class="c"># Codex is written to the user config; others are project-local</span>
+<span class="k">code-explorer</span> mcp-install --client both --scope project
+<span class="c"># Claude is project-local; Codex is written to the user config</span>
 <span class="c"># or point any MCP client at:</span>
 <span class="k">code-explorer</span> mcp           <span class="c"># stdio</span>
 <span class="k">code-explorer</span> serve --port 3010</pre>
+        <p style="color:var(--t2);font-size:14px;margin-top:4px">For large structured outputs, add lm-resizer as a second MCP server to compress supported payloads and retrieve originals when CCR offload applies.</p>
         <p style="color:var(--t2);font-size:14px;margin-top:4px">Works with:</p>
         <div class="works">
           <span>Claude Code</span><span>Codex</span><span>Cursor</span><span>VS Code</span><span>any MCP agent</span>
