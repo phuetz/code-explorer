@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -631,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-db"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "code-explorer-core",
  "csv",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-git"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-ingest"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "code-explorer-core",
  "code-explorer-db",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-lang"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "code-explorer-core",
  "once_cell",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-output"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-query"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "code-explorer-core",
  "pest",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "code-explorer-search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "code-explorer-core",
