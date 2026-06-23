@@ -178,7 +178,7 @@ Code Explorer ships a **React UI** — a desktop app (Tauri) and a web chat — 
   <img src="docs/img/chat-llm.png" alt="Code Explorer — LLM-powered chat over the code graph" width="900"/>
 </p>
 
-The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic, OpenRouter, Gemini). For each question it pulls just the relevant graph context and sends only that to the model — so answers are precise and cheap, with modes for Q&A, deep research, feature-dev and review. The same LLM layer powers `code-explorer generate docs/wiki/html` to turn a repo into a full documentation site.
+The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic, OpenRouter, Gemini, Mistral — any OpenAI-compatible endpoint via `~/.codeexplorer/chat-config.json`). For each question it pulls just the relevant graph context and sends only that to the model — so answers are precise and cheap, with modes for Q&A, deep research, feature-dev and review. The same LLM layer powers `code-explorer generate docs/wiki/html` to turn a repo into a full documentation site. Validated live (2026-06-23) with **Mistral** and **Ollama** — `code-explorer config test` connects and `ask` returns graph-grounded answers from both.
 
 ---
 
