@@ -27,6 +27,8 @@ regex.workspace = true
 once_cell.workspace = true
 streaming-iterator.workspace = true
 sha2.workspace = true
+magika = { version = "1.1.0", optional = true }
+ort = { workspace = true, optional = true }
 
 # Tree-sitter grammars
 tree-sitter-javascript.workspace = true
@@ -47,5 +49,6 @@ tree-sitter-swift = { workspace = true, optional = true }
 default = ["kotlin", "swift"]
 kotlin = ["tree-sitter-kotlin-ng"]
 swift = ["tree-sitter-swift"]
+magika-detect = ["magika", "ort"]
 
 [dev-dependencies]

@@ -194,6 +194,9 @@ cargo build --release -p code-explorer-cli
 #   → binary at target/release/code-explorer  (code-explorer.exe on Windows)
 #   put it on your PATH so `code-explorer` works anywhere.
 
+# Optional: enable Magika/ONNX file-type detection for extensionless scripts
+cargo build --release -p code-explorer-cli --features magika-detect
+
 # 2. Index your project (writes a .codeexplorer/ graph inside it)
 cd /path/to/your/project
 code-explorer analyze .
@@ -205,7 +208,7 @@ code-explorer query    "where do we verify auth"   # full-text + symbol search
 code-explorer cypher   "MATCH (n:Function) RETURN n.name LIMIT 10"
 ```
 
-No internet, no API key needed for indexing or graph queries. (LLM features like `ask` and `--enrich` are optional and bring-your-own-key.)
+No internet, no API key needed for indexing or graph queries. (LLM features like `ask` and `--enrich` are optional and bring-your-own-key.) By default, Code Explorer selects parsers from file extensions. The optional `magika-detect` feature adds Magika-backed ONNX detection for extensionless files while keeping the normal extension path as the fast default.
 
 ---
 
@@ -245,12 +248,14 @@ code-explorer mcp-install --client both --scope project
 code-explorer mcp-install --client cursor --scope project          # writes .cursor/mcp.json
 code-explorer mcp-install --client vscode --scope project          # writes .vscode/mcp.json
 code-explorer mcp-install --client claude-desktop --scope global   # writes Claude Desktop user config
+code-explorer mcp-install --client both --scope project            # Claude Code project config + Codex user config
 code-explorer mcp-install --client all --scope project             # Claude Code + Cursor + VS Code project configs, Codex user config
 ```
 
 **Any MCP client** — point it at `code-explorer mcp` (stdio), or `code-explorer serve --port 3010` for the HTTP transport.
 
 Full setup guide: [docs/agent-install.md](docs/agent-install.md).
+Pairing Code Explorer with lm-resizer for supported context compression: [docs/lm-resizer-integration.md](docs/lm-resizer-integration.md).
 
 Once connected, the agent can call:
 

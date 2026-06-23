@@ -10,10 +10,10 @@ Setup:
 
 ```bash
 code-explorer analyze .
-code-explorer mcp-install --client all --scope project
+code-explorer mcp-install --client both --scope project
 ```
 
-Codex is installed in its user MCP config; Claude Code, Cursor and VS Code get project-local config files.
+Claude Code gets `.mcp.json`; Codex gets the user `config.toml`.
 
 Then ask:
 
@@ -24,6 +24,9 @@ Then ask:
 Instead of reading dozens of files, the agent calls one local MCP tool and gets callers, callees, imports, impact, hotspots, ownership, and documentation context.
 
 Rust. Local. 14 languages. 30 MCP tools. Claude Code, Codex, Cursor and VS Code.
+Optional Magika/ONNX detection helps extensionless scripts enter the graph without replacing the fast extension-based path.
+
+Pair it with lm-resizer when JSON, diffs, logs, search results, or source snippets get large: Code Explorer selects the right repository facts, lm-resizer compresses supported payloads and keeps offloaded originals retrievable by CCR hash.
 
 https://github.com/phuetz/code-explorer
 
@@ -35,10 +38,10 @@ Code Explorer indexes your code into a local graph, then exposes it over MCP.
 
 ```bash
 code-explorer analyze .
-code-explorer mcp-install --client all --scope project
+code-explorer mcp-install --client both --scope project
 ```
 
-Codex uses its user config; the other project clients use local MCP files.
+Claude Code gets `.mcp.json`; Codex gets the user `config.toml`.
 
 Ask: "What breaks if I change PaymentService?"
 
@@ -65,6 +68,23 @@ Which files are involved?
 ```
 
 5. Show that the answer comes from graph tools, not brute-force file reading.
+
+## Code Explorer + lm-resizer
+
+Code Explorer and lm-resizer fit together cleanly:
+
+- Code Explorer selects the repository facts that matter.
+- lm-resizer compresses supported large payloads: JSON, diffs, logs, search results, and source snippets.
+- CCR hashes keep offloaded originals retrievable when the agent needs the full payload.
+
+```bash
+code-explorer analyze .
+code-explorer mcp-install --client both --scope project
+lm-resizer install --client claude --scope project
+lm-resizer install --client codex --scope global
+```
+
+Claude Code and Codex get graph-first repository understanding plus compression for supported large payloads.
 
 ## French LinkedIn
 

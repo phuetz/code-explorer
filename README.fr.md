@@ -123,6 +123,9 @@ cargo build --release -p code-explorer-cli
 # Windows : target\release\code-explorer.exe
 # Linux/macOS : target/release/code-explorer
 
+# Optionnel : Magika/ONNX pour les scripts sans extension
+cargo build --release -p code-explorer-cli --features magika-detect
+
 # 3. (Optionnel) Compiler l'Application Desktop
 cd crates/code-explorer-desktop/ui && npm install && npm run build && cd ../../..
 cargo build -p code-explorer-desktop --release
@@ -539,10 +542,11 @@ code-explorer mcp-install --client codex --scope global    # Codex
 code-explorer mcp-install --client both --scope project    # Claude projet + Codex utilisateur
 code-explorer mcp-install --client cursor --scope project  # Cursor
 code-explorer mcp-install --client vscode --scope project  # VS Code
-code-explorer mcp-install --client all --scope project     # Claude/Cursor/VS Code projet + Codex utilisateur
+code-explorer mcp-install --client all --scope project     # Claude projet + Codex utilisateur + Cursor + VS Code
 ```
 
 Guide complet : [`docs/agent-install.md`](docs/agent-install.md).
+Utilisation avec lm-resizer pour compresser les payloads agent supportés : [`docs/lm-resizer-integration.md`](docs/lm-resizer-integration.md).
 
 ### 3. API LLM (`--enrich` et `ask`)
 

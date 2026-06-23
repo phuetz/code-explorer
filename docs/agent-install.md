@@ -19,6 +19,12 @@ The binary is:
 
 Put it on your `PATH`, or call it by absolute path.
 
+Optional Magika/ONNX build for extensionless scripts:
+
+```bash
+cargo build --release -p code-explorer-cli --features magika-detect
+```
+
 ## 2. Index The Project
 
 Run this in the repository you want your agent to understand:
@@ -246,6 +252,8 @@ What breaks if I change handleLogin?
 Show me the impact of UserRepository.
 Where is authentication checked?
 ```
+
+For long JSON, diff, log, search, or source outputs selected from the graph, install lm-resizer alongside Code Explorer so the agent can compress supported context and retrieve originals when CCR offload applies. See [lm-resizer-integration.md](lm-resizer-integration.md).
 
 Or run the graph directly:
 

@@ -450,6 +450,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize logging
     let log_level = match &cli.command {
         Commands::Analyze { verbose, .. } if *verbose => tracing::Level::DEBUG,
+        Commands::Analyze { .. } => tracing::Level::WARN,
         Commands::Mcp => tracing::Level::WARN, // Quiet for stdio MCP
         _ => tracing::Level::INFO,
     };

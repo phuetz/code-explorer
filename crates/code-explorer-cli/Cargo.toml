@@ -14,6 +14,7 @@ path = "src/main.rs"
 [features]
 default = []
 kuzu-backend = ["code-explorer-db/kuzu-backend"]
+magika-detect = ["code-explorer-ingest/magika-detect"]
 
 [dependencies]
 code-explorer-core.workspace = true

@@ -5,6 +5,8 @@ use code_explorer_core::graph::types::*;
 use code_explorer_core::graph::KnowledgeGraph;
 use code_explorer_core::id::generate_id;
 
+use super::file_type::detect_language_for_path;
+
 /// A file entry discovered during repository scan.
 #[derive(Debug, Clone)]
 pub struct FileEntry {
@@ -66,7 +68,7 @@ pub fn walk_repository(repo_path: &Path) -> Result<Vec<FileEntry>, crate::Ingest
             continue;
         }
 
-        let language = SupportedLanguage::from_filename(&rel_path);
+        let language = detect_language_for_path(abs_path, &rel_path);
 
         // Only include files with supported languages
         if language.is_some() {
