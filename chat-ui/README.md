@@ -121,7 +121,7 @@ Tools exposés : 27 (list_repos, query, search_code, impact, hotspots, etc. — 
 ## Pourquoi pas Open WebUI ?
 
 Voir le rapport
-[`claude-et-patrice/propositions/CHAT-OPENWEBUI-2026-05-04.md`](https://github.com/phuetz/claude-et-patrice/blob/master/propositions/CHAT-OPENWEBUI-2026-05-04.md).
+an internal decision note.
 TL;DR : la licence BSD-3 modifiée d'OWUI ("fair-source", branding obligatoire
 sauf <50 users ou enterprise license payante) est bloquante pour la
 commercialisation via agile-up.com.
