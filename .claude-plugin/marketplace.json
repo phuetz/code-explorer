@@ -1,0 +1,19 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "code-explorer",
+  "owner": { "name": "Patrice Huetz", "url": "https://github.com/phuetz" },
+  "description": "Code Explorer: a knowledge graph of your codebase for Claude Code, Codex and any MCP agent.",
+  "plugins": [
+    {
+      "name": "code-explorer",
+      "displayName": "Code Explorer",
+      "description": "Map the codebase first: symbols, callers, impact/blast radius, hotspots, complexity over a pre-indexed graph. Skill + MCP server.",
+      "source": "./",
+      "version": "0.2.0",
+      "author": { "name": "Patrice Huetz" },
+      "license": "BUSL-1.1",
+      "keywords": ["code-intelligence", "knowledge-graph", "impact-analysis", "mcp"],
+      "category": "development"
+    }
+  ]
+}

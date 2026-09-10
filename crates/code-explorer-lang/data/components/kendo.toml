@@ -1,0 +1,112 @@
+# Kendo UI - Progress Software JavaScript UI framework
+# Covers: Kendo UI for jQuery, Kendo UI for Angular, Kendo UI for React, Kendo UI for Vue
+
+# ── Kendo UI for jQuery ──────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Kendo UI for jQuery"
+vendor = "Progress"
+category = "JavaScript UI Widgets"
+
+[[libraries.versions]]
+from = "2012.1"
+notes = "First major release as part of Telerik"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_global"
+value = "kendo"
+confidence = 0.85
+description = "Global kendo namespace"
+
+[[libraries.detection_patterns]]
+pattern_type = "html_attribute"
+value = "data-role"
+confidence = 0.6
+description = "Kendo MVVM data-role attribute"
+
+[[libraries.detection_patterns]]
+pattern_type = "html_attribute"
+value = "data-bind"
+confidence = 0.5
+description = "Kendo MVVM data-bind attribute"
+
+[[libraries.detection_patterns]]
+pattern_type = "html_attribute"
+value = "k-"
+confidence = 0.7
+description = "Kendo Angular directive prefix (legacy)"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "k-"
+confidence = 0.7
+description = "Kendo CSS class prefix"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "k-widget"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "@progress/kendo-ui"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "file_path"
+value = "kendo"
+confidence = 0.6
+
+# ── Kendo UI for Angular ─────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Kendo UI for Angular"
+vendor = "Progress"
+category = "Angular UI Components"
+
+[[libraries.versions]]
+from = "2017.1"
+notes = "Angular 2+ native components"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "@progress/kendo-angular"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "kendo-"
+confidence = 0.9
+description = "Angular Kendo components (e.g., <kendo-grid>)"
+
+# ── Kendo UI for React ───────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Kendo UI for React"
+vendor = "Progress"
+category = "React UI Components"
+
+[[libraries.versions]]
+from = "2017.2"
+notes = "React native components"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "@progress/kendo-react"
+confidence = 1.0
+
+# ── Kendo UI for Vue ─────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Kendo UI for Vue"
+vendor = "Progress"
+category = "Vue UI Components"
+
+[[libraries.versions]]
+from = "2018.1"
+notes = "Vue native components"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "@progress/kendo-vue"
+confidence = 1.0

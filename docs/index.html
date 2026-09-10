@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Code Explorer — graph-powered code intelligence for AI agents</title>
+  <meta name="description" content="A Rust engine that pre-indexes your whole repo into a knowledge graph and exposes 30 tools over MCP — callers, callees, blast radius — so AI agents understand a codebase instead of reading files one at a time. 14 languages, 100% local." />
+  <meta property="og:title" content="Code Explorer — code intelligence for AI agents" />
+  <meta property="og:description" content="Pre-indexed knowledge graph over MCP. Blast radius in 0.65s instead of reading 35K tokens of source. 30 tools, 14 languages, 100% local. Rust." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-row">
+      <a class="brand" href="#top">🕸️ <span>Code Explorer</span></a>
+      <nav class="nav-links">
+        <a href="#why">Why</a>
+        <a href="#gain">The gain</a>
+        <a href="#tools">Tools</a>
+        <a href="#install">Install</a>
+        <a href="index.fr.html">FR</a>
+        <a class="btn btn-ghost" href="https://github.com/phuetz/code-explorer">GitHub</a>
+        <a class="btn btn-primary" href="https://github.com/phuetz/code-explorer">⭐ Star</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="pill">Rust · MCP · 14 languages · source-available</span>
+          <h1>Your AI agent stops reading files one by one. It understands the <span class="grad">whole codebase.</span></h1>
+          <p class="lead">
+            Code Explorer pre-indexes your <strong>entire</strong> repository into a queryable
+            <strong>knowledge graph</strong> — every function, class, call and import — and serves it to any
+            AI agent over <a href="https://modelcontextprotocol.io/">MCP</a>. Ask
+            <em>"who calls this?"</em> or <em>"what breaks if I change it?"</em> and get a precise answer in
+            milliseconds, instead of reading file after file.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star on GitHub</a>
+            <a class="btn btn-ghost lg" href="#gain">📊 See the measured gain</a>
+            <a class="btn btn-ghost lg" href="#install">Quick start →</a>
+          </div>
+          <div class="trust">
+            <span>🦀 Written in Rust</span>
+            <span>🔌 30 tools over MCP</span>
+            <span>💻 100% local · offline</span>
+            <span>🧩 Claude Code · Cursor · VS Code</span>
+          </div>
+        </div>
+        <div class="hero-media">
+          <div class="terminal">
+            <div class="term-bar"><i></i><i></i><i></i><span>gitnexus impact</span></div>
+            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">gitnexus impact executePlan --direction both</span>
+
+<span class="t-key">Downstream</span> <span class="t-dim">(symbols affected by a change):</span>
+  Depth 1 (7)  Depth 2 (39)  Depth 3 (4)
+  Depth 4 (7)  Depth 5 (4)
+<span class="t-key">Upstream</span> <span class="t-dim">(symbols that affect this):</span>
+  Depth 1 (1)  Depth 2 (13)  Depth 3 (22) …
+
+<span class="t-ok">✓ 136 symbols, 5 levels — 0.65 s</span>
+<span class="t-dim">  no files read · whole-repo graph</span></pre></div>
+          </div>
+          <p class="caption">Real run on a 1,984-file codebase. A text search can't compute that transitive blast radius at all.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHY -->
+    <section id="picture" class="section">
+      <div class="wrap">
+        <h2>The big picture</h2>
+        <p class="sub">Your repository is parsed once into a knowledge graph, then queried by developers and AI agents over MCP.</p>
+        <p><a href="infographic-code-explorer.webp"><img src="infographic-code-explorer.webp" alt="Code Explorer: your repository is parsed with tree-sitter into a knowledge graph of files, symbols, calls, dependencies and changes, queried by developers and AI agents over MCP; impact analysis and 14 languages" style="width:100%;height:auto;border-radius:14px;display:block" loading="lazy"></a></p>
+      </div>
+    </section>
+
+    <section id="why" class="section">
+      <div class="wrap narrow">
+        <h2>The problem it solves</h2>
+        <p class="sub">AI coding assistants (Claude Code, Cursor, Copilot…) read source files <strong>one at a time, on demand</strong>.</p>
+        <ul class="shipped">
+          <li>They read <b>dozens of files</b> to follow a single call chain.</li>
+          <li>They <b>start from scratch</b> every conversation.</li>
+          <li>They <b>fill the context window</b> with raw code, leaving no room to reason.</li>
+          <li>And a text search <b>can't compute a transitive blast radius</b> — <code>grep</code> finds where a name <em>appears</em>, not the chain of things that break three hops away.</li>
+        </ul>
+        <p class="honest">Code Explorer pre-computes all of that, once, into a graph that lives on disk and answers structural questions instantly.</p>
+      </div>
+    </section>
+
+    <!-- GAIN -->
+    <section id="gain" class="section alt">
+      <div class="wrap narrow">
+        <h2>The gain, measured</h2>
+        <p class="sub">Real numbers from indexing a 1,984-file TypeScript codebase (the Code Buddy agent itself), measured 2026-07-03.</p>
+
+        <div class="statline">
+          <span>📦 Index: <b>1,984 files</b></span>
+          <span>🔗 <b>67,114 nodes</b> / <b>153,966 edges</b></span>
+          <span>⚡ built once</span>
+        </div>
+
+        <p class="sub" style="margin-top:30px;">Question: <em>"What breaks if I change <code>executePlan</code>?"</em></p>
+        <table class="gain">
+          <thead>
+            <tr><th></th><th>Agent alone (grep + read)</th><th>Agent + Code Explorer</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="col-q">Method</td>
+              <td class="bad">grep finds <b>4 files</b> that mention the name</td>
+              <td class="good">one <code>impact</code> call</td>
+            </tr>
+            <tr>
+              <td class="col-q">Cost</td>
+              <td class="bad">reading them ≈ <b>35,000 tokens</b> <span class="t-dim">(est.)</span></td>
+              <td class="good"><b>0.65 s</b> · one call</td>
+            </tr>
+            <tr>
+              <td class="col-q">Answer</td>
+              <td class="bad">direct mentions only — the transitive blast radius is <b>uncomputable</b> by text search</td>
+              <td class="good"><b>136 affected symbols</b> (75 up + 61 down), 5 levels deep</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="honest" style="margin-top:24px;">The point isn't only the token saving on this query. It's <strong>capability</strong>: the complete transitive impact is something a text-search agent simply can't produce reliably — it gives up after a few hops or guesses. The graph returns it in one call.</p>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
+      <div class="wrap">
+        <h2>What the graph gives your agent</h2>
+        <div class="cards">
+          <div class="card">
+            <div class="ic">🕸️</div>
+            <h3>Pre-indexed knowledge graph</h3>
+            <p>Your whole repo parsed into symbols and typed relationships — functions, classes, calls, imports, hierarchy. Persists on disk, queryable in one call.</p>
+          </div>
+          <div class="card">
+            <div class="ic">💥</div>
+            <h3>Blast-radius analysis</h3>
+            <p><code>impact &lt;symbol&gt;</code> traces upstream callers, downstream callees and transitive impact — the single highest-value habit before any refactor.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🔌</div>
+            <h3>30 tools over MCP</h3>
+            <p><code>context</code>, <code>impact</code>, <code>find_cycles</code>, <code>detect_changes</code>, <code>cypher</code> and more — to any MCP agent: Claude Code, Cursor, VS Code.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🌐</div>
+            <h3>14 languages</h3>
+            <p>JS, TypeScript, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor — via tree-sitter, plus deep legacy ASP.NET MVC support.</p>
+          </div>
+          <div class="card">
+            <div class="ic">💻</div>
+            <h3>100% local &amp; offline</h3>
+            <p>The graph is a snapshot you own. No cloud, no API, no telemetry — runs entirely on your machine.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🧭</div>
+            <h3>Honest static analysis</h3>
+            <p>Read-only by design. Call edges through dynamic imports may be missed — so "dead code" is a candidate, not proof. A fast, precise navigation aid, stated plainly.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOOLS / INSTALL -->
+    <section id="install" class="section alt">
+      <div class="wrap narrow">
+        <h2>Quick start</h2>
+        <pre class="code"><code># 1. Build (release, ~35 MB binary)
+cargo build --release        # binary at target/release/gitnexus
+
+# 2. Index your repo once (re-run with --incremental after changes)
+gitnexus analyze .
+
+# 3. Point your agent at it over MCP
+gitnexus mcp-install         # writes .mcp.json for Claude Code
+# …or add it manually:  { "command": "gitnexus", "args": ["mcp"] }</code></pre>
+        <p class="sub">Verify: your agent should report <b>"gitnexus · 30 tools"</b>.</p>
+        <div class="cta center">
+          <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star on GitHub</a>
+          <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-explorer#readme">Documentation</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- LICENSE -->
+    <section id="tools" class="section">
+      <div class="wrap narrow">
+        <h2>License</h2>
+        <p class="lead" style="font-size:1.05rem;">
+          <strong>BSL 1.1.</strong> Free to use, study, test and build on for any
+          <strong>non-commercial</strong> purpose — personal projects, research, education, evaluation.
+          <strong>Commercial use requires a separate license</strong> — open an issue or get in touch.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap foot-row">
+      <span>🕸️ Code Explorer — Business Source License 1.1 · built in Rust</span>
+      <span><a href="https://github.com/phuetz/code-explorer">github.com/phuetz/code-explorer</a></span>
+    </div>
+  </footer>
+</body>
+</html>

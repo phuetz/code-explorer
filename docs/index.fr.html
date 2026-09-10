@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Code Explorer — intelligence de code par graphe, pour les agents IA</title>
+  <meta name="description" content="Un moteur Rust qui pré-indexe tout ton dépôt en un graphe de connaissance et expose 30 outils via MCP — appelants, appelés, rayon d'impact — pour que les agents IA comprennent une base de code au lieu de lire les fichiers un par un. 14 langages, 100 % local." />
+  <meta property="og:title" content="Code Explorer — intelligence de code pour agents IA" />
+  <meta property="og:description" content="Graphe de connaissance pré-indexé via MCP. Rayon d'impact en 0,65 s au lieu de lire 35 000 tokens de source. 30 outils, 14 langages, 100 % local. Rust." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-row">
+      <a class="brand" href="#top">🕸️ <span>Code Explorer</span></a>
+      <nav class="nav-links">
+        <a href="#why">Pourquoi</a>
+        <a href="#gain">Le gain</a>
+        <a href="#tools">Outils</a>
+        <a href="#install">Installer</a>
+        <a href="index.html">EN</a>
+        <a class="btn btn-ghost" href="https://github.com/phuetz/code-explorer">GitHub</a>
+        <a class="btn btn-primary" href="https://github.com/phuetz/code-explorer">⭐ Star</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="pill">Rust · MCP · 14 langages · source-available</span>
+          <h1>Ton agent IA arrête de lire les fichiers un par un. Il comprend <span class="grad">toute la base de code.</span></h1>
+          <p class="lead">
+            Code Explorer pré-indexe ton dépôt <strong>entier</strong> en un
+            <strong>graphe de connaissance</strong> interrogeable — chaque fonction, classe, appel et import —
+            et le sert à n'importe quel agent IA via <a href="https://modelcontextprotocol.io/">MCP</a>. Demande
+            <em>« qui appelle ça ? »</em> ou <em>« qu'est-ce qui casse si je modifie ça ? »</em> et obtiens une
+            réponse précise en quelques millisecondes, au lieu de lire fichier après fichier.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star sur GitHub</a>
+            <a class="btn btn-ghost lg" href="#gain">📊 Voir le gain mesuré</a>
+            <a class="btn btn-ghost lg" href="#install">Démarrage rapide →</a>
+          </div>
+          <div class="trust">
+            <span>🦀 Écrit en Rust</span>
+            <span>🔌 30 outils via MCP</span>
+            <span>💻 100 % local · hors-ligne</span>
+            <span>🧩 Claude Code · Cursor · VS Code</span>
+          </div>
+        </div>
+        <div class="hero-media">
+          <div class="terminal">
+            <div class="term-bar"><i></i><i></i><i></i><span>gitnexus impact</span></div>
+            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">gitnexus impact executePlan --direction both</span>
+
+<span class="t-key">Aval</span> <span class="t-dim">(symboles affectés par un changement) :</span>
+  Niveau 1 (7)  Niveau 2 (39)  Niveau 3 (4)
+  Niveau 4 (7)  Niveau 5 (4)
+<span class="t-key">Amont</span> <span class="t-dim">(symboles qui affectent celui-ci) :</span>
+  Niveau 1 (1)  Niveau 2 (13)  Niveau 3 (22) …
+
+<span class="t-ok">✓ 136 symboles, 5 niveaux — 0,65 s</span>
+<span class="t-dim">  aucun fichier lu · graphe de tout le dépôt</span></pre></div>
+          </div>
+          <p class="caption">Vrai run sur une base de 1 984 fichiers. Une recherche texte ne peut pas calculer ce rayon d'impact transitif, point.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHY -->
+    <section id="picture" class="section">
+      <div class="wrap">
+        <h2>Vue d'ensemble</h2>
+        <p class="sub">Votre dépôt est analysé une fois en graphe de connaissances, puis interrogé par les développeurs et les agents IA via MCP.</p>
+        <p><a href="infographic-code-explorer.webp"><img src="infographic-code-explorer.webp" alt="Code Explorer: your repository is parsed with tree-sitter into a knowledge graph of files, symbols, calls, dependencies and changes, queried by developers and AI agents over MCP; impact analysis and 14 languages" style="width:100%;height:auto;border-radius:14px;display:block" loading="lazy"></a></p>
+      </div>
+    </section>
+
+    <section id="why" class="section">
+      <div class="wrap narrow">
+        <h2>Le problème qu'il résout</h2>
+        <p class="sub">Les assistants IA de code (Claude Code, Cursor, Copilot…) lisent les fichiers <strong>un par un, à la demande</strong>.</p>
+        <ul class="shipped">
+          <li>Ils lisent des <b>dizaines de fichiers</b> pour suivre une seule chaîne d'appels.</li>
+          <li>Ils <b>repartent de zéro</b> à chaque conversation.</li>
+          <li>Ils <b>remplissent la fenêtre de contexte</b> de code brut, sans place pour réfléchir.</li>
+          <li>Et une recherche texte <b>ne peut pas calculer un rayon d'impact transitif</b> — <code>grep</code> trouve où un nom <em>apparaît</em>, pas la chaîne de choses qui cassent trois sauts plus loin.</li>
+        </ul>
+        <p class="honest">Code Explorer pré-calcule tout ça, une fois, dans un graphe qui vit sur le disque et répond instantanément aux questions de structure.</p>
+      </div>
+    </section>
+
+    <!-- GAIN -->
+    <section id="gain" class="section alt">
+      <div class="wrap narrow">
+        <h2>Le gain, mesuré</h2>
+        <p class="sub">Chiffres réels, en indexant une base TypeScript de 1 984 fichiers (l'agent Code Buddy lui-même), mesurés le 2026-07-03.</p>
+
+        <div class="statline">
+          <span>📦 Index : <b>1 984 fichiers</b></span>
+          <span>🔗 <b>67 114 nœuds</b> / <b>153 966 arêtes</b></span>
+          <span>⚡ construit une fois</span>
+        </div>
+
+        <p class="sub" style="margin-top:30px;">Question : <em>« Qu'est-ce qui casse si je modifie <code>executePlan</code> ? »</em></p>
+        <table class="gain">
+          <thead>
+            <tr><th></th><th>Agent seul (grep + lecture)</th><th>Agent + Code Explorer</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="col-q">Méthode</td>
+              <td class="bad">grep trouve <b>4 fichiers</b> qui mentionnent le nom</td>
+              <td class="good">un seul appel <code>impact</code></td>
+            </tr>
+            <tr>
+              <td class="col-q">Coût</td>
+              <td class="bad">les lire ≈ <b>35 000 tokens</b> <span class="t-dim">(est.)</span></td>
+              <td class="good"><b>0,65 s</b> · un seul appel</td>
+            </tr>
+            <tr>
+              <td class="col-q">Réponse</td>
+              <td class="bad">mentions directes seulement — le rayon d'impact transitif est <b>incalculable</b> par recherche texte</td>
+              <td class="good"><b>136 symboles impactés</b> (75 amont + 61 aval), 5 niveaux de profondeur</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="honest" style="margin-top:24px;">L'enjeu n'est pas que l'économie de tokens. C'est la <strong>capacité</strong> : l'impact transitif complet, un agent en recherche texte ne peut pas le produire de façon fiable — il abandonne après quelques sauts ou il devine. Le graphe le rend en un seul appel.</p>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
+      <div class="wrap">
+        <h2>Ce que le graphe apporte à ton agent</h2>
+        <div class="cards">
+          <div class="card">
+            <div class="ic">🕸️</div>
+            <h3>Graphe de connaissance pré-indexé</h3>
+            <p>Tout ton dépôt parsé en symboles et relations typées — fonctions, classes, appels, imports, hiérarchie. Persiste sur le disque, interrogeable en un appel.</p>
+          </div>
+          <div class="card">
+            <div class="ic">💥</div>
+            <h3>Analyse de rayon d'impact</h3>
+            <p><code>impact &lt;symbole&gt;</code> trace les appelants amont, les appelés aval et l'impact transitif — le réflexe le plus rentable avant toute refacto.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🔌</div>
+            <h3>30 outils via MCP</h3>
+            <p><code>context</code>, <code>impact</code>, <code>find_cycles</code>, <code>detect_changes</code>, <code>cypher</code> et plus — vers n'importe quel agent MCP : Claude Code, Cursor, VS Code.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🌐</div>
+            <h3>14 langages</h3>
+            <p>JS, TypeScript, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor — via tree-sitter, plus un support poussé du legacy ASP.NET MVC.</p>
+          </div>
+          <div class="card">
+            <div class="ic">💻</div>
+            <h3>100 % local &amp; hors-ligne</h3>
+            <p>Le graphe est un instantané qui t'appartient. Aucun cloud, aucune API, aucune télémétrie — tourne entièrement sur ta machine.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🧭</div>
+            <h3>Analyse statique honnête</h3>
+            <p>Lecture seule par conception. Les arêtes via imports dynamiques peuvent manquer — donc « code mort » est un candidat, pas une preuve. Une aide à la navigation rapide et précise, dite franchement.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="install" class="section alt">
+      <div class="wrap narrow">
+        <h2>Démarrage rapide</h2>
+        <pre class="code"><code># 1. Build (release, binaire ~35 Mo)
+cargo build --release        # binaire dans target/release/gitnexus
+
+# 2. Indexer le dépôt une fois (relancer avec --incremental après changements)
+gitnexus analyze .
+
+# 3. Brancher ton agent dessus via MCP
+gitnexus mcp-install         # écrit .mcp.json pour Claude Code
+# …ou à la main :  { "command": "gitnexus", "args": ["mcp"] }</code></pre>
+        <p class="sub">Vérif : ton agent doit afficher <b>« gitnexus · 30 tools »</b>.</p>
+        <div class="cta center">
+          <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star sur GitHub</a>
+          <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-explorer#readme">Documentation</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- LICENSE -->
+    <section id="tools" class="section">
+      <div class="wrap narrow">
+        <h2>Licence</h2>
+        <p class="lead" style="font-size:1.05rem;">
+          <strong>BSL 1.1.</strong> Libre d'utilisation, d'étude, de test et de dérivation
+          pour tout usage <strong>non commercial</strong> — projets perso, recherche, éducation, évaluation.
+          <strong>L'usage commercial nécessite une licence séparée</strong> — ouvre une issue ou contacte-moi.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap foot-row">
+      <span>🕸️ Code Explorer — Business Source License 1.1 · écrit en Rust</span>
+      <span><a href="https://github.com/phuetz/code-explorer">github.com/phuetz/code-explorer</a></span>
+    </div>
+  </footer>
+</body>
+</html>

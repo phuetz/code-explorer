@@ -1,0 +1,276 @@
+# Community and open-source Blazor component libraries
+# Covers: MudBlazor, Radzen, Blazorise, AntDesign Blazor, MatBlazor, FluentUI
+
+# ── MudBlazor ────────────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "MudBlazor"
+vendor = "MudBlazor (Community)"
+category = "Blazor UI Components (Open Source)"
+
+[[libraries.versions]]
+from = "5.0"
+notes = "Material Design components for Blazor"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "MudBlazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "MudBlazor.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudButton"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudDataGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudTable"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudTextField"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudCard"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudDialog"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudNavMenu"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudAppBar"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudDrawer"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MudThemeProvider"
+confidence = 1.0
+description = "MudBlazor required root component"
+
+# ── Radzen Blazor ────────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Radzen Blazor"
+vendor = "Radzen"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "2.0"
+notes = "Free and commercial Blazor components"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Radzen.Blazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Radzen.*"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenDataGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenChart"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenDialog"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenTextBox"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "RadzenDropDown"
+confidence = 0.9
+
+# ── Blazorise ────────────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Blazorise"
+vendor = "Blazorise (Community)"
+category = "Blazor UI Components (Open Source)"
+
+[[libraries.versions]]
+from = "0.9"
+notes = "Multi-CSS-framework Blazor components"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Blazorise"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Blazorise.Bootstrap"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Blazorise.Material"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Blazorise.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "DataGrid"
+confidence = 0.6
+description = "Generic name, lower confidence"
+
+# ── Ant Design Blazor ────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Ant Design Blazor"
+vendor = "Ant Design (Community)"
+category = "Blazor UI Components (Open Source)"
+
+[[libraries.versions]]
+from = "0.1"
+notes = "Ant Design for Blazor"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "AntDesign"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "AntDesign.*"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "AntDesign"
+confidence = 0.85
+
+# ── Microsoft Fluent UI Blazor ───────────────────────────────────────────────
+
+[[libraries]]
+name = "Fluent UI Blazor"
+vendor = "Microsoft"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "1.0"
+notes = "Microsoft Fluent UI for Blazor"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Microsoft.FluentUI.AspNetCore.Components"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Microsoft.Fast.Components.FluentUI"
+confidence = 1.0
+description = "Legacy package name"
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Microsoft.FluentUI.AspNetCore.Components.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "FluentDataGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "FluentButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "FluentTextField"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "FluentDialog"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "FluentNavMenu"
+confidence = 0.9
+
+# ── MatBlazor ────────────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "MatBlazor"
+vendor = "MatBlazor (Community)"
+category = "Blazor UI Components (Open Source)"
+
+[[libraries.versions]]
+from = "2.0"
+notes = "Material Design for Blazor (less maintained since 2022)"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "MatBlazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "MatBlazor.*"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MatButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MatTextField"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "MatTable"
+confidence = 0.9

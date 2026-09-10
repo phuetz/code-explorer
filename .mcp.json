@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-explorer": {
+      "command": "code-explorer",
+      "args": ["mcp"]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "code-explorer",
+  "version": "0.2.0",
+  "displayName": "Code Explorer",
+  "description": "Graph-powered code intelligence for AI agents: a pre-indexed knowledge graph of your whole codebase (symbols, callers, impact/blast radius, hotspots, complexity) served over MCP. Ships the code-explorer skill and the code-explorer MCP server. Requires the code-explorer binary on PATH and an index (`code-explorer analyze .`).",
+  "author": {
+    "name": "Patrice Huetz",
+    "url": "https://github.com/phuetz"
+  },
+  "homepage": "https://github.com/phuetz/code-explorer",
+  "repository": "https://github.com/phuetz/code-explorer",
+  "license": "BUSL-1.1",
+  "keywords": [
+    "code-intelligence",
+    "knowledge-graph",
+    "impact-analysis",
+    "mcp",
+    "claude-code",
+    "codex",
+    "rust"
+  ],
+  "skills": "./skills/"
+}

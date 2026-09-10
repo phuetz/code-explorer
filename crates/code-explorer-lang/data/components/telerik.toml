@@ -1,0 +1,157 @@
+# Telerik / Progress Software UI component libraries
+# Covers: Telerik UI for ASP.NET MVC, ASP.NET AJAX, Blazor, and Kendo UI wrappers
+
+# ── Telerik UI for ASP.NET MVC (server-side HtmlHelper wrappers) ─────────────
+
+[[libraries]]
+name = "Telerik UI for ASP.NET MVC"
+vendor = "Progress"
+category = "ASP.NET MVC UI Components"
+
+[[libraries.versions]]
+from = "2012.1"
+to = "2014.3"
+notes = "Classic MVC wrappers (pre-Kendo merger)"
+
+[[libraries.versions]]
+from = "2015.1"
+notes = "Kendo-based MVC wrappers (current)"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Telerik.UI.for.AspNet.Mvc5"
+confidence = 1.0
+description = "NuGet package for ASP.NET MVC 5"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Telerik.UI.for.AspNet.Mvc"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Kendo.Mvc.*"
+confidence = 0.95
+description = "Kendo MVC HtmlHelper namespace"
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Telerik.Web.Mvc.*"
+confidence = 0.9
+description = "Legacy Telerik MVC namespace (pre-2015)"
+
+[[libraries.detection_patterns]]
+pattern_type = "html_attribute"
+value = "data-role"
+confidence = 0.6
+description = "Kendo MVVM data-role attribute (shared with Kendo UI)"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "k-"
+confidence = 0.7
+description = "Kendo CSS class prefix"
+
+# ── Telerik UI for ASP.NET AJAX (WebForms-era, still maintained) ─────────────
+
+[[libraries]]
+name = "Telerik UI for ASP.NET AJAX"
+vendor = "Progress"
+category = "ASP.NET WebForms UI Controls"
+
+[[libraries.versions]]
+from = "2007.1"
+to = "2012.3"
+notes = "RadControls era"
+
+[[libraries.versions]]
+from = "2013.1"
+notes = "Telerik UI for ASP.NET AJAX rebrand"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Telerik.UI.for.AspNet.Ajax"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "telerik:"
+confidence = 0.95
+description = "Server-side tag prefix <telerik:RadGrid>"
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Telerik.Web.UI.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "assembly_binding"
+value = "Telerik.Web.UI"
+confidence = 0.9
+
+# ── Telerik UI for Blazor ────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Telerik UI for Blazor"
+vendor = "Progress"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "2.0.0"
+notes = "First stable release"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Telerik.UI.for.Blazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Telerik.Blazor.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikRootComponent"
+confidence = 1.0
+description = "Required root component"
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikChart"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikDropDownList"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikDatePicker"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikWindow"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikScheduler"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "TelerikTreeView"
+confidence = 0.95

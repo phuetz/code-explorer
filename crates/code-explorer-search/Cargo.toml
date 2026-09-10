@@ -1,0 +1,29 @@
+[package]
+name = "code-explorer-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Hybrid search (BM25 + semantic + RRF) for Code Explorer"
+
+[dependencies]
+code-explorer-core.workspace = true
+code-explorer-db.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+ort = { workspace = true, optional = true }
+ndarray = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+
+[features]
+default = []
+embeddings = ["ort", "ndarray", "tokenizers"]
+reranker-llm = ["reqwest"]
+
+[dev-dependencies]
+tempfile = "3"

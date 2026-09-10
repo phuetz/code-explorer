@@ -1,0 +1,169 @@
+# Syncfusion Essential Studio UI component libraries
+# Covers: ASP.NET MVC (EJ1 & EJ2), Blazor, JavaScript
+
+# ── Syncfusion Essential JS 1 (legacy) ───────────────────────────────────────
+
+[[libraries]]
+name = "Syncfusion Essential JS 1"
+vendor = "Syncfusion"
+category = "ASP.NET MVC UI Controls (Legacy)"
+
+[[libraries.versions]]
+from = "12.1"
+to = "20.4"
+notes = "EJ1 - legacy jQuery-based controls"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.EJ"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.Mvc.EJ"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Syncfusion.JavaScript.*"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Syncfusion.Mvc.EJ.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "ej-"
+confidence = 0.9
+description = "EJ1 tag helpers"
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "e-"
+confidence = 0.5
+description = "Syncfusion CSS prefix (also used by EJ2)"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_global"
+value = "ej"
+confidence = 0.7
+
+# ── Syncfusion Essential JS 2 (current) ─────────────────────────────────────
+
+[[libraries]]
+name = "Syncfusion Essential JS 2"
+vendor = "Syncfusion"
+category = "ASP.NET Core UI Controls"
+
+[[libraries.versions]]
+from = "16.1"
+notes = "EJ2 - modern TypeScript-based controls"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.EJ2.AspNet.Core"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.EJ2.AspNet.Mvc5"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.EJ2"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Syncfusion.EJ2.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag_prefix"
+value = "ejs-"
+confidence = 0.95
+description = "EJ2 tag helpers (e.g., <ejs-grid>)"
+
+[[libraries.detection_patterns]]
+pattern_type = "js_import"
+value = "@syncfusion/ej2"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "css_class_prefix"
+value = "e-"
+confidence = 0.5
+
+# ── Syncfusion Blazor ────────────────────────────────────────────────────────
+
+[[libraries]]
+name = "Syncfusion Blazor"
+vendor = "Syncfusion"
+category = "Blazor UI Components"
+
+[[libraries.versions]]
+from = "18.1"
+notes = "First Blazor release"
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.Blazor"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.Blazor.Grid"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "nuget_package"
+value = "Syncfusion.Blazor.Charts"
+confidence = 1.0
+
+[[libraries.detection_patterns]]
+pattern_type = "namespace"
+value = "Syncfusion.Blazor.*"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfGrid"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfChart"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfButton"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfSchedule"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfTreeView"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfDialog"
+confidence = 0.9
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfRichTextEditor"
+confidence = 0.95
+
+[[libraries.detection_patterns]]
+pattern_type = "html_tag"
+value = "SfDropDownList"
+confidence = 0.9

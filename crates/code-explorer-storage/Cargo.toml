@@ -1,0 +1,6 @@
+[package]
+name = "code-explorer-storage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

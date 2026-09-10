@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check & Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        run: cargo check --workspace --exclude code-explorer-desktop
+
+      # Clippy runs informationally — warnings show in the logs but don't fail
+      # the build (gating on `-D warnings` is brittle across clippy versions).
+      - name: cargo clippy
+        run: cargo clippy --workspace --exclude code-explorer-desktop
+
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test
+        run: cargo test --workspace --exclude code-explorer-desktop
+
+  frontend:
+    name: Frontend Build & E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/code-explorer-desktop/ui/package-lock.json
+
+      - name: Install & build
+        working-directory: crates/code-explorer-desktop/ui
+        run: |
+          npm ci
+          npm run build
+          npm run bundle:report
+
+      # E2E is heavier/flakier in CI (headless browser) — run it but don't let it
+      # fail the overall build.
+      - name: E2E (non-blocking)
+        working-directory: crates/code-explorer-desktop/ui
+        continue-on-error: true
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: cargo audit
+        run: cargo audit
+        continue-on-error: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: npm audit
+        working-directory: crates/code-explorer-desktop/ui
+        run: |
+          npm ci
+          npm audit --audit-level=moderate || true

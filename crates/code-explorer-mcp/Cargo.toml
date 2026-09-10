@@ -1,0 +1,27 @@
+[package]
+name = "code-explorer-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "MCP server (stdio + HTTP), tools, resources for Code Explorer"
+
+[dependencies]
+code-explorer-core.workspace = true
+code-explorer-db.workspace = true
+code-explorer-git = { workspace = true }
+code-explorer-rag = { workspace = true }
+code-explorer-search = { workspace = true, features = ["reranker-llm", "embeddings"] }
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+regex.workspace = true
+ignore.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
