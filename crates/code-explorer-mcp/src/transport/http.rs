@@ -2312,7 +2312,7 @@ mod tests {
     fn tailscale_status_parser_keeps_online_and_offline_hosts() {
         let payload = r#"{
             "Self": {
-                "HostName": "MINISTAR",
+                "HostName": "WORKSTATION",
                 "DNSName": "workstation.tail.example.",
                 "OS": "windows",
                 "TailscaleIPs": ["100.90.108.4"],
@@ -2321,7 +2321,7 @@ mod tests {
             },
             "Peer": {
                 "nodekey:tailnet-host": {
-                    "HostName": "DARKSTAR",
+                    "HostName": "TAILNET-HOST",
                     "DNSName": "tailnet-host.tail.example.",
                     "OS": "windows",
                     "TailscaleIPs": ["100.64.0.10"],
@@ -2350,11 +2350,11 @@ mod tests {
         assert_eq!(workstation["active"], true);
         assert_eq!(workstation["tailscaleIp"], "100.64.0.11");
 
-        let tailnet-host = hosts
+        let tailnet_host = hosts
             .iter()
-            .find(|host| host["hostName"] == "DARKSTAR")
+            .find(|host| host["hostName"] == "TAILNET-HOST")
             .expect("tailnet-host host");
-        assert_eq!(tailnet-host["online"], false);
+        assert_eq!(tailnet_host["online"], false);
     }
 
     #[test]

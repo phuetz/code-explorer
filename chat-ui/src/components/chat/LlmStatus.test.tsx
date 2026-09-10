@@ -36,7 +36,7 @@ const readyState: LlmConfigState = {
     available: true,
     hosts: [
       {
-        hostName: 'DARKSTAR',
+        hostName: 'TAILNET-HOST',
         dnsName: 'tailnet-host.tail2a752c.ts.net',
         os: 'windows',
         tailscaleIp: '100.64.0.10',
@@ -89,7 +89,7 @@ describe('LlmStatus', () => {
         available: true,
         hosts: [
           {
-            hostName: 'DARKSTAR',
+            hostName: 'TAILNET-HOST',
             tailscaleIp: '100.64.0.10',
             online: false,
             active: true,
@@ -211,7 +211,7 @@ describe('LlmStatus', () => {
     expect((modelSelect as HTMLSelectElement).value).toBe('qwen3:4b');
   });
 
-  it('saves the DARKSTAR provider as a tailnet Ollama endpoint', async () => {
+  it('saves the TAILNET-HOST provider as a tailnet Ollama endpoint', async () => {
     render(<LlmStatus llm={readyState} />);
 
     fireEvent.click(screen.getByRole('button', { name: /configuration llm/i }));
