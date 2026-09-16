@@ -1,13 +1,14 @@
 # Grok skill (Code Explorer)
 
-Canonical copy of the Grok-authored `code-explorer` skill.
+https://github.com/phuetz/code-explorer
 
-Install (idempotent, will not overwrite a different existing file):
+Install into the user Grok skill directory (idempotent; skips if any dest file differs):
 
 ```bash
-./scripts/install-grok-skill.sh
+./scripts/install-grok-skill.sh --target grok
+./scripts/install-grok-skill.sh --target codex
 ```
 
-Verified clients for `code-explorer mcp-install --client`: claude, codex, claude-desktop, cursor, vscode. Grok is not a `--client` value; Grok discovers `~/.grok/skills/<name>/SKILL.md` on the **next** session.
+`--force` copies after a timestamped backup of dest. Extra files in dest are kept.
 
-Do not use this installer to mutate Code Buddy 2.1 packaging.
+Grok discovery: `grok inspect --json` (field `skills`). MCP `--client grok` does not exist. Claude/Buddy skill install is not claimed by this script.
