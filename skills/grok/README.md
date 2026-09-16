@@ -2,7 +2,7 @@
 
 https://github.com/phuetz/code-explorer
 
-Install into the user Grok skill directory (idempotent; skips if any dest file differs):
+Install into the user Grok skill directory (idempotent; skips the whole copy if any dest file differs — missing-file repair is then skipped too):
 
 ```bash
 ./scripts/install-grok-skill.sh --target grok
