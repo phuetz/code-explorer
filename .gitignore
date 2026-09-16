@@ -80,3 +80,8 @@ docs/kit/
 !/skills/
 !/skills/code-explorer/
 !/skills/code-explorer/SKILL.md
+!/skills/grok/
+!/skills/grok/**
+!/crates/code-explorer-cli/skills/
+!/crates/code-explorer-cli/skills/grok/
+!/crates/code-explorer-cli/skills/grok/**

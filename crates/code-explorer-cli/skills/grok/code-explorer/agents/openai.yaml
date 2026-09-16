@@ -1,0 +1,3 @@
+interface:
+  display_name: "Code Explorer"
+  short_description: "Local knowledge-graph index and query (no auto paid LLM)"

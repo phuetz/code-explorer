@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-16
+
+### Added
+- Skill Grok « code-explorer » (`skills/grok/`, copie dans le crate `code-explorer-cli`) et installateur idempotent `scripts/install-grok-skill.sh` (`--target grok|codex`, préserve les fichiers personnalisés, `--force` avec sauvegarde) avec ses tests (`scripts/test-install-grok-skill.sh`). Auteur : Grok 4.6.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added
