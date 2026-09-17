@@ -74,6 +74,18 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:e2e
 
+  scripts:
+    name: Scripts & Skills Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Grok Skill Installer
+        run: bash scripts/test-install-grok-skill.sh
+
+      - name: Check Skills Sync
+        run: bash scripts/check-skills-sync.sh
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
