@@ -1457,6 +1457,7 @@ fn collect_jsx_component_calls(
                 call_form,
                 receiver_name,
                 receiver_type_name: None,
+                start_byte: None,
             });
         }
     }

@@ -148,6 +148,7 @@ pub(super) fn process_razor_extras(
                     call_form: CallForm::Member,
                     receiver_name: Some("Html".to_string()),
                     receiver_type_name: Some("IHtmlHelper".to_string()),
+                    start_byte: None,
                 });
             }
             "ActionLink" | "Action" | "RenderAction" | "RouteUrl" => {
@@ -167,6 +168,7 @@ pub(super) fn process_razor_extras(
                         .controller
                         .as_ref()
                         .map(|c| format!("{}Controller", c)),
+                    start_byte: None,
                 });
             }
             _ => {}

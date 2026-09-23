@@ -64,6 +64,12 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
     if let (Some(s), Some(e)) = (node.properties.start_line, node.properties.end_line) {
         println!("Lines:  {}-{}", s, e);
     }
+    if let Some(notes) = &node.properties.ambiguous_calls {
+        println!("\nAmbiguous calls ({}):", notes.len());
+        for note in notes {
+            println!("  {note}");
+        }
+    }
 
     // Collect incoming and outgoing
     let mut callers = Vec::new();
