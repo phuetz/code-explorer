@@ -220,6 +220,7 @@ pub fn incremental_update(
             &package_map,
             &module_alias_map,
             &file_entries,
+            repo_path,
         )?;
 
         // Re-run heritage processing for changed files

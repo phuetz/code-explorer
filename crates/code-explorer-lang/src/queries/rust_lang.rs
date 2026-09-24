@@ -20,8 +20,15 @@ pub const QUERIES: &str = r#"
 ; Calls
 (call_expression function: (identifier) @call.name) @call
 (call_expression function: (field_expression field: (field_identifier) @call.name)) @call
-(call_expression function: (scoped_identifier name: (identifier) @call.name)) @call
+; Qualified path: keep the qualifier (`crate::mod`, `self`, `super`, alias) so
+; resolution does not fall back to a bare homonym.
+(call_expression function: (scoped_identifier
+    path: (_) @call.object
+    name: (identifier) @call.name)) @call
 (call_expression function: (generic_function function: (identifier) @call.name)) @call
+(call_expression function: (generic_function function: (scoped_identifier
+    path: (_) @call.object
+    name: (identifier) @call.name))) @call
 
 ; Struct literal construction: User { name: value }
 (struct_expression name: (type_identifier) @call.name) @call

@@ -238,6 +238,7 @@ pub async fn run_pipeline(
         &package_map,
         &module_alias_map,
         &file_entries,
+        repo_path,
     )?;
     // Safety net: re-point any CALLS edge whose source node doesn't exist to its File
     // node (keeps best-effort source attribution, e.g. C/C++, from leaving orphan edges).
@@ -5691,6 +5692,324 @@ class Dog(Animal):
         let result = result.unwrap();
         assert_eq!(result.total_file_count, 3, "Should report exactly 3 files");
 
+        cleanup(&dir);
+    }
+
+    fn calls_from_to(graph: &code_explorer_core::graph::KnowledgeGraph, source: &str, target: &str) -> Vec<String> {
+        graph
+            .iter_relationships()
+            .filter_map(|rel| {
+                if rel.rel_type != code_explorer_core::graph::RelationshipType::Calls {
+                    return None;
+                }
+                let src = graph.get_node(&rel.source_id)?;
+                let dst = graph.get_node(&rel.target_id)?;
+                if src.properties.name == source && dst.properties.name == target {
+                    Some(format!("{} -> {} [{}]", src.properties.file_path, dst.properties.file_path, rel.reason))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_rust_qualified_calls_do_not_bind_homonyms() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("src/transforms")).unwrap();
+        fs::create_dir_all(dir.join("src/dup")).unwrap();
+        fs::write(
+            dir.join("src/lib.rs"),
+            r#"
+mod transforms;
+mod other;
+mod dup;
+pub fn ambiguous_call() { crate::dup::run(); }
+pub fn bare_reinject() { reinject(); }
+"#,
+        )
+        .unwrap();
+        fs::write(dir.join("src/transforms/mod.rs"), "pub mod gate;\npub mod live;\n").unwrap();
+        fs::write(
+            dir.join("src/transforms/gate.rs"),
+            "pub fn reinject() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("src/transforms/live.rs"),
+            r#"
+pub fn dispatch() { crate::transforms::gate::reinject(); }
+pub fn via_super() { super::gate::reinject(); }
+pub fn via_alias() {
+    use crate::transforms::gate as g;
+    g::reinject();
+}
+"#,
+        )
+        .unwrap();
+        fs::write(dir.join("src/other.rs"), "pub fn reinject() {}\n").unwrap();
+        fs::write(dir.join("src/dup.rs"), "pub fn run() {}\n").unwrap();
+        fs::write(dir.join("src/dup/mod.rs"), "pub fn run() {}\n").unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let graph = &result.graph;
+        let linked = calls_from_to(graph, "dispatch", "reinject");
+        assert!(
+            linked.iter().any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:")),
+            "crate:: path should link gate, got {linked:?}"
+        );
+        assert!(
+            !linked.iter().any(|e| e.contains("other.rs")),
+            "must not link the homonym in other.rs: {linked:?}"
+        );
+        let via_super = calls_from_to(graph, "via_super", "reinject");
+        assert!(
+            via_super.iter().any(|e| e.contains("transforms/gate.rs")),
+            "super:: should link gate, got {via_super:?}"
+        );
+        let via_alias = calls_from_to(graph, "via_alias", "reinject");
+        assert!(
+            via_alias.iter().any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:g::")),
+            "use alias should link gate, got {via_alias:?}"
+        );
+        let ambiguous = calls_from_to(graph, "ambiguous_call", "run");
+        assert!(
+            ambiguous.is_empty(),
+            "duplicate module files must not be linked: {ambiguous:?}"
+        );
+        let note = graph.iter_nodes().find(|n| n.properties.name == "ambiguous_call");
+        let notes = note.and_then(|n| n.properties.ambiguous_calls.as_ref());
+        assert!(
+            notes.is_some_and(|n| n.iter().any(|s| s.contains("2 candidates"))),
+            "ambiguity should be declared, got {notes:?}"
+        );
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_rust_qualified_associated_type_call_keeps_same_file() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(
+            dir.join("src/lib.rs"),
+            r#"
+pub struct S;
+impl S {
+    pub fn build() -> S { Self::fresh() }
+    pub fn fresh() -> S { S }
+    pub fn consume(&self) {}
+}
+pub fn make() { let _ = S::build(); }
+pub fn consume_it(s: S) { s.consume(); }
+pub fn local_free() {}
+pub fn call_free() { local_free(); }
+pub fn vec_new() { let _ = Vec::<u8>::new(); }
+pub fn missing_path() { crate::nope::run(); }
+pub mod child;
+pub fn via_mod() { crate::child::build(); }
+"#,
+        )
+        .unwrap();
+        fs::write(dir.join("src/child.rs"), "pub fn other_fn() {}\n").unwrap();
+        fs::write(
+            dir.join("src/other.rs"),
+            "pub fn new() {}\npub fn run() {}\npub fn build() {}\n",
+        )
+        .unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let graph = &result.graph;
+
+        let make_build = calls_from_to(graph, "make", "build");
+        assert!(
+            make_build
+                .iter()
+                .any(|e| e.contains("src/lib.rs") && e.contains("same-file")),
+            "S::build() must keep the same-file link, got {make_build:?}"
+        );
+        assert!(
+            !make_build.iter().any(|e| e.contains("other.rs")),
+            "must not link the other.rs homonym, got {make_build:?}"
+        );
+        let self_fresh = calls_from_to(graph, "build", "fresh");
+        assert!(
+            self_fresh
+                .iter()
+                .any(|e| e.contains("src/lib.rs") && e.contains("same-file")),
+            "Self::fresh() must keep the same-file link, got {self_fresh:?}"
+        );
+        assert!(
+            calls_from_to(graph, "consume_it", "consume")
+                .iter()
+                .any(|e| e.contains("same-file")),
+            "method call must stay"
+        );
+        assert!(
+            calls_from_to(graph, "call_free", "local_free")
+                .iter()
+                .any(|e| e.contains("same-file")),
+            "bare call must stay"
+        );
+        assert!(
+            calls_from_to(graph, "vec_new", "new").is_empty(),
+            "Vec::new() must not attach to another file's new: {:?}",
+            calls_from_to(graph, "vec_new", "new")
+        );
+        assert!(
+            calls_from_to(graph, "missing_path", "run").is_empty(),
+            "unresolved crate:: path must not link a homonym: {:?}",
+            calls_from_to(graph, "missing_path", "run")
+        );
+        assert!(
+            calls_from_to(graph, "via_mod", "build").is_empty(),
+            "resolved module without the function must not fall back: {:?}",
+            calls_from_to(graph, "via_mod", "build")
+        );
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_rust_path_dependency_crate_name() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ncore = { path = \"crates/core\" }\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::create_dir_all(dir.join("crates/core/src/transforms")).unwrap();
+        fs::write(
+            dir.join("crates/core/Cargo.toml"),
+            "[package]\nname = \"core\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::write(dir.join("crates/core/src/lib.rs"), "pub mod transforms;\n").unwrap();
+        fs::write(
+            dir.join("crates/core/src/transforms/mod.rs"),
+            "pub mod gate;\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("crates/core/src/transforms/gate.rs"),
+            "pub fn reinject() {}\n",
+        )
+        .unwrap();
+        fs::write(dir.join("src/gate.rs"), "pub fn reinject() {}\n").unwrap();
+        fs::write(
+            dir.join("src/main.rs"),
+            "mod gate;\nfn boot() { core::transforms::gate::reinject(); }\n",
+        )
+        .unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let linked = calls_from_to(&result.graph, "boot", "reinject");
+        assert!(
+            linked.iter().any(|e| e.contains("crates/core/src/transforms/gate.rs")),
+            "path dependency should link the dependency crate, got {linked:?}"
+        );
+        assert!(
+            !linked.iter().any(|e| e.contains("-> src/gate.rs")),
+            "must not link the local homonym, got {linked:?}"
+        );
+        cleanup(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_csharp_minimal_api_lambda_calls() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("AnswerCache.cs"),
+            "public class AnswerCache { public void Clear() {} public void InvalidateUser(string id) {} }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("Other.cs"),
+            "public class Other { public void Clear() {} }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("Program.cs"),
+            r#"
+var app = new App();
+app.MapPost("/feedback", (AnswerCache answerCache) => { answerCache.Clear(); });
+app.MapGet("/admin", (AnswerCache answers, Other other) => {
+    answers.InvalidateUser("u");
+    other.Clear();
+});
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("Legacy")).unwrap();
+        fs::write(
+            dir.join("Widget.cs"),
+            "public class Widget { public void Run() {} }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("Legacy/Widget.cs"),
+            "public class Widget { public void Run() {} }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("Ambiguous.cs"),
+            "var app = new App();\napp.MapGet(\"/x\", (Widget widget) => { widget.Run(); });\n",
+        )
+        .unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let graph = &result.graph;
+        let clear = calls_from_to(graph, "Program.cs", "Clear");
+        // Source of a top-level lambda is the file node, whose name is the file name.
+        let clear_named = graph
+            .iter_relationships()
+            .filter(|rel| rel.rel_type == code_explorer_core::graph::RelationshipType::Calls && rel.reason.starts_with("lambda-param:"))
+            .filter_map(|rel| {
+                let src = graph.get_node(&rel.source_id)?;
+                let dst = graph.get_node(&rel.target_id)?;
+                Some(format!("{} -> {} ({}) [{}]", src.properties.name, dst.properties.name, dst.properties.file_path, rel.reason))
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            clear_named.iter().any(|e| e.contains("AnswerCache.cs") && e.contains("Clear") && e.contains("lambda-param:AnswerCache:")),
+            "answerCache.Clear should link AnswerCache, got {clear_named:?} file-callers {clear:?}"
+        );
+        assert!(
+            clear_named.iter().any(|e| e.contains("Other.cs") && e.contains("lambda-param:Other:Clear")),
+            "other.Clear should link Other, got {clear_named:?}"
+        );
+        assert!(
+            clear_named.iter().any(|e| e.contains("InvalidateUser") && e.contains("AnswerCache.cs")),
+            "InvalidateUser should link AnswerCache, got {clear_named:?}"
+        );
+        let widget_links = clear_named.iter().filter(|e| e.contains("Run")).collect::<Vec<_>>();
+        assert!(
+            widget_links.is_empty(),
+            "two Widget.Run must not be linked: {widget_links:?}"
+        );
+        let declared = graph.iter_nodes().any(|n| {
+            n.properties.ambiguous_calls.as_ref().is_some_and(|notes| {
+                notes.iter().any(|s| s.contains("widget.Run") && s.contains("2 candidates"))
+            })
+        });
+        assert!(declared, "Widget.Run ambiguity should be declared on the caller");
         cleanup(&dir);
     }
 }

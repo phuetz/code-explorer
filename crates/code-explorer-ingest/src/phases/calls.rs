@@ -880,6 +880,7 @@ pub fn resolve_calls(
     package_map: &PackageMap,
     module_alias_map: &ModuleAliasMap,
     file_entries: &[crate::phases::structure::FileEntry],
+    repo_path: &std::path::Path,
 ) -> Result<(), IngestError> {
     let mut ctx = ResolutionContext::new(
         symbol_table,
@@ -909,6 +910,25 @@ pub fn resolve_calls(
     let mut receiver_resolved = 0u32;
 
     let mut edge_count = 0;
+    let file_set: HashSet<String> = file_entries.iter().map(|f| f.path.clone()).collect();
+    let rust_ws = crate::phases::rust_qualified::RustWorkspace::load(repo_path, &file_set);
+    let content_by_path: HashMap<&str, &str> = file_entries
+        .iter()
+        .map(|f| (f.path.as_str(), f.content.as_str()))
+        .collect();
+    // File texts stay on disk (`RustWorkspace` reads them once per file).
+    // Copying every source into the workspace doubled the analyze heap.
+    let mut csharp_lambda_types: HashMap<(String, String), String> = HashMap::new();
+    for file in file_entries {
+        if !file.path.ends_with(".cs") {
+            continue;
+        }
+        for (name, ty) in crate::phases::rust_qualified::csharp_lambda_parameters(&file.content) {
+            csharp_lambda_types
+                .entry((file.path.clone(), name))
+                .or_insert(ty);
+        }
+    }
 
     // Debug: count how many calls have receivers
     let with_receiver = extracted
@@ -930,6 +950,97 @@ pub fn resolve_calls(
 
     for call in &extracted.calls {
         ctx.enable_cache(&call.file_path);
+
+        // Qualified Rust paths (`crate::`, `self::`, `super::`, modules, use aliases,
+        // path-dependencies). A path that does not land stays unresolved: no
+        // homonym. A bare type name (`S::build`, `Self::new`) is not a module
+        // and keeps the historical same-file tier only — not import-scoped,
+        // which used to tie `Vec::new()` to another file's `new`.
+        if call.file_path.ends_with(".rs") {
+            if let Some(qualifier) = call.receiver_name.as_deref().filter(|q| !q.is_empty()) {
+                let content = content_by_path
+                    .get(call.file_path.as_str())
+                    .copied()
+                    .unwrap_or("");
+                match rust_ws.decide_at(
+                    &call.file_path,
+                    content,
+                    qualifier,
+                    &call.called_name,
+                    symbol_table,
+                    call.start_byte,
+                ) {
+                    crate::phases::rust_qualified::RustCallDecision::Link { node_id, reason } => {
+                        let edge_id = format!("calls_rustq_{}_{}", call.source_id, node_id);
+                        if graph.get_relationship(&edge_id).is_none() {
+                            graph.add_relationship(GraphRelationship {
+                                id: edge_id,
+                                source_id: call.source_id.clone(),
+                                target_id: node_id,
+                                rel_type: RelationshipType::Calls,
+                                confidence: 0.95,
+                                reason,
+                                step: None,
+                            });
+                            edge_count += 1;
+                        }
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Ambiguous { note } => {
+                        note_ambiguous_call(graph, &call.source_id, &call.file_path, &note);
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Unresolved => continue,
+                    crate::phases::rust_qualified::RustCallDecision::NotAModule => {
+                        // Same-file only for Self in the enclosing impl, a type or
+                        // trait that owns the function in this file, or an inline
+                        // module. External crates, std aliases and foreign types
+                        // (`Vec::new`, `fs::write`, `serde_json::from_str`) get no edge.
+                        if let Some(decision) = rust_ws.same_file_target(
+                            &call.file_path,
+                            content,
+                            qualifier,
+                            &call.called_name,
+                            call.start_byte,
+                            symbol_table,
+                        ) {
+                            match decision {
+                                crate::phases::rust_qualified::RustCallDecision::Link {
+                                    node_id,
+                                    ..
+                                } => {
+                                    let edge_id = format!("calls_{}_{}", call.source_id, node_id);
+                                    if graph.get_relationship(&edge_id).is_none() {
+                                        graph.add_relationship(GraphRelationship {
+                                            id: edge_id,
+                                            source_id: call.source_id.clone(),
+                                            target_id: node_id,
+                                            rel_type: RelationshipType::Calls,
+                                            confidence: ResolutionTier::SameFile.confidence(),
+                                            reason: ResolutionTier::SameFile.as_str().to_string(),
+                                            step: None,
+                                        });
+                                        edge_count += 1;
+                                    }
+                                }
+                                crate::phases::rust_qualified::RustCallDecision::Ambiguous {
+                                    note,
+                                } => {
+                                    note_ambiguous_call(
+                                        graph,
+                                        &call.source_id,
+                                        &call.file_path,
+                                        &note,
+                                    );
+                                }
+                                _ => {}
+                            }
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
 
         // Tier 0: Field-type-aware resolution for C# files
         // If the call has a receiver (e.g., _letterService.CreateLetter()),
@@ -1023,6 +1134,64 @@ pub fn resolve_calls(
                                 continue;
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // C# lambda parameters of minimal APIs: `(AnswerCache cache) => cache.Clear()`.
+        // The receiver is not a field. Bind it to that type's method, or declare
+        // ambiguity when several classes of that name define the method.
+        if call.file_path.ends_with(".cs") {
+            if let Some(receiver) = call.receiver_name.as_deref() {
+                if let Some(ty) =
+                    csharp_lambda_types.get(&(call.file_path.clone(), receiver.to_string()))
+                {
+                    let targets = crate::phases::rust_qualified::csharp_methods_of_type(
+                        symbol_table,
+                        ty,
+                        &call.called_name,
+                    );
+                    match targets.len() {
+                        1 => {
+                            let target_def = &targets[0];
+                            let edge_id = format!(
+                                "calls_cs_lambda_{}_{}",
+                                call.source_id, target_def.node_id
+                            );
+                            if graph.get_relationship(&edge_id).is_none() {
+                                graph.add_relationship(GraphRelationship {
+                                    id: edge_id,
+                                    source_id: call.source_id.clone(),
+                                    target_id: target_def.node_id.clone(),
+                                    rel_type: RelationshipType::Calls,
+                                    confidence: 0.9,
+                                    reason: format!("lambda-param:{ty}:{}", call.called_name),
+                                    step: None,
+                                });
+                                edge_count += 1;
+                                receiver_resolved += 1;
+                            }
+                            continue;
+                        }
+                        n if n > 1 => {
+                            let files = targets
+                                .iter()
+                                .map(|d| d.file_path.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            note_ambiguous_call(
+                                graph,
+                                &call.source_id,
+                                &call.file_path,
+                                &format!(
+                                    "{receiver}.{} ({n} candidates: {files})",
+                                    call.called_name
+                                ),
+                            );
+                            continue;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -3054,6 +3223,24 @@ fn normalize_ts_type_name(type_name: &str) -> Option<&str> {
         None
     } else {
         Some(trimmed)
+    }
+}
+
+fn note_ambiguous_call(graph: &mut KnowledgeGraph, source_id: &str, file_path: &str, note: &str) {
+    let file_id = generate_id("File", file_path);
+    let id = if graph.get_node(source_id).is_some() {
+        source_id.to_string()
+    } else if graph.get_node(&file_id).is_some() {
+        file_id
+    } else {
+        return;
+    };
+    let Some(node) = graph.get_node_mut(&id) else {
+        return;
+    };
+    let notes = node.properties.ambiguous_calls.get_or_insert_with(Vec::new);
+    if !notes.iter().any(|existing| existing == note) {
+        notes.push(note.to_string());
     }
 }
 

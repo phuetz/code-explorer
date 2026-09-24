@@ -709,6 +709,11 @@ pub struct NodeProperties {
     /// EnvVar referenced in code but not declared in any config file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub undeclared: Option<bool>,
+
+    /// Qualified calls that matched several targets. No Calls edge was created
+    /// for these: an arbitrary homonym would be a false link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambiguous_calls: Option<Vec<String>>,
 }
 
 // ─── Graph Node ──────────────────────────────────────────────────────────

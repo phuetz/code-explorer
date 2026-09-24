@@ -63,6 +63,10 @@ pub struct ExtractedCall {
     pub call_form: CallForm,
     pub receiver_name: Option<String>,
     pub receiver_type_name: Option<String>,
+    /// Byte offset of the call in the file. Rust resolution uses it to see
+    /// which inline `mod` contains the call. Absent for languages that do not.
+    #[serde(default)]
+    pub start_byte: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1744,6 +1748,8 @@ fn extract_call(
         .and_then(|(_, node)| find_enclosing_method_id(node, &file.path, file.content.as_bytes()))
         .unwrap_or_else(|| file_node_id.to_string());
 
+    let start_byte = captures.get("call").map(|(_, node)| node.start_byte());
+
     extracted.calls.push(ExtractedCall {
         file_path: file.path.clone(),
         called_name,
@@ -1752,6 +1758,7 @@ fn extract_call(
         call_form,
         receiver_name,
         receiver_type_name: None,
+        start_byte,
     });
 }
 
@@ -1788,6 +1795,7 @@ fn extract_new_call(
             call_form: CallForm::Constructor,
             receiver_name: None,
             receiver_type_name: None,
+            start_byte: None,
         });
     }
 }

@@ -14,6 +14,7 @@ pub mod llm_enrichment;
 pub mod local_enrichment;
 pub mod parsing;
 pub mod process;
+pub mod rust_qualified;
 pub mod structure;
 pub mod text_util;
 pub mod todos;
