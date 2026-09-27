@@ -54,8 +54,8 @@
         </div>
         <div class="hero-media">
           <div class="terminal">
-            <div class="term-bar"><i></i><i></i><i></i><span>gitnexus impact</span></div>
-            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">gitnexus impact executePlan --direction both</span>
+            <div class="term-bar"><i></i><i></i><i></i><span>code-explorer impact</span></div>
+            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">code-explorer impact executePlan --direction both</span>
 
 <span class="t-key">Downstream</span> <span class="t-dim">(symbols affected by a change):</span>
   Depth 1 (7)  Depth 2 (39)  Depth 3 (4)
@@ -87,7 +87,7 @@
         <ul class="shipped">
           <li>They read <b>dozens of files</b> to follow a single call chain.</li>
           <li>They <b>start from scratch</b> every conversation.</li>
-          <li>They <b>fill the context window</b> with raw code, leaving no room to reason.</li>
+          <li>They <b>fill their context window</b> with raw code, leaving no room to reason.</li>
           <li>And a text search <b>can't compute a transitive blast radius</b> — <code>grep</code> finds where a name <em>appears</em>, not the chain of things that break three hops away.</li>
         </ul>
         <p class="honest">Code Explorer pre-computes all of that, once, into a graph that lives on disk and answers structural questions instantly.</p>
@@ -146,7 +146,7 @@
           <div class="card">
             <div class="ic">💥</div>
             <h3>Blast-radius analysis</h3>
-            <p><code>impact &lt;symbol&gt;</code> traces upstream callers, downstream callees and transitive impact — the single highest-value habit before any refactor.</p>
+            <p><code>impact <symbol></code> traces upstream callers, downstream callees and transitive impact — the single highest-value habit before any refactor.</p>
           </div>
           <div class="card">
             <div class="ic">🔌</div>
@@ -160,7 +160,7 @@
           </div>
           <div class="card">
             <div class="ic">💻</div>
-            <h3>100% local &amp; offline</h3>
+            <h3>100% local & offline</h3>
             <p>The graph is a snapshot you own. No cloud, no API, no telemetry — runs entirely on your machine.</p>
           </div>
           <div class="card">
@@ -177,15 +177,15 @@
       <div class="wrap narrow">
         <h2>Quick start</h2>
         <pre class="code"><code># 1. Build (release, ~35 MB binary)
-cargo build --release        # binary at target/release/gitnexus
+cargo build --release        # binary at target/release/code-explorer
 
 # 2. Index your repo once (re-run with --incremental after changes)
-gitnexus analyze .
+code-explorer analyze .
 
 # 3. Point your agent at it over MCP
-gitnexus mcp-install         # writes .mcp.json for Claude Code
-# …or add it manually:  { "command": "gitnexus", "args": ["mcp"] }</code></pre>
-        <p class="sub">Verify: your agent should report <b>"gitnexus · 30 tools"</b>.</p>
+code-explorer mcp-install         # writes .mcp.json for Claude Code
+# …or add it manually:  { "command": "code-explorer", "args": ["mcp"] }</code></pre>
+        <p class="sub">Verify: your agent should report <b>"code-explorer · 30 tools"</b>.</p>
         <div class="cta center">
           <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star on GitHub</a>
           <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-explorer#readme">Documentation</a>
