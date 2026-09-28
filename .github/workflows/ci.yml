@@ -58,6 +58,9 @@ jobs:
           cache: npm
           cache-dependency-path: crates/code-explorer-desktop/ui/package-lock.json
 
+      - name: Check license metadata
+        run: node scripts/check-license-metadata.mjs
+
       - name: Install & build
         working-directory: crates/code-explorer-desktop/ui
         run: |
