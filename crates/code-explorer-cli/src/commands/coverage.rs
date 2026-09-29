@@ -5,6 +5,7 @@ use colored::Colorize;
 use std::collections::HashMap;
 
 use code_explorer_core::graph::types::{NodeLabel, RelationshipType};
+use code_explorer_core::symbol::selection::find_symbols;
 use code_explorer_db::snapshot;
 
 pub fn run(target: Option<&str>, path: Option<&str>, json: bool, trace: bool) -> Result<()> {
@@ -83,25 +84,11 @@ fn run_single_class(
     method_class: &HashMap<String, String>,
     json: bool,
 ) -> Result<()> {
-    let target_lower = target_name.to_lowercase();
-
     // Find the Class/Service node
-    let mut candidates: Vec<_> = graph
-        .iter_nodes()
-        .filter(|n| {
-            n.properties.name.to_lowercase() == target_lower
-                && matches!(
-                    n.label,
-                    NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller
-                )
-        })
+    let candidates: Vec<_> = find_symbols(graph, target_name)
+        .into_iter()
+        .filter(|n| matches!(n.label, NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller))
         .collect();
-    candidates.sort_by_key(|n| match n.label {
-        NodeLabel::Controller => 0,
-        NodeLabel::Class => 1,
-        NodeLabel::Service => 2,
-        _ => 10,
-    });
 
     let class_node = match candidates.first() {
         Some(n) => *n,
@@ -444,25 +431,11 @@ fn run_flow_trace(
 ) -> Result<()> {
     use std::collections::{BTreeMap, HashSet, VecDeque};
 
-    let target_lower = target_name.to_lowercase();
-
     // Find the Class/Service/Controller node
-    let mut candidates: Vec<_> = graph
-        .iter_nodes()
-        .filter(|n| {
-            n.properties.name.to_lowercase() == target_lower
-                && matches!(
-                    n.label,
-                    NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller
-                )
-        })
+    let candidates: Vec<_> = find_symbols(graph, target_name)
+        .into_iter()
+        .filter(|n| matches!(n.label, NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller))
         .collect();
-    candidates.sort_by_key(|n| match n.label {
-        NodeLabel::Controller => 0,
-        NodeLabel::Class => 1,
-        NodeLabel::Service => 2,
-        _ => 10,
-    });
 
     let start_node = match candidates.first() {
         Some(n) => *n,

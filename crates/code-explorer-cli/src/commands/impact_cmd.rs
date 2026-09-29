@@ -30,6 +30,7 @@ pub async fn run(target: &str, repo: Option<&str>, direction: &str) -> anyhow::R
         "Impact Analysis for '{}' (direction: {})",
         impact.target.name, direction
     );
+    println!("ID: {}", impact.target.id);
     println!("{}", "-".repeat(50));
 
     if use_downstream {

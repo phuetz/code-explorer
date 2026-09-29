@@ -2,8 +2,9 @@
 
 use std::path::Path;
 
-use code_explorer_core::graph::types::{NodeLabel, RelationshipType};
+use code_explorer_core::graph::types::RelationshipType;
 use code_explorer_core::storage::repo_manager;
+use code_explorer_core::symbol::selection::find_symbols;
 
 pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
     let repo_path = resolve_repo_path(repo)?;
@@ -17,49 +18,18 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
     }
 
     let graph = code_explorer_db::snapshot::load_snapshot(&snap)?;
-    let lower = name.to_lowercase();
-
-    // Find matching node(s)
-    let mut matches = Vec::new();
-    for node in graph.iter_nodes() {
-        if node.properties.name.to_lowercase() == lower {
-            matches.push(node.id.clone());
-        }
-    }
-    if matches.is_empty() {
-        // Fallback to substring
-        for node in graph.iter_nodes() {
-            if node.properties.name.to_lowercase().contains(&lower) {
-                matches.push(node.id.clone());
-            }
-        }
-    }
+    let matches = find_symbols(&graph, name);
 
     if matches.is_empty() {
         println!("Symbol '{}' not found.", name);
         return Ok(());
     }
 
-    // Sort by priority: Controller > Class > Service > Interface > Method > others
-    matches.sort_by_key(|id| {
-        graph
-            .get_node(id)
-            .map(|n| match n.label {
-                NodeLabel::Controller => 0,
-                NodeLabel::Class => 1,
-                NodeLabel::Service => 2,
-                NodeLabel::Interface => 3,
-                NodeLabel::Method => 5,
-                NodeLabel::File => 8,
-                _ => 10,
-            })
-            .unwrap_or(10)
-    });
-
-    let node_id = &matches[0];
-    let node = graph.get_node(node_id).unwrap();
+    let node = matches[0];
+    let node_id = &node.id;
 
     println!("Symbol: {} ({})", node.properties.name, node.label.as_str());
+    println!("ID:     {}", node.id);
     println!("File:   {}", node.properties.file_path);
     if let (Some(s), Some(e)) = (node.properties.start_line, node.properties.end_line) {
         println!("Lines:  {}-{}", s, e);
@@ -99,6 +69,35 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
                 println!("  <- {} {}", c.label.as_str(), c.properties.name);
             }
         }
+        let mut paths = Vec::new();
+        for caller_id in &callers {
+            let Some(caller) = graph.get_node(caller_id) else {
+                continue;
+            };
+            for rel in graph
+                .iter_relationships()
+                .filter(|r| r.target_id == *caller_id && r.rel_type == RelationshipType::Calls)
+            {
+                if let Some(source) = graph.get_node(&rel.source_id) {
+                    paths.push(format!(
+                        "  <- {} <- {}",
+                        caller.properties.name, source.properties.name
+                    ));
+                }
+                if paths.len() >= 12 {
+                    break;
+                }
+            }
+            if paths.len() >= 12 {
+                break;
+            }
+        }
+        if !paths.is_empty() {
+            println!("\nCaller paths (2 hops):");
+            for path in paths {
+                println!("{path}");
+            }
+        }
     }
 
     if !callees.is_empty() {
@@ -106,6 +105,36 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
         for callee_id in &callees {
             if let Some(c) = graph.get_node(callee_id) {
                 println!("  -> {} {}", c.label.as_str(), c.properties.name);
+            }
+        }
+
+        let mut paths = Vec::new();
+        for callee_id in &callees {
+            let Some(callee) = graph.get_node(callee_id) else {
+                continue;
+            };
+            for rel in graph
+                .iter_relationships()
+                .filter(|r| r.source_id == *callee_id && r.rel_type == RelationshipType::Calls)
+            {
+                if let Some(next) = graph.get_node(&rel.target_id) {
+                    paths.push(format!(
+                        "  -> {} -> {}",
+                        callee.properties.name, next.properties.name
+                    ));
+                }
+                if paths.len() >= 12 {
+                    break;
+                }
+            }
+            if paths.len() >= 12 {
+                break;
+            }
+        }
+        if !paths.is_empty() {
+            println!("\nCallee paths (2 hops):");
+            for path in paths {
+                println!("{path}");
             }
         }
     }
@@ -122,27 +151,67 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
                 );
             }
         }
+        let mut paths = Vec::new();
+        for (sid, _) in &other_in {
+            let Some(intermediate) = graph.get_node(sid) else {
+                continue;
+            };
+            for rel in graph
+                .iter_relationships()
+                .filter(|r| r.target_id == *sid && r.rel_type == RelationshipType::DependsOn)
+            {
+                if let Some(source) = graph.get_node(&rel.source_id) {
+                    paths.push(format!(
+                        "  <-- {} <-- {}",
+                        intermediate.properties.name, source.properties.name
+                    ));
+                }
+                if paths.len() >= 12 {
+                    break;
+                }
+            }
+            if paths.len() >= 12 {
+                break;
+            }
+        }
+        if !paths.is_empty() {
+            println!("\nIncoming dependency paths (2 hops):");
+            for path in paths {
+                println!("{path}");
+            }
+        }
     }
 
     if !other_out.is_empty() {
         println!("\nOutgoing relationships:");
         for (tid, rtype) in &other_out {
             if let Some(t) = graph.get_node(tid) {
+                let location = t
+                    .properties
+                    .start_line
+                    .map(|line| format!(" ({}:{line})", t.properties.file_path))
+                    .unwrap_or_default();
                 println!(
-                    "  --[{}]--> {} {}",
+                    "  --[{}]--> {} {}{}",
                     rtype.as_str(),
                     t.label.as_str(),
-                    t.properties.name
+                    t.properties.name,
+                    location
                 );
             }
         }
     }
 
     if matches.len() > 1 {
-        println!(
-            "\nNote: {} other symbols also match this name.",
-            matches.len() - 1
-        );
+        println!("\nOther matches (use ID, Type.member or file:member):");
+        for alternative in matches.iter().skip(1) {
+            println!(
+                "  {}  {}:{}",
+                alternative.id,
+                alternative.properties.file_path,
+                alternative.properties.start_line.unwrap_or(0)
+            );
+        }
     }
 
     Ok(())

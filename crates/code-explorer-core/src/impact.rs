@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::graph::types::{NodeLabel, RelationshipType};
 use crate::graph::KnowledgeGraph;
+use crate::symbol::selection::find_symbols;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImpactTarget {
@@ -90,21 +91,7 @@ pub fn is_impact_traversal_edge(rel_type: RelationshipType) -> bool {
 }
 
 fn resolve_impact_target(graph: &KnowledgeGraph, target: &str) -> Option<ImpactTarget> {
-    let target_lower = target.to_lowercase();
-    let mut matches: Vec<_> = graph
-        .iter_nodes()
-        .filter(|node| node.id == target || node.properties.name.to_lowercase() == target_lower)
-        .collect();
-
-    if matches.is_empty() {
-        matches = graph
-            .iter_nodes()
-            .filter(|node| node.properties.name.to_lowercase().contains(&target_lower))
-            .collect();
-    }
-
-    matches.sort_by_key(|node| impact_node_priority(node.label));
-    let node = matches.first()?;
+    let node = find_symbols(graph, target).into_iter().next()?;
     Some(ImpactTarget {
         id: node.id.clone(),
         name: node.properties.name.clone(),

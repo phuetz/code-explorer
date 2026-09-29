@@ -5,6 +5,7 @@ use colored::Colorize;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use code_explorer_core::graph::types::{NodeLabel, RelationshipType};
+use code_explorer_core::symbol::selection::find_symbols;
 use code_explorer_db::snapshot;
 
 pub fn run(target: &str, path: Option<&str>, depth: usize, json: bool) -> Result<()> {
@@ -28,19 +29,7 @@ pub fn run(target: &str, path: Option<&str>, depth: usize, json: bool) -> Result
     let graph = snapshot::load_snapshot(&snap_path)
         .map_err(|e| anyhow::anyhow!("Failed to load graph: {}", e))?;
 
-    // Find the target symbol — prefer Class/Controller over Constructor/Method
-    let target_lower = target.to_lowercase();
-    let mut candidates: Vec<_> = graph
-        .iter_nodes()
-        .filter(|n| n.properties.name.to_lowercase() == target_lower)
-        .collect();
-    candidates.sort_by_key(|n| match n.label {
-        code_explorer_core::graph::types::NodeLabel::Controller => 0,
-        code_explorer_core::graph::types::NodeLabel::Class => 1,
-        code_explorer_core::graph::types::NodeLabel::Service => 2,
-        _ => 10,
-    });
-    let start_node = candidates.first().copied();
+    let start_node = find_symbols(&graph, target).into_iter().next();
 
     let start_node = match start_node {
         Some(n) => n,

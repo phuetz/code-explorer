@@ -15,6 +15,7 @@ use rustyline::{Config, Editor, Helper};
 use code_explorer_core::graph::types::{GraphNode, NodeLabel, RelationshipType};
 use code_explorer_core::graph::KnowledgeGraph;
 use code_explorer_core::storage::repo_manager;
+use code_explorer_core::symbol::selection::find_symbols;
 use code_explorer_output::terminal::TerminalFormatter;
 use code_explorer_output::traits::OutputFormatter;
 
@@ -94,8 +95,10 @@ impl ShellContext {
 
     /// Find node IDs by exact name (case-insensitive).
     fn find_nodes_exact(&self, name: &str) -> Vec<String> {
-        let lower = name.to_lowercase();
-        self.name_index.get(&lower).cloned().unwrap_or_default()
+        find_symbols(&self.graph, name)
+            .into_iter()
+            .map(|node| node.id.clone())
+            .collect()
     }
 }
 
@@ -568,6 +571,7 @@ fn cmd_context(symbol: &str, ctx: &ShellContext) -> anyhow::Result<()> {
         node.properties.name.bold().cyan()
     );
     println!("  {} {}", "Label:".bold(), node.label.as_str().yellow());
+    println!("  {} {}", "ID:".bold(), node.id);
     println!(
         "  {} {}",
         "File:".bold(),
