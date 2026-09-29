@@ -41,11 +41,14 @@ pub async fn run(
     let fts = FtsIndex::build(&graph);
 
     // Pull a larger pool when reranking or fusing so there's room to reorder.
-    let pool = if rerank || hybrid_mode {
+    let mut pool = if rerank || hybrid_mode {
         pool.max(RERANK_CANDIDATE_POOL)
     } else {
         pool
     };
+    if asks_for_files(query) && !rerank && !hybrid_mode {
+        pool = pool.max(200);
+    }
     let bm25 = fts.search_with_file_type(&graph, query, None, file_type, pool);
 
     if bm25.is_empty() && !hybrid_mode {
@@ -100,6 +103,9 @@ pub async fn run(
                 extension.trim_start_matches('.').to_ascii_lowercase()
             ))
         });
+    }
+    if asks_for_files(query) {
+        distinct_files(&mut candidates);
     }
 
     let start = offset.min(candidates.len());
@@ -199,6 +205,18 @@ fn source_excerpt(repo: &Path, file_path: &str, line: Option<u32>) -> Option<Str
     let text = BufReader::new(file).lines().nth(line)?.ok()?;
     let excerpt: String = text.trim().chars().take(120).collect();
     Some(excerpt)
+}
+
+fn asks_for_files(query: &str) -> bool {
+    query
+        .to_ascii_lowercase()
+        .split(|ch: char| !ch.is_ascii_alphabetic())
+        .any(|word| matches!(word, "fichier" | "fichiers" | "file" | "files"))
+}
+
+fn distinct_files(candidates: &mut Vec<Candidate>) {
+    let mut seen = HashSet::new();
+    candidates.retain(|candidate| seen.insert(candidate.file_path.clone()));
 }
 
 /// When a question names concrete code markers, inspect source files for the
@@ -374,6 +392,37 @@ mod pagination_tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].file_path, "src/Pragma.cs");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn file_question_is_detected_in_french_and_english() {
+        assert!(asks_for_files("Quels fichiers relient les modules ?"));
+        assert!(asks_for_files("Which files configure the database?"));
+        assert!(!asks_for_files("Où est définie cette méthode ?"));
+    }
+
+    #[test]
+    fn file_question_returns_one_result_per_source_file() {
+        let rows = [("a", "src/a.ts"), ("b", "src/a.ts"), ("c", "src/c.ts")].map(|(name, path)| {
+            FtsResult {
+                node_id: name.to_string(),
+                score: 1.0,
+                name: name.to_string(),
+                file_path: path.to_string(),
+                label: "Function".to_string(),
+                start_line: Some(1),
+                end_line: Some(1),
+            }
+        });
+        let mut candidates = fts_to_candidates(&rows);
+        distinct_files(&mut candidates);
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "c"]
+        );
     }
 }
 
