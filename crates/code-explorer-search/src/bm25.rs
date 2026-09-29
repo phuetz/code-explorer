@@ -1,6 +1,6 @@
 //! BM25 full-text search via Cypher FTS queries.
 //!
-//! Executes FTS queries across 17 searchable tables and merges results
+//! Executes FTS queries across searchable tables and merges results
 //! by file_path with summed scores.
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use code_explorer_db::error::DbError;
 use code_explorer_db::query::escape_cypher_string;
 
 /// Tables that have FTS indexes.
-/// Matches the 17 tables defined in code-explorer-db schema::fts_queries().
+/// Searchable code tables from code-explorer-db schema::fts_queries().
 const FTS_TABLES: &[&str] = &[
     "File",
     "Function",
@@ -23,6 +23,7 @@ const FTS_TABLES: &[&str] = &[
     "Controller",
     "ControllerAction",
     "ApiEndpoint",
+    "CodeElement",
     "View",
     "ViewModel",
     "DbEntity",

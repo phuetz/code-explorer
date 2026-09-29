@@ -120,6 +120,7 @@ pub fn fts_queries() -> Vec<String> {
         "Controller",
         "ControllerAction",
         "ApiEndpoint",
+        "CodeElement",
         "View",
         "ViewModel",
         "DbEntity",
@@ -276,7 +277,7 @@ mod tests {
     #[test]
     fn test_fts_queries_count() {
         let queries = fts_queries();
-        assert_eq!(queries.len(), 19);
+        assert_eq!(queries.len(), 20);
     }
 
     #[test]

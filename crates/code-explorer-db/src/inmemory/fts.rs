@@ -24,6 +24,8 @@ const FTS_LABELS: &[NodeLabel] = &[
     NodeLabel::Module,
     NodeLabel::Route,
     NodeLabel::Tool,
+    NodeLabel::ApiEndpoint,
+    NodeLabel::CodeElement,
     // Prose: a Markdown/rst heading is the searchable symbol of a document.
     NodeLabel::Section,
     // ASP.NET MVC searchable labels
@@ -180,8 +182,10 @@ impl FtsIndex {
                         return None;
                     }
                 }
-                let weighted_score =
-                    score * path_weight(&node.properties.file_path) * label_weight(node.label);
+                let weighted_score = score
+                    * path_weight(&node.properties.file_path)
+                    * label_weight(node.label)
+                    * entry_intent_weight(node, &query_tokens);
                 Some((node_id, weighted_score, node))
             })
             .collect();
@@ -202,6 +206,20 @@ impl FtsIndex {
             })
             .collect()
     }
+}
+
+/// Favor a declared CLI branch when the question names that command and asks
+/// about CLI dispatch. Generic function names can otherwise bury the entry.
+fn entry_intent_weight(node: &code_explorer_core::graph::types::GraphNode, tokens: &[String]) -> f64 {
+    if node.label != NodeLabel::CodeElement
+        || !matches!(node.properties.framework.as_deref(), Some("clap" | "commander"))
+        || !tokens.iter().any(|token| matches!(token.as_str(), "cli" | "commande" | "command" | "dispatch" | "dispatché")) {
+        return 1.0;
+    }
+    let command = node.properties.name.strip_prefix("Commands::")
+        .unwrap_or(&node.properties.name);
+    let parts = tokenize(command);
+    if !parts.is_empty() && parts.iter().all(|part| tokens.contains(part)) { 20.0 } else { 1.0 }
 }
 
 /// Deprioritize minified assets and third-party library bundles so business
@@ -410,6 +428,30 @@ mod tests {
         let results = index.search(&graph, "handleLogin", None, 10);
         assert!(!results.is_empty());
         assert_eq!(results[0].name, "handleLogin");
+    }
+
+    #[test]
+    fn entry_points_are_searchable_by_route_and_command() {
+        let mut graph = KnowledgeGraph::new();
+        for (id, label, name, path) in [
+            ("endpoint", NodeLabel::ApiEndpoint, "POST /api/chat/stream", "src/Program.cs"),
+            ("command", NodeLabel::CodeElement, "Commands::Compress", "src/main.rs"),
+        ] {
+            graph.add_node(GraphNode { id: id.into(), label, properties: NodeProperties {
+                name: name.into(), file_path: path.into(),
+                framework: if id == "command" { Some("clap".into()) } else { Some("aspnet-minimal".into()) },
+                ..Default::default()
+            }});
+        }
+        graph.add_node(GraphNode { id: "noise".into(), label: NodeLabel::Function,
+            properties: NodeProperties { name: "cli_compress_dispatch_test".into(),
+                file_path: "tests/cli.rs".into(), ..Default::default() }});
+        let index = FtsIndex::build(&graph);
+        assert!(index.search(&graph, "/api/chat/stream", None, 10)
+            .iter().any(|result| result.node_id == "endpoint"));
+        assert!(index.search(&graph, "Commands::Compress", None, 10)
+            .iter().any(|result| result.node_id == "command"));
+        assert_eq!(index.search(&graph, "Où le sous-programme CLI Compress est-il dispatché ?", None, 10)[0].node_id, "command");
     }
 
     #[test]

@@ -381,6 +381,17 @@ pub async fn run_pipeline(
         duration_ms: duration.as_millis() as u64,
     });
 
+    // Discover inline HTTP handlers, dependency registrations and CLI arms.
+    // These registrations are absent from the ordinary function AST.
+    let phase_start = Instant::now();
+    let entry_stats = phases::entry_points::extract_entry_points(&mut graph, &file_entries);
+    tracing::info!(routes = entry_stats.routes, registrations = entry_stats.registrations,
+        commands = entry_stats.commands, "Entry points linked");
+    phase_timings.push(PhaseTiming {
+        name: "entry_points".into(),
+        duration_ms: phase_start.elapsed().as_millis() as u64,
+    });
+
     // Phase 5d: DB schema extraction (Theme D).
     // Parses SQL migrations, Prisma schemas, and ORM classes to produce
     // DbEntity + DbColumn nodes with HasColumn / ReferencesTable /
