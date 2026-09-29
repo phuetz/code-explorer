@@ -63,6 +63,7 @@ fn should_skip_dir(path: &Path) -> bool {
             name.to_string_lossy().as_ref(),
             ".git"
                 | ".codeexplorer"
+                | "_qa"
                 | ".omx"
                 | ".playwright-mcp"
                 | "node_modules"

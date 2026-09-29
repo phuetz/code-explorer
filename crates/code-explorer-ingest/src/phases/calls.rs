@@ -286,8 +286,16 @@ fn build_field_type_map(
 fn build_ts_type_envs(
     file_entries: &[crate::phases::structure::FileEntry],
     ts_external_imported_type_names: &HashMap<String, HashSet<String>>,
-) -> HashMap<String, TypeEnvironment> {
+) -> (
+    HashMap<String, TypeEnvironment>,
+    HashMap<String, HashSet<String>>,
+    HashMap<String, HashSet<String>>,
+    HashMap<String, Vec<TsScopeRange>>,
+) {
     let mut envs = HashMap::new();
+    let mut callable_parameter_names = HashMap::new();
+    let mut opaque_local_callable_names = HashMap::new();
+    let mut scopes_by_file = HashMap::new();
 
     for file in file_entries {
         if !is_ts_like_file(&file.path) {
@@ -295,7 +303,7 @@ fn build_ts_type_envs(
         }
 
         let mut env = TypeEnvironment::new();
-        let scope_ranges = build_ts_scope_ranges(file);
+        let mut scope_ranges = Vec::new();
 
         let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
             file.language
@@ -306,11 +314,30 @@ fn build_ts_type_envs(
         let mut parser = Parser::new();
         if parser.set_language(&ts_language).is_ok() {
             if let Some(tree) = parser.parse(&file.content, None) {
+                let root = tree.root_node();
+                collect_ts_scope_ranges(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut scope_ranges,
+                );
                 collect_ts_parameter_type_bindings(
-                    tree.root_node(),
+                    root,
                     &file.path,
                     file.content.as_bytes(),
                     &mut env,
+                );
+                collect_ts_callable_parameter_names(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut callable_parameter_names,
+                );
+                collect_ts_opaque_local_callable_names(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut opaque_local_callable_names,
                 );
             }
         }
@@ -368,13 +395,15 @@ fn build_ts_type_envs(
         }
 
         envs.insert(file.path.clone(), env);
+        scopes_by_file.insert(file.path.clone(), scope_ranges);
     }
 
-    envs
+    (envs, callable_parameter_names, opaque_local_callable_names, scopes_by_file)
 }
 
 fn build_ts_external_receiver_envs(
     file_entries: &[crate::phases::structure::FileEntry],
+    scopes_by_file: &HashMap<String, Vec<TsScopeRange>>,
 ) -> HashMap<String, TypeEnvironment> {
     let mut envs = HashMap::new();
 
@@ -385,18 +414,18 @@ fn build_ts_external_receiver_envs(
 
         let fs_aliases = collect_ts_node_fs_aliases(&file.content);
         let mut env = TypeEnvironment::new();
-        let scope_ranges = build_ts_scope_ranges(file);
+        let scope_ranges = scopes_by_file.get(&file.path).map(Vec::as_slice).unwrap_or(&[]);
 
-        bind_ts_node_fs_stats_receivers(file, &scope_ranges, &fs_aliases, &mut env);
-        bind_ts_node_fs_dirent_arrays(file, &scope_ranges, &fs_aliases, &mut env);
-        bind_ts_external_array_derivatives(file, &scope_ranges, &mut env);
-        bind_ts_external_array_loop_items(file, &scope_ranges, &mut env);
-        bind_ts_external_array_index_items(file, &scope_ranges, &mut env);
-        bind_ts_external_array_callback_params(file, &scope_ranges, &mut env);
-        bind_ts_fetch_response_receivers(file, &scope_ranges, &mut env);
-        bind_ts_external_response_parameters(file, &scope_ranges, &mut env);
-        bind_ts_express_router_response_parameters(file, &scope_ranges, &mut env);
-        bind_ts_node_event_receivers(file, &scope_ranges, &mut env);
+        bind_ts_node_fs_stats_receivers(file, scope_ranges, &fs_aliases, &mut env);
+        bind_ts_node_fs_dirent_arrays(file, scope_ranges, &fs_aliases, &mut env);
+        bind_ts_external_array_derivatives(file, scope_ranges, &mut env);
+        bind_ts_external_array_loop_items(file, scope_ranges, &mut env);
+        bind_ts_external_array_index_items(file, scope_ranges, &mut env);
+        bind_ts_external_array_callback_params(file, scope_ranges, &mut env);
+        bind_ts_fetch_response_receivers(file, scope_ranges, &mut env);
+        bind_ts_external_response_parameters(file, scope_ranges, &mut env);
+        bind_ts_express_router_response_parameters(file, scope_ranges, &mut env);
+        bind_ts_node_event_receivers(file, scope_ranges, &mut env);
 
         envs.insert(file.path.clone(), env);
     }
@@ -736,33 +765,6 @@ fn extract_balanced_parenthesized(content: &str, open_paren_byte: usize) -> Opti
     None
 }
 
-fn build_ts_scope_ranges(file: &crate::phases::structure::FileEntry) -> Vec<TsScopeRange> {
-    let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-        file.language
-    else {
-        return Vec::new();
-    };
-
-    let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-    let mut parser = Parser::new();
-    if parser.set_language(&ts_language).is_err() {
-        return Vec::new();
-    }
-
-    let Some(tree) = parser.parse(&file.content, None) else {
-        return Vec::new();
-    };
-
-    let mut ranges = Vec::new();
-    collect_ts_scope_ranges(
-        tree.root_node(),
-        &file.path,
-        file.content.as_bytes(),
-        &mut ranges,
-    );
-    ranges
-}
-
 fn collect_ts_scope_ranges(
     node: Node,
     file_path: &str,
@@ -894,8 +896,9 @@ pub fn resolve_calls(
     // Build field→type map for receiver-aware resolution (C# DI)
     let field_type_map = build_field_type_map(file_entries);
     let ts_external_imported_type_names = build_ts_external_imported_type_names(extracted);
-    let ts_type_envs = build_ts_type_envs(file_entries, &ts_external_imported_type_names);
-    let ts_external_receiver_envs = build_ts_external_receiver_envs(file_entries);
+    let (ts_type_envs, ts_callable_parameter_names, ts_opaque_local_callable_names, ts_scopes) =
+        build_ts_type_envs(file_entries, &ts_external_imported_type_names);
+    let ts_external_receiver_envs = build_ts_external_receiver_envs(file_entries, &ts_scopes);
     let ts_global_fallback_blocked_names = build_ts_global_fallback_blocked_names(
         extracted,
         named_import_map,
@@ -903,9 +906,7 @@ pub fn resolve_calls(
         symbol_table,
         file_entries,
     );
-    let ts_callable_parameter_names = build_ts_callable_parameter_names(file_entries);
-    let ts_opaque_local_callable_names = build_ts_opaque_local_callable_names(file_entries);
-    let ts_bound_method_aliases = build_ts_bound_method_aliases(file_entries);
+    let ts_bound_method_aliases = build_ts_bound_method_aliases(file_entries, &ts_scopes);
     let ts_imported_binding_names = build_ts_imported_binding_names(extracted);
     let mut receiver_resolved = 0u32;
 
@@ -2116,39 +2117,6 @@ fn is_ts_known_global_receiver(receiver: &str) -> bool {
     )
 }
 
-fn build_ts_callable_parameter_names(
-    file_entries: &[crate::phases::structure::FileEntry],
-) -> HashMap<String, HashSet<String>> {
-    let mut names_by_source: HashMap<String, HashSet<String>> = HashMap::new();
-
-    for file in file_entries {
-        let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-            file.language
-        else {
-            continue;
-        };
-
-        let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-        let mut parser = Parser::new();
-        if parser.set_language(&ts_language).is_err() {
-            continue;
-        }
-
-        let Some(tree) = parser.parse(&file.content, None) else {
-            continue;
-        };
-
-        collect_ts_callable_parameter_names(
-            tree.root_node(),
-            &file.path,
-            file.content.as_bytes(),
-            &mut names_by_source,
-        );
-    }
-
-    names_by_source
-}
-
 fn collect_ts_callable_parameter_names(
     node: Node,
     file_path: &str,
@@ -2170,39 +2138,6 @@ fn collect_ts_callable_parameter_names(
     for child in node.children(&mut cursor) {
         collect_ts_callable_parameter_names(child, file_path, content, names_by_source);
     }
-}
-
-fn build_ts_opaque_local_callable_names(
-    file_entries: &[crate::phases::structure::FileEntry],
-) -> HashMap<String, HashSet<String>> {
-    let mut names_by_source: HashMap<String, HashSet<String>> = HashMap::new();
-
-    for file in file_entries {
-        let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-            file.language
-        else {
-            continue;
-        };
-
-        let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-        let mut parser = Parser::new();
-        if parser.set_language(&ts_language).is_err() {
-            continue;
-        }
-
-        let Some(tree) = parser.parse(&file.content, None) else {
-            continue;
-        };
-
-        collect_ts_opaque_local_callable_names(
-            tree.root_node(),
-            &file.path,
-            file.content.as_bytes(),
-            &mut names_by_source,
-        );
-    }
-
-    names_by_source
 }
 
 fn collect_ts_opaque_local_callable_names(
@@ -2252,6 +2187,7 @@ fn collect_ts_opaque_local_callable_names_in_scope(
 
 fn build_ts_bound_method_aliases(
     file_entries: &[crate::phases::structure::FileEntry],
+    scopes_by_file: &HashMap<String, Vec<TsScopeRange>>,
 ) -> HashMap<String, HashMap<String, TsBoundMethodAlias>> {
     let mut aliases_by_source: HashMap<String, HashMap<String, TsBoundMethodAlias>> =
         HashMap::new();
@@ -2262,7 +2198,7 @@ fn build_ts_bound_method_aliases(
             continue;
         };
 
-        let scope_ranges = build_ts_scope_ranges(file);
+        let scope_ranges = scopes_by_file.get(&file.path).map(Vec::as_slice).unwrap_or(&[]);
         for cap in TS_BOUND_METHOD_ALIAS_RE.captures_iter(&file.content) {
             let Some(full_match) = cap.get(0) else {
                 continue;
@@ -2272,7 +2208,7 @@ fn build_ts_bound_method_aliases(
                 continue;
             };
 
-            let scope = ts_scope_at_byte(&scope_ranges, full_match.start());
+            let scope = ts_scope_at_byte(scope_ranges, full_match.start());
             if scope.is_empty() {
                 continue;
             }
