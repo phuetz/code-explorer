@@ -42,7 +42,7 @@ const ENTRY_POINT_PATTERNS: &[&str] = &[
 /// 5. Create Process nodes and STEP_IN_PROCESS edges
 pub fn detect_processes(graph: &mut KnowledgeGraph) -> Result<usize, crate::IngestError> {
     // Build raw adjacency lists from CALLS edges
-    let (raw_callees, _raw_callers) = build_call_adjacency(graph);
+    let raw_callees = build_call_adjacency(graph);
 
     if raw_callees.is_empty() {
         tracing::info!("No CALLS edges found, skipping process detection");
@@ -161,9 +161,8 @@ pub fn detect_processes(graph: &mut KnowledgeGraph) -> Result<usize, crate::Inge
 /// Adjacency lists for CALLS edges.
 fn build_call_adjacency(
     graph: &KnowledgeGraph,
-) -> (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>) {
+) -> HashMap<String, Vec<String>> {
     let mut callees_of: HashMap<String, Vec<String>> = HashMap::new();
-    let mut callers_of: HashMap<String, Vec<String>> = HashMap::new();
 
     graph.for_each_relationship(|rel| {
         if rel.rel_type == RelationshipType::Calls {
@@ -171,14 +170,10 @@ fn build_call_adjacency(
                 .entry(rel.source_id.clone())
                 .or_default()
                 .push(rel.target_id.clone());
-            callers_of
-                .entry(rel.target_id.clone())
-                .or_default()
-                .push(rel.source_id.clone());
         }
     });
 
-    (callees_of, callers_of)
+    callees_of
 }
 
 /// An entry point candidate with a score.
@@ -195,27 +190,30 @@ fn build_function_call_graph(
     let mut func_callees: HashMap<String, Vec<String>> = HashMap::new();
     let mut func_callers: HashMap<String, Vec<String>> = HashMap::new();
 
+    // Index DEFINES once. Scanning every relationship for each File caller
+    // makes process detection quadratic on repositories with many C/C++ files.
+    let mut functions_by_file: HashMap<&str, Vec<&str>> = HashMap::new();
+    for rel in graph.iter_relationships() {
+        if rel.rel_type == RelationshipType::Defines
+            && graph.get_node(&rel.source_id).is_some_and(|n| n.label == NodeLabel::File)
+            && graph.get_node(&rel.target_id).is_some_and(|n| {
+                matches!(n.label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Constructor)
+            })
+        {
+            functions_by_file
+                .entry(rel.source_id.as_str())
+                .or_default()
+                .push(rel.target_id.as_str());
+        }
+    }
+
     for (source_id, targets) in raw_callees {
         let source_node = graph.get_node(source_id);
         let is_file = source_node.is_some_and(|n| n.label == NodeLabel::File);
 
         if is_file {
             // Find functions defined in this file (via DEFINES edges)
-            let file_functions: Vec<String> = graph
-                .iter_relationships()
-                .filter(|r| r.rel_type == RelationshipType::Defines && r.source_id == *source_id)
-                .filter(|r| {
-                    graph.get_node(&r.target_id).is_some_and(|n| {
-                        matches!(
-                            n.label,
-                            NodeLabel::Function | NodeLabel::Method | NodeLabel::Constructor
-                        )
-                    })
-                })
-                .map(|r| r.target_id.clone())
-                .collect();
-
-            for func_id in &file_functions {
+            for &func_id in functions_by_file.get(source_id.as_str()).into_iter().flatten() {
                 for target in targets {
                     let is_func_target = graph.get_node(target).is_some_and(|n| {
                         matches!(
@@ -225,13 +223,13 @@ fn build_function_call_graph(
                     });
                     if is_func_target && func_id != target {
                         func_callees
-                            .entry(func_id.clone())
+                            .entry(func_id.to_string())
                             .or_default()
                             .push(target.clone());
                         func_callers
                             .entry(target.clone())
                             .or_default()
-                            .push(func_id.clone());
+                            .push(func_id.to_string());
                     }
                 }
             }
@@ -596,6 +594,39 @@ mod tests {
             assert!(edge.step.is_some());
             assert!(edge.step.unwrap() >= 1);
         }
+    }
+
+    #[test]
+    fn file_calls_expand_through_defined_functions() {
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(GraphNode {
+            id: "file".into(),
+            label: NodeLabel::File,
+            properties: NodeProperties {
+                name: "entry.ts".into(),
+                file_path: "entry.ts".into(),
+                ..Default::default()
+            },
+        });
+        for (id, name) in [("entry", "entry"), ("middle", "middle"), ("last", "last")] {
+            graph.add_node(make_fn_node(id, name, "entry.ts", id == "entry"));
+        }
+        graph.add_relationship(GraphRelationship {
+            id: "defines".into(),
+            source_id: "file".into(),
+            target_id: "entry".into(),
+            rel_type: RelationshipType::Defines,
+            confidence: 1.0,
+            reason: "test".into(),
+            step: None,
+        });
+        graph.add_relationship(make_calls_edge("file", "middle"));
+        graph.add_relationship(make_calls_edge("middle", "last"));
+
+        assert!(detect_processes(&mut graph).unwrap() > 0);
+        assert!(graph.iter_relationships().any(|rel| {
+            rel.rel_type == RelationshipType::StepInProcess && rel.source_id == "entry"
+        }));
     }
 
     #[test]

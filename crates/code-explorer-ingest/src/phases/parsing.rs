@@ -148,6 +148,70 @@ pub(crate) fn parse_files_cached(
     storage: &std::path::Path,
     incremental: bool,
 ) -> Result<(ExtractedData, usize, Option<String>), crate::IngestError> {
+    // Keeping a second copy of every parsed node/call for incremental runs
+    // dominates memory on large repositories. Bound the source represented by
+    // the cache; oversized repositories still get the same complete graph and
+    // can be reparsed on the next incremental run.
+    const PARSE_CACHE_SOURCE_BUDGET: usize = 64 * 1024 * 1024;
+    const MAX_PARSE_BATCH_FILES: usize = 512;
+    const PARSE_BATCH_BYTES: usize = 20 * 1024 * 1024;
+    let batch_files = rayon::current_num_threads()
+        .saturating_mul(4)
+        .clamp(64, MAX_PARSE_BATCH_FILES);
+    let source_bytes: usize = files.iter().map(|file| file.content.len()).sum();
+    if source_bytes > PARSE_CACHE_SOURCE_BUDGET {
+        let path = storage.join("parse-cache.bin");
+        if let Err(error) = std::fs::remove_file(&path) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(%error, "Could not remove oversized parse cache");
+            }
+        }
+        tracing::info!(
+            source_bytes,
+            budget_bytes = PARSE_CACHE_SOURCE_BUDGET,
+            batch_files,
+            batch_bytes = PARSE_BATCH_BYTES,
+            "Parse cache skipped; parsing in bounded batches"
+        );
+        let mut extracted = ExtractedData::default();
+        let mut parsed_files = 0;
+        let mut start = 0;
+        while start < files.len() {
+            let mut end = start;
+            let mut bytes: usize = 0;
+            while end < files.len() && end - start < batch_files {
+                let next = files[end].content.len();
+                if end > start && bytes.saturating_add(next) > PARSE_BATCH_BYTES {
+                    break;
+                }
+                bytes = bytes.saturating_add(next);
+                end += 1;
+            }
+            let batch: Vec<_> = files[start..end]
+                .par_iter()
+                .filter_map(|file| {
+                    let lang = file.language.filter(|lang| grammar::is_language_available(*lang))?;
+                    Some(parse_single_file(file, lang))
+                })
+                .collect();
+            parsed_files += batch.len();
+            for result in batch {
+                for node in result.nodes {
+                    graph.add_node(node);
+                }
+                for rel in result.relationships {
+                    graph.add_relationship(rel);
+                }
+                extracted.merge(result.extracted);
+            }
+            start = end;
+        }
+        let fallback = incremental.then(|| format!(
+            "parse cache disabled: {source_bytes} source bytes exceeds {PARSE_CACHE_SOURCE_BUDGET} byte budget"
+        ));
+        return Ok((extracted, parsed_files, fallback));
+    }
+
     // A changed executable invalidates parsing semantics, grammar and feature changes.
     let executable = std::env::current_exe()
         .ok()

@@ -251,11 +251,13 @@ pub async fn run(
             }
 
             // Save binary snapshot for fast reload (REPL, MCP, CLI queries)
+            let snapshot_start = std::time::Instant::now();
             let snap_path = code_explorer_db::snapshot::snapshot_path(&storage_paths.storage_path);
             code_explorer_db::snapshot::save_snapshot(&result.graph, &snap_path)?;
             println!(
-                "  Graph snapshot saved ({} bytes)",
-                std::fs::metadata(&snap_path).map(|m| m.len()).unwrap_or(0)
+                "  Graph snapshot saved ({} bytes, {} ms)",
+                std::fs::metadata(&snap_path).map(|m| m.len()).unwrap_or(0),
+                snapshot_start.elapsed().as_millis()
             );
 
             // Save file manifest for incremental indexing
@@ -274,9 +276,11 @@ pub async fn run(
 
             // Generate CSV and save
             println!("  Saving CSVs...");
+            let csv_start = std::time::Instant::now();
             let csv_dir = storage_paths.storage_path.join("csv");
             std::fs::create_dir_all(&csv_dir)?;
             code_explorer_db::csv_generator::generate_all_csvs(&result.graph, &repo_path, &csv_dir)?;
+            println!("  CSVs saved ({} ms)", csv_start.elapsed().as_millis());
 
             // Load CSVs into KuzuDB (when the kuzu-backend feature is enabled)
             #[cfg(feature = "kuzu-backend")]

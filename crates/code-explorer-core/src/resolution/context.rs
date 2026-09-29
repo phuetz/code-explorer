@@ -16,8 +16,13 @@ pub struct ResolutionContext<'a> {
     pub re_export_map: &'a ReExportMap,
     pub module_alias_map: &'a ModuleAliasMap,
 
-    /// Per-file resolution cache: (file_path, name) → result
-    cache: HashMap<(String, String), Option<TieredCandidates>>,
+    /// Deterministic import order, computed once per file rather than once
+    /// for every distinct called name in that file.
+    sorted_imports: HashMap<&'a str, Vec<&'a str>>,
+
+    /// Per-file resolution cache: name → result (the cache is cleared when
+    /// `active_file` changes).
+    cache: HashMap<String, Option<TieredCandidates>>,
     /// Currently active file path for caching
     active_file: Option<String>,
 
@@ -35,6 +40,14 @@ impl<'a> ResolutionContext<'a> {
         re_export_map: &'a ReExportMap,
         module_alias_map: &'a ModuleAliasMap,
     ) -> Self {
+        let sorted_imports = import_map
+            .iter()
+            .map(|(file, imports)| {
+                let mut imports: Vec<&str> = imports.iter().map(String::as_str).collect();
+                imports.sort_unstable();
+                (file.as_str(), imports)
+            })
+            .collect();
         Self {
             symbols,
             import_map,
@@ -42,6 +55,7 @@ impl<'a> ResolutionContext<'a> {
             named_import_map,
             re_export_map,
             module_alias_map,
+            sorted_imports,
             cache: HashMap::new(),
             active_file: None,
             cache_hits: 0,
@@ -72,9 +86,9 @@ impl<'a> ResolutionContext<'a> {
     ///    2b. Package-scoped fuzzy match
     /// 3. Global fuzzy match
     pub fn resolve(&mut self, name: &str, from_file: &str) -> Option<TieredCandidates> {
+        self.enable_cache(from_file);
         // Check cache
-        let cache_key = (from_file.to_string(), name.to_string());
-        if let Some(cached) = self.cache.get(&cache_key) {
+        if let Some(cached) = self.cache.get(name) {
             self.cache_hits += 1;
             return cached.clone();
         }
@@ -83,7 +97,7 @@ impl<'a> ResolutionContext<'a> {
         let result = self.resolve_uncached(name, from_file);
 
         // Store in cache
-        self.cache.insert(cache_key, result.clone());
+        self.cache.insert(name.to_string(), result.clone());
         result
     }
 
@@ -117,12 +131,8 @@ impl<'a> ResolutionContext<'a> {
         }
 
         // Tier 2a: Import-scoped
-        if let Some(imported_files) = self.import_map.get(from_file) {
+        if let Some(imported_files) = self.sorted_imports.get(from_file) {
             let mut candidates = Vec::new();
-            // ImportMap uses a HashSet. Its iteration order must not choose
-            // the winning target when multiple imports expose the same name.
-            let mut imported_files: Vec<_> = imported_files.iter().collect();
-            imported_files.sort_unstable();
             for imported_file in imported_files {
                 if let Some(defs) = self.symbols.lookup_in_file(imported_file, name) {
                     for def in defs {

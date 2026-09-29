@@ -20,8 +20,9 @@ use crate::error::{DbError, Result};
 const SYMBOL_CONTENT_MAX: usize = 5000;
 /// Maximum characters for file content
 const FILE_CONTENT_MAX: usize = 10000;
-/// LRU cache capacity for source file contents
+/// Bound retained source text during CSV export (separate from the graph).
 const FILE_CACHE_CAPACITY: usize = 3000;
+const FILE_CACHE_BYTE_BUDGET: usize = 128 * 1024 * 1024;
 /// Number of rows to buffer before flushing to disk
 const FLUSH_INTERVAL: usize = 500;
 /// Threshold: if more than 10% of bytes are non-printable, treat as binary
@@ -67,36 +68,91 @@ fn truncate_content(s: &str, max_len: usize) -> &str {
 }
 
 /// Source file content cache with LRU eviction.
+struct CachedFile {
+    text: String,
+    lines: Vec<(usize, usize)>,
+}
+
+impl CachedFile {
+    fn new(text: String) -> Self {
+        // Match `str::lines`: split at LF, drop a preceding CR, and do not
+        // expose an extra empty line after a trailing LF.
+        let mut lines = Vec::new();
+        let bytes = text.as_bytes();
+        let mut start = 0;
+        for (index, &byte) in bytes.iter().enumerate() {
+            if byte == b'\n' {
+                let end = if index > start && bytes[index - 1] == b'\r' {
+                    index - 1
+                } else {
+                    index
+                };
+                lines.push((start, end));
+                start = index + 1;
+            }
+        }
+        if start < bytes.len() {
+            lines.push((start, bytes.len()));
+        }
+        Self { text, lines }
+    }
+
+    fn retained_bytes(&self) -> usize {
+        self.text.capacity() + self.lines.capacity() * std::mem::size_of::<(usize, usize)>()
+    }
+}
+
 struct FileContentCache {
-    cache: LruCache<PathBuf, Option<String>>,
+    cache: LruCache<PathBuf, Option<CachedFile>>,
+    bytes: usize,
+    peak_bytes: usize,
+    evictions: usize,
 }
 
 impl FileContentCache {
     fn new() -> Self {
         Self {
             cache: LruCache::new(std::num::NonZeroUsize::new(FILE_CACHE_CAPACITY).unwrap()),
+            bytes: 0,
+            peak_bytes: 0,
+            evictions: 0,
         }
     }
 
     /// Read file content, returning None for binary files or read errors.
-    fn get_content(&mut self, file_path: &Path) -> Option<String> {
-        if let Some(cached) = self.cache.get(file_path) {
-            return cached.clone();
-        }
-
-        let result = match std::fs::read(file_path) {
-            Ok(bytes) => {
-                if is_binary_content(&bytes) {
-                    None
-                } else {
-                    String::from_utf8(bytes).ok().map(|s| sanitize_utf8(&s))
+    fn get_content(&mut self, file_path: &Path) -> Option<&CachedFile> {
+        if !self.cache.contains(file_path) {
+            let result = match std::fs::read(file_path) {
+                Ok(bytes) => {
+                    if is_binary_content(&bytes) {
+                        None
+                    } else {
+                        String::from_utf8(bytes)
+                            .ok()
+                            .map(|s| CachedFile::new(sanitize_utf8(&s)))
+                    }
                 }
-            }
-            Err(_) => None,
-        };
+                Err(_) => None,
+            };
 
-        self.cache.put(file_path.to_path_buf(), result.clone());
-        result
+            if self.cache.len() == FILE_CACHE_CAPACITY {
+                self.evict_lru();
+            }
+            self.bytes += result.as_ref().map_or(0, CachedFile::retained_bytes);
+            self.cache.put(file_path.to_path_buf(), result);
+            while self.bytes > FILE_CACHE_BYTE_BUDGET {
+                self.evict_lru();
+            }
+            self.peak_bytes = self.peak_bytes.max(self.bytes);
+        }
+        self.cache.get(file_path).and_then(Option::as_ref)
+    }
+
+    fn evict_lru(&mut self) {
+        if let Some((_, old)) = self.cache.pop_lru() {
+            self.bytes -= old.as_ref().map_or(0, CachedFile::retained_bytes);
+            self.evictions += 1;
+        }
     }
 }
 
@@ -119,7 +175,7 @@ fn extract_node_content(
     }
 
     let file_path = repo_root.join(&node.properties.file_path);
-    let full_content = match cache.get_content(&file_path) {
+    let cached = match cache.get_content(&file_path) {
         Some(c) => c,
         None => return String::new(),
     };
@@ -132,20 +188,19 @@ fn extract_node_content(
 
     // For files, return the whole (truncated) content
     if node.label == NodeLabel::File {
-        return truncate_content(&full_content, max_len).to_string();
+        return truncate_content(&cached.text, max_len).to_string();
     }
 
     // For symbols with line ranges, extract the relevant slice
     let start = node.properties.start_line.unwrap_or(1).max(1) as usize;
     let end = node.properties.end_line.unwrap_or(u32::MAX) as usize;
 
-    let lines: Vec<&str> = full_content.lines().collect();
-    if start > lines.len() {
+    if start > cached.lines.len() {
         return String::new();
     }
 
     let slice_start = start - 1;
-    let slice_end = end.min(lines.len());
+    let slice_end = end.min(cached.lines.len());
     // Guard against malformed line ranges where end < start (e.g. corrupted
     // snapshot data or a future parser bug). `lines[4..3]` would panic with
     // "slice index starts at 4 but ends at 3", crashing CSV generation for
@@ -153,7 +208,18 @@ fn extract_node_content(
     if slice_start >= slice_end {
         return String::new();
     }
-    let extracted: String = lines[slice_start..slice_end].join("\n");
+    let mut extracted = String::new();
+    let mut first = true;
+    for &(from, to) in &cached.lines[slice_start..slice_end] {
+        if !first {
+            extracted.push('\n');
+        }
+        first = false;
+        extracted.push_str(&cached.text[from..to]);
+        if extracted.len() >= max_len {
+            break;
+        }
+    }
     truncate_content(&extracted, max_len).to_string()
 }
 
@@ -290,6 +356,12 @@ pub fn generate_node_csvs(
         generated.push(csv_path);
     }
 
+    tracing::info!(
+        cache_peak_bytes = cache.peak_bytes,
+        cache_evictions = cache.evictions,
+        cache_budget_bytes = FILE_CACHE_BYTE_BUDGET,
+        "CSV source cache complete"
+    );
     Ok(generated)
 }
 
@@ -378,6 +450,17 @@ mod tests {
         assert!(truncated.len() <= 8);
         // Should be valid UTF-8
         assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn cached_line_ranges_match_string_lines() {
+        for text in ["", "\n", "\nfirst\n", "α\r\nβ\n\r", "last\r"] {
+            let cached = CachedFile::new(text.to_string());
+            let indexed: Vec<&str> = cached.lines.iter()
+                .map(|&(start, end)| &cached.text[start..end])
+                .collect();
+            assert_eq!(indexed, text.lines().collect::<Vec<_>>());
+        }
     }
 
     #[test]
