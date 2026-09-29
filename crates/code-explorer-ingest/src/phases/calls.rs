@@ -398,7 +398,12 @@ fn build_ts_type_envs(
         scopes_by_file.insert(file.path.clone(), scope_ranges);
     }
 
-    (envs, callable_parameter_names, opaque_local_callable_names, scopes_by_file)
+    (
+        envs,
+        callable_parameter_names,
+        opaque_local_callable_names,
+        scopes_by_file,
+    )
 }
 
 fn build_ts_external_receiver_envs(
@@ -414,7 +419,10 @@ fn build_ts_external_receiver_envs(
 
         let fs_aliases = collect_ts_node_fs_aliases(&file.content);
         let mut env = TypeEnvironment::new();
-        let scope_ranges = scopes_by_file.get(&file.path).map(Vec::as_slice).unwrap_or(&[]);
+        let scope_ranges = scopes_by_file
+            .get(&file.path)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
 
         bind_ts_node_fs_stats_receivers(file, scope_ranges, &fs_aliases, &mut env);
         bind_ts_node_fs_dirent_arrays(file, scope_ranges, &fs_aliases, &mut env);
@@ -917,6 +925,7 @@ pub fn resolve_calls(
         .iter()
         .map(|f| (f.path.as_str(), f.content.as_str()))
         .collect();
+    let mut line_offsets: HashMap<String, Vec<usize>> = HashMap::new();
     // File texts stay on disk (`RustWorkspace` reads them once per file).
     // Copying every source into the workspace doubled the analyze heap.
     let mut csharp_lambda_types: HashMap<(String, String), String> = HashMap::new();
@@ -951,6 +960,69 @@ pub fn resolve_calls(
 
     for call in &extracted.calls {
         ctx.enable_cache(&call.file_path);
+        let evidence = call_site_evidence(call, &content_by_path, &mut line_offsets, graph);
+
+        if call.file_path.ends_with(".rs") {
+            let content = content_by_path
+                .get(call.file_path.as_str())
+                .copied()
+                .unwrap_or("");
+            let has_declared_receiver_type = call.receiver_type_name.is_some();
+            let typed = call.receiver_type_name.as_deref().map(|ty| {
+                rust_ws.decide_receiver_type_at(
+                    &call.file_path,
+                    content,
+                    ty,
+                    &call.called_name,
+                    symbol_table,
+                    call.start_byte,
+                )
+            });
+            let imported = if call.receiver_name.is_none() {
+                Some(rust_ws.decide_at(
+                    &call.file_path,
+                    content,
+                    "",
+                    &call.called_name,
+                    symbol_table,
+                    call.start_byte,
+                ))
+            } else {
+                None
+            };
+            if let Some(decision) = typed.or(imported) {
+                match decision {
+                    crate::phases::rust_qualified::RustCallDecision::Link { node_id, reason } => {
+                        let edge_id = format!("calls_rusttype_{}_{}", call.source_id, node_id);
+                        if graph.get_relationship(&edge_id).is_none() {
+                            graph.add_relationship(GraphRelationship {
+                                id: edge_id,
+                                source_id: call.source_id.clone(),
+                                target_id: node_id,
+                                rel_type: RelationshipType::Calls,
+                                confidence: 0.93,
+                                reason: format!("{reason} @ {evidence}"),
+                                step: None,
+                            });
+                            edge_count += 1;
+                        }
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Ambiguous { note } => {
+                        note_ambiguous_call(graph, &call.source_id, &call.file_path, &note);
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Unresolved => {
+                        // A declared receiver type or an explicit import rules out
+                        // a bare-name guess in a different file.
+                        if has_declared_receiver_type || call.receiver_name.is_none() {
+                            continue;
+                        }
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::NotAModule => {}
+                }
+            }
+        }
 
         // Qualified Rust paths (`crate::`, `self::`, `super::`, modules, use aliases,
         // path-dependencies). A path that does not land stays unresolved: no
@@ -980,7 +1052,7 @@ pub fn resolve_calls(
                                 target_id: node_id,
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.95,
-                                reason,
+                                reason: format!("{reason} @ {evidence}"),
                                 step: None,
                             });
                             edge_count += 1;
@@ -1018,7 +1090,10 @@ pub fn resolve_calls(
                                             target_id: node_id,
                                             rel_type: RelationshipType::Calls,
                                             confidence: ResolutionTier::SameFile.confidence(),
-                                            reason: ResolutionTier::SameFile.as_str().to_string(),
+                                            reason: format!(
+                                                "{} @ {evidence}",
+                                                ResolutionTier::SameFile.as_str()
+                                            ),
                                             step: None,
                                         });
                                         edge_count += 1;
@@ -1076,7 +1151,10 @@ pub fn resolve_calls(
                                     target_id: target_def.node_id.clone(),
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.85,
-                                    reason: format!("field-type:{}:{}", receiver, call.called_name),
+                                    reason: format!(
+                                        "field-type:{}:{} @ {evidence}",
+                                        receiver, call.called_name
+                                    ),
                                     step: None,
                                 });
                                 edge_count += 1;
@@ -1124,7 +1202,7 @@ pub fn resolve_calls(
                                         rel_type: RelationshipType::Calls,
                                         confidence: 0.80,
                                         reason: format!(
-                                            "static-call:{}::{}",
+                                            "static-call:{}::{} @ {evidence}",
                                             receiver, call.called_name
                                         ),
                                         step: None,
@@ -1167,7 +1245,10 @@ pub fn resolve_calls(
                                     target_id: target_def.node_id.clone(),
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.9,
-                                    reason: format!("lambda-param:{ty}:{}", call.called_name),
+                                    reason: format!(
+                                        "lambda-param:{ty}:{} @ {evidence}",
+                                        call.called_name
+                                    ),
                                     step: None,
                                 });
                                 edge_count += 1;
@@ -1230,7 +1311,7 @@ pub fn resolve_calls(
                         target_id: target_def.node_id.clone(),
                         rel_type: RelationshipType::Calls,
                         confidence: 0.94,
-                        reason,
+                        reason: format!("{reason} @ {evidence}"),
                         step: None,
                     });
                     edge_count += 1;
@@ -1271,7 +1352,7 @@ pub fn resolve_calls(
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.90,
                                 reason: format!(
-                                    "receiver-type:{}:{}:{}",
+                                    "receiver-type:{}:{}:{} @ {evidence}",
                                     receiver_root, type_name, call.called_name
                                 ),
                                 step: None,
@@ -1315,7 +1396,7 @@ pub fn resolve_calls(
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.88,
                                 reason: format!(
-                                    "static-call-ts:{}::{}",
+                                    "static-call-ts:{}::{} @ {evidence}",
                                     receiver_root, call.called_name
                                 ),
                                 step: None,
@@ -1366,7 +1447,7 @@ pub fn resolve_calls(
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.93,
                                     reason: format!(
-                                        "module-alias:{}:{}",
+                                        "module-alias:{}:{} @ {evidence}",
                                         receiver_root, call.called_name
                                     ),
                                     step: None,
@@ -1412,7 +1493,7 @@ pub fn resolve_calls(
                     target_id: target_def.node_id.clone(),
                     rel_type: RelationshipType::Calls,
                     confidence: 0.89,
-                    reason,
+                    reason: format!("{reason} @ {evidence}"),
                     step: None,
                 });
                 edge_count += 1;
@@ -1450,7 +1531,7 @@ pub fn resolve_calls(
                         target_id: target_def.node_id.clone(),
                         rel_type: RelationshipType::Calls,
                         confidence,
-                        reason,
+                        reason: format!("{reason} @ {evidence}"),
                         step: None,
                     });
                     edge_count += 1;
@@ -1465,6 +1546,37 @@ pub fn resolve_calls(
         receiver_resolved
     );
     Ok(())
+}
+
+fn call_site_evidence(
+    call: &ExtractedCall,
+    content_by_path: &HashMap<&str, &str>,
+    line_offsets: &mut HashMap<String, Vec<usize>>,
+    graph: &KnowledgeGraph,
+) -> String {
+    let line = call
+        .start_byte
+        .and_then(|byte| {
+            content_by_path.get(call.file_path.as_str()).map(|content| {
+                if !line_offsets.contains_key(call.file_path.as_str()) {
+                    let mut starts = vec![0];
+                    for (index, &ch) in content.as_bytes().iter().enumerate() {
+                        if ch == b'\n' {
+                            starts.push(index + 1);
+                        }
+                    }
+                    line_offsets.insert(call.file_path.clone(), starts);
+                }
+                line_offsets[call.file_path.as_str()].partition_point(|&start| start <= byte)
+            })
+        })
+        .or_else(|| {
+            graph
+                .get_node(&call.source_id)
+                .and_then(|node| node.properties.start_line.map(|line| line as usize))
+        })
+        .unwrap_or(1);
+    format!("{}:{line}", call.file_path)
 }
 
 /// Safety net: re-point any `CALLS` edge whose `source_id` node doesn't exist to the
@@ -1492,19 +1604,15 @@ pub fn repoint_orphan_call_sources(graph: &mut KnowledgeGraph) -> usize {
 
     let mut fixed = 0;
     for (old_id, target, file_id) in fixes {
-        graph.remove_relationship(&old_id);
+        let Some(mut edge) = graph.remove_relationship(&old_id) else {
+            continue;
+        };
         if let Some(fid) = file_id {
             let new_id = format!("calls_{fid}_{target}");
             if graph.get_relationship(&new_id).is_none() {
-                graph.add_relationship(GraphRelationship {
-                    id: new_id,
-                    source_id: fid,
-                    target_id: target,
-                    rel_type: RelationshipType::Calls,
-                    confidence: 1.0,
-                    reason: "repointed_orphan_source".to_string(),
-                    step: None,
-                });
+                edge.id = new_id;
+                edge.source_id = fid;
+                graph.add_relationship(edge);
             }
         }
         fixed += 1;
@@ -2198,7 +2306,10 @@ fn build_ts_bound_method_aliases(
             continue;
         };
 
-        let scope_ranges = scopes_by_file.get(&file.path).map(Vec::as_slice).unwrap_or(&[]);
+        let scope_ranges = scopes_by_file
+            .get(&file.path)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         for cap in TS_BOUND_METHOD_ALIAS_RE.captures_iter(&file.content) {
             let Some(full_match) = cap.get(0) else {
                 continue;
@@ -3217,8 +3328,8 @@ mod orphan_source_tests {
             source_id: src.to_string(),
             target_id: tgt.to_string(),
             rel_type: RelationshipType::Calls,
-            confidence: 1.0,
-            reason: "test".to_string(),
+            confidence: 0.8,
+            reason: "test @ x.cpp:4".to_string(),
             step: None,
         };
         // Orphan: source node `Method:x.cpp:save` does not exist.
@@ -3244,6 +3355,8 @@ mod orphan_source_tests {
             r.rel_type == RelationshipType::Calls
                 && r.source_id == "File:x.cpp"
                 && r.target_id == "Function:x.cpp:callee"
+                && r.confidence == 0.8
+                && r.reason == "test @ x.cpp:4"
         }));
         // No CALLS edge has a missing source anymore.
         let ids: std::collections::HashSet<&str> =

@@ -19,7 +19,9 @@ pub const QUERIES: &str = r#"
 
 ; Calls
 (call_expression function: (identifier) @call.name) @call
-(call_expression function: (field_expression field: (field_identifier) @call.name)) @call
+(call_expression function: (field_expression
+    value: (_) @call.object
+    field: (field_identifier) @call.name)) @call
 ; Qualified path: keep the qualifier (`crate::mod`, `self`, `super`, alias) so
 ; resolution does not fall back to a bare homonym.
 (call_expression function: (scoped_identifier

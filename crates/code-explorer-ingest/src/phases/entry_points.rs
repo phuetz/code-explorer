@@ -1,6 +1,6 @@
 //! Registrations and dispatch arms whose handlers are inline rather than named AST functions.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use code_explorer_core::graph::types::{
     GraphNode, GraphRelationship, NodeLabel, NodeProperties, RelationshipType,
@@ -308,18 +308,27 @@ fn link_calls(
     body: &[&str],
     symbols: &HashMap<String, Vec<String>>,
 ) {
-    let names: HashSet<String> = CALL
-        .captures_iter(&body.join("\n"))
-        .map(|cap| cap[1].to_string())
-        .collect();
-    for name in names {
+    let Some(node) = graph.get_node(source) else {
+        return;
+    };
+    let path = node.properties.file_path.clone();
+    let start_line = node.properties.start_line.unwrap_or(1);
+    let mut names = HashMap::new();
+    for (offset, line) in body.iter().enumerate() {
+        for cap in CALL.captures_iter(line) {
+            names
+                .entry(cap[1].to_string())
+                .or_insert(start_line + offset as u32);
+        }
+    }
+    for (name, line) in names {
         link_named(
             graph,
             source,
             &name,
             symbols,
             RelationshipType::Calls,
-            "inline handler call",
+            &format!("inline handler call @ {path}:{line}"),
         );
     }
 }
@@ -420,9 +429,10 @@ mod tests {
             .find(|n| n.properties.name == "GET /api/admin/import/browse")
             .unwrap();
         assert_eq!(browse.properties.start_line, Some(2));
-        assert!(graph
-            .iter_relationships()
-            .any(|r| r.source_id == browse.id && r.target_id == "method:resolve"));
+        assert!(graph.iter_relationships().any(|r| r.source_id == browse.id
+            && r.target_id == "method:resolve"
+            && r.reason.contains("Program.cs:4")
+            && r.confidence > 0.0));
         assert!(graph
             .iter_relationships()
             .any(|r| r.source_id == browse.id && r.rel_type == RelationshipType::DependsOn));

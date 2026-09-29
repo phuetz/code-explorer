@@ -23,7 +23,8 @@ pub struct PipelineResult {
     /// Files actually passed to tree-sitter in this run.
     pub parsed_files: usize,
     pub incremental_fallback: Option<String>,
-    pub local_enrichments: std::collections::BTreeMap<String, phases::local_enrichment::LocalPhaseStats>,
+    pub local_enrichments:
+        std::collections::BTreeMap<String, phases::local_enrichment::LocalPhaseStats>,
     pub repo_path: String,
     pub total_file_count: usize,
     pub community_count: usize,
@@ -124,8 +125,7 @@ pub async fn run_pipeline(
     let doc_stats = if index_docs && !doc_entries.is_empty() {
         send_progress(PipelinePhase::Structure, 100.0, "Indexing documents...");
         phases::docs::load_document_contents(repo_path, &mut doc_entries);
-        let known_files: HashSet<String> =
-            file_entries.iter().map(|f| f.path.clone()).collect();
+        let known_files: HashSet<String> = file_entries.iter().map(|f| f.path.clone()).collect();
         let stats = phases::docs::create_document_nodes(&mut graph, &doc_entries, &known_files);
         tracing::info!(
             phase = "docs",
@@ -147,7 +147,9 @@ pub async fn run_pipeline(
     send_progress(PipelinePhase::Parsing, 0.0, "Parsing files...");
     let phase_start = Instant::now();
     let (extracted, parsed_files, incremental_fallback) = phases::parsing::parse_files_cached(
-        &mut graph, &file_entries, &repo_path.join(".codeexplorer"),
+        &mut graph,
+        &file_entries,
+        &repo_path.join(".codeexplorer"),
         options.incremental && !options.force,
     )?;
 
@@ -166,18 +168,28 @@ pub async fn run_pipeline(
     // type, which Go's rules make unambiguous. Cheap regex scan; only floating methods.
     if file_entries.iter().any(|f| f.path.ends_with(".go")) {
         let linked = phases::parsing::reconcile_cross_file_methods(&mut graph, &file_entries);
-        tracing::debug!(phase = "go_reconcile", linked, "Cross-file Go methods linked");
+        tracing::debug!(
+            phase = "go_reconcile",
+            linked,
+            "Cross-file Go methods linked"
+        );
     }
 
     // Phase 2e: C++ out-of-class method nesting (`void User::save()` in a .cpp links to
     // the User class declared in a header). Regex scan; only floating methods, endpoints
     // verified, so no dangling/duplicate edges.
-    if file_entries
-        .iter()
-        .any(|f| matches!(f.path.rsplit_once('.').map(|(_, e)| e), Some("cpp" | "cc" | "cxx" | "hpp" | "hh")))
-    {
+    if file_entries.iter().any(|f| {
+        matches!(
+            f.path.rsplit_once('.').map(|(_, e)| e),
+            Some("cpp" | "cc" | "cxx" | "hpp" | "hh")
+        )
+    }) {
         let linked = phases::parsing::reconcile_out_of_class_methods(&mut graph, &file_entries);
-        tracing::debug!(phase = "cpp_reconcile", linked, "C++ out-of-class methods linked");
+        tracing::debug!(
+            phase = "cpp_reconcile",
+            linked,
+            "C++ out-of-class methods linked"
+        );
     }
 
     // Build symbol table from graph
@@ -286,10 +298,15 @@ pub async fn run_pipeline(
     // neighbors, as well as neighbors stored with the previous artifacts.
     let phase_start = Instant::now();
     let mut local_enrichment = phases::local_enrichment::LocalEnrichment::new(
-        &repo_path.join(".codeexplorer"), &file_entries, options.incremental && !options.force,
+        &repo_path.join(".codeexplorer"),
+        &file_entries,
+        options.incremental && !options.force,
     );
     let (_, markers) = local_enrichment.run(
-        "todos", &mut graph, &file_entries, phases::todos::scan_todos,
+        "todos",
+        &mut graph,
+        &file_entries,
+        phases::todos::scan_todos,
     );
     let todo_stats = phases::todos::TodoStats { markers };
     let duration = phase_start.elapsed();
@@ -353,9 +370,15 @@ pub async fn run_pipeline(
     // files (owned by aspnet_mvc).
     let phase_start = Instant::now();
     let (per_file, endpoints) = local_enrichment.run(
-        "api_surface", &mut graph, &file_entries, phases::api_surface::extract_api_surface,
+        "api_surface",
+        &mut graph,
+        &file_entries,
+        phases::api_surface::extract_api_surface,
     );
-    let mut api_stats = phases::api_surface::ApiSurfaceStats { endpoints, ..Default::default() };
+    let mut api_stats = phases::api_surface::ApiSurfaceStats {
+        endpoints,
+        ..Default::default()
+    };
     for stats in per_file {
         api_stats.express_next += stats.express_next;
         api_stats.next_app_router += stats.next_app_router;
@@ -385,8 +408,12 @@ pub async fn run_pipeline(
     // These registrations are absent from the ordinary function AST.
     let phase_start = Instant::now();
     let entry_stats = phases::entry_points::extract_entry_points(&mut graph, &file_entries);
-    tracing::info!(routes = entry_stats.routes, registrations = entry_stats.registrations,
-        commands = entry_stats.commands, "Entry points linked");
+    tracing::info!(
+        routes = entry_stats.routes,
+        registrations = entry_stats.registrations,
+        commands = entry_stats.commands,
+        "Entry points linked"
+    );
     phase_timings.push(PhaseTiming {
         name: "entry_points".into(),
         duration_ms: phase_start.elapsed().as_millis() as u64,
@@ -746,6 +773,10 @@ mod integration_tests {
     use std::fs;
     use std::path::PathBuf;
 
+    fn reason_tier(reason: &str) -> &str {
+        reason.split(" @ ").next().unwrap_or(reason)
+    }
+
     fn create_test_dir() -> PathBuf {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -907,7 +938,7 @@ module.exports = { greet, processData };
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
         assert!(call.confidence >= 0.8);
 
         cleanup(&dir);
@@ -987,7 +1018,7 @@ export function load() {
             })
             .expect("runtime named imports should still resolve");
 
-        assert_eq!(runtime_call.reason, "named-import");
+        assert_eq!(reason_tier(&runtime_call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1066,7 +1097,7 @@ export function load() {
             })
             .expect("runtime re-exported imports should still resolve");
 
-        assert_eq!(runtime_call.reason, "named-import");
+        assert_eq!(reason_tier(&runtime_call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1104,7 +1135,9 @@ export class ServiceInstaller {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -1182,10 +1215,12 @@ export async function save() {
             helper_target.properties.file_path,
             helper_call.reason
         );
-        assert_eq!(helper_call.reason, "named-import");
+        assert_eq!(reason_tier(&helper_call.reason), "named-import");
 
         let bad_import_scoped_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "import-scoped" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "import-scoped"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -1259,7 +1294,9 @@ export function createPipelineCommand(): Command {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -1314,7 +1351,9 @@ export class WhatsAppChannel {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -1383,7 +1422,7 @@ export class WhatsAppChannel {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1439,7 +1478,7 @@ export class WhatsAppChannel {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1499,7 +1538,7 @@ export class WhatsAppChannel {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1552,7 +1591,7 @@ export class WhatsAppChannel {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "module-alias:api:foo");
+        assert_eq!(reason_tier(&call.reason), "module-alias:api:foo");
 
         cleanup(&dir);
     }
@@ -1607,7 +1646,7 @@ export class WhatsAppChannel {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -1708,7 +1747,7 @@ export function load() {
                 && target.properties.name == "default"
         });
         assert!(
-            call_to_default_function.is_some_and(|rel| rel.reason == "named-import"),
+            call_to_default_function.is_some_and(|rel| reason_tier(&rel.reason) == "named-import"),
             "default function import should resolve via named-import"
         );
 
@@ -1831,7 +1870,10 @@ export function load() {
                     && target.properties.name == "hiddenTask"
             })
             .expect("default object member should resolve to aliased local function");
-        assert_eq!(run_task_call.reason, "default-object:apiDirect:runTask");
+        assert_eq!(
+            reason_tier(&run_task_call.reason),
+            "default-object:apiDirect:runTask"
+        );
 
         let direct_call = result
             .graph
@@ -1851,7 +1893,10 @@ export function load() {
                     && target.properties.name == "directTask"
             })
             .expect("barrel-exported default object should resolve shorthand member");
-        assert_eq!(direct_call.reason, "default-object:api:directTask");
+        assert_eq!(
+            reason_tier(&direct_call.reason),
+            "default-object:api:directTask"
+        );
 
         let static_call = result
             .graph
@@ -1872,7 +1917,7 @@ export function load() {
             })
             .expect("default object class member should resolve static method");
         assert_eq!(
-            static_call.reason,
+            reason_tier(&static_call.reason),
             "default-object-static:api:Service::create"
         );
 
@@ -1953,7 +1998,10 @@ export function load() {
                     && target.properties.name == "hiddenTask"
             })
             .expect("named object alias member should resolve to aliased local function");
-        assert_eq!(run_task_call.reason, "named-object:api:runTask");
+        assert_eq!(
+            reason_tier(&run_task_call.reason),
+            "named-object:api:runTask"
+        );
 
         let direct_call = result
             .graph
@@ -1973,7 +2021,10 @@ export function load() {
                     && target.properties.name == "directTask"
             })
             .expect("named object shorthand member should resolve");
-        assert_eq!(direct_call.reason, "named-object:api:directTask");
+        assert_eq!(
+            reason_tier(&direct_call.reason),
+            "named-object:api:directTask"
+        );
 
         let inline_call = result
             .graph
@@ -1993,7 +2044,7 @@ export function load() {
                     && target.properties.name == "inline"
             })
             .expect("named object inline function member should resolve");
-        assert_eq!(inline_call.reason, "named-object:api:inline");
+        assert_eq!(reason_tier(&inline_call.reason), "named-object:api:inline");
 
         let static_call = result
             .graph
@@ -2014,7 +2065,7 @@ export function load() {
             })
             .expect("named object class member should resolve static method");
         assert_eq!(
-            static_call.reason,
+            reason_tier(&static_call.reason),
             "named-object-static:api:Service::create"
         );
 
@@ -2078,7 +2129,10 @@ export function load() {
                     && target.properties.name == "hiddenTask"
             })
             .expect("wildcard js shim should expose named object aliased member");
-        assert_eq!(run_task_call.reason, "named-object:api:runTask");
+        assert_eq!(
+            reason_tier(&run_task_call.reason),
+            "named-object:api:runTask"
+        );
 
         let direct_call = result
             .graph
@@ -2098,7 +2152,10 @@ export function load() {
                     && target.properties.name == "directTask"
             })
             .expect("wildcard js shim should expose named object shorthand member");
-        assert_eq!(direct_call.reason, "named-object:api:directTask");
+        assert_eq!(
+            reason_tier(&direct_call.reason),
+            "named-object:api:directTask"
+        );
 
         cleanup(&dir);
     }
@@ -2171,7 +2228,10 @@ export function load() {
                     && target.properties.name == "hiddenTask"
             })
             .expect("separate named object export should expose aliased member");
-        assert_eq!(run_task_call.reason, "named-object:publicApi:runTask");
+        assert_eq!(
+            reason_tier(&run_task_call.reason),
+            "named-object:publicApi:runTask"
+        );
 
         let default_call = result
             .graph
@@ -2191,7 +2251,10 @@ export function load() {
                     && target.properties.name == "directTask"
             })
             .expect("separate default object export should expose shorthand member");
-        assert_eq!(default_call.reason, "default-object:defaultApi:directTask");
+        assert_eq!(
+            reason_tier(&default_call.reason),
+            "default-object:defaultApi:directTask"
+        );
 
         let static_call = result
             .graph
@@ -2212,7 +2275,7 @@ export function load() {
             })
             .expect("separate named object export should expose static class member");
         assert_eq!(
-            static_call.reason,
+            reason_tier(&static_call.reason),
             "named-object-static:publicApi:Service::create"
         );
 
@@ -2274,7 +2337,7 @@ export function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -2389,7 +2452,7 @@ export function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         let bad_alias_call = result.graph.iter_relationships().find(|rel| {
             if !matches!(rel.rel_type, RelationshipType::Calls) {
@@ -2461,7 +2524,7 @@ export function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         let bad_alias_call = result.graph.iter_relationships().find(|rel| {
             if !matches!(rel.rel_type, RelationshipType::Calls) {
@@ -2529,7 +2592,7 @@ export function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
         assert!(call.confidence >= 0.8);
 
         cleanup(&dir);
@@ -2586,7 +2649,7 @@ export function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -2662,7 +2725,7 @@ export function load() {
                 target.properties.file_path,
                 call.reason
             );
-            assert_eq!(call.reason, "named-import");
+            assert_eq!(reason_tier(&call.reason), "named-import");
         }
 
         cleanup(&dir);
@@ -2736,7 +2799,7 @@ export async function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -2777,7 +2840,9 @@ export function dispose() {
         .unwrap();
 
         let bad_import_scoped_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "import-scoped" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "import-scoped"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -2876,7 +2941,9 @@ export async function handleTool(target: { listener: FleetListener }, stream: bo
         }
 
         let bad_import_scoped_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "import-scoped" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "import-scoped"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -3055,7 +3122,7 @@ export function load() {
                 target.properties.file_path,
                 call.reason
             );
-            assert_eq!(call.reason, "named-import");
+            assert_eq!(reason_tier(&call.reason), "named-import");
         }
 
         cleanup(&dir);
@@ -3135,7 +3202,7 @@ export async function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         let settings_call = result
             .graph
@@ -3164,7 +3231,7 @@ export async function load() {
             settings_target.properties.file_path,
             settings_call.reason
         );
-        assert_eq!(settings_call.reason, "named-import");
+        assert_eq!(reason_tier(&settings_call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -3236,7 +3303,7 @@ export async function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -3309,7 +3376,7 @@ export async function load() {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -3517,7 +3584,7 @@ export const Panel = React.memo(function Panel() {
             call.source_id, panel.id,
             "CALLS source should point at the real Panel node"
         );
-        assert_eq!(call.reason, "same-file");
+        assert_eq!(reason_tier(&call.reason), "same-file");
 
         cleanup(&dir);
     }
@@ -3839,7 +3906,9 @@ export const tools = {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -3892,7 +3961,9 @@ export function formatMap(map: SemanticMap) {
         .unwrap();
 
         let bad_import_scoped_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "import-scoped" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "import-scoped"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -3974,10 +4045,15 @@ export function stop(server: { close(): void }) {
                     && target.properties.name == "warn"
             })
             .expect("named object member should still resolve before fuzzy fallback");
-        assert_eq!(logger_warn_call.reason, "named-object:logger:warn");
+        assert_eq!(
+            reason_tier(&logger_warn_call.reason),
+            "named-object:logger:warn"
+        );
 
         let bad_import_scoped_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "import-scoped" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "import-scoped"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4037,7 +4113,9 @@ export function collect(values: string[]) {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(target) = result.graph.get_node(&rel.target_id) else {
@@ -4116,7 +4194,9 @@ export function validate(value: string): Result<string> {
         );
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4181,7 +4261,9 @@ export function handleData(message: string) {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4232,7 +4314,9 @@ export function collect(elements: string[]) {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4291,7 +4375,9 @@ export class Store {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4345,7 +4431,9 @@ export async function info(filePath: string) {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4411,7 +4499,9 @@ export async function list(dir: string) {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(target) = result.graph.get_node(&rel.target_id) else {
@@ -4492,7 +4582,9 @@ export const provider = {
         .unwrap();
 
         let bad_same_file_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4550,7 +4642,9 @@ export function createUpdateCommand(): Command {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4610,7 +4704,9 @@ export async function complete() {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4662,7 +4758,9 @@ export async function complete() {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4715,7 +4813,9 @@ export async function complete() {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4791,7 +4891,7 @@ export function runBefore() {
 
         let target = result.graph.get_node(&call.target_id).unwrap();
         assert_eq!(target.properties.file_path, "middleware/types.ts");
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -4830,7 +4930,9 @@ export function compressContext(estimateTokens: (text: string) => number) {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4903,7 +5005,9 @@ export class Queue {
         .unwrap();
 
         let bad_executor_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4923,7 +5027,9 @@ export class Queue {
         );
 
         let member_property_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "same-file" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "same-file"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -4991,7 +5097,7 @@ export class Queue {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         cleanup(&dir);
     }
@@ -5046,7 +5152,7 @@ export class Queue {
             target.properties.file_path,
             call.reason
         );
-        assert_eq!(call.reason, "named-import");
+        assert_eq!(reason_tier(&call.reason), "named-import");
 
         let bad_alias_call = result.graph.iter_relationships().find(|rel| {
             if !matches!(rel.rel_type, RelationshipType::Calls) {
@@ -5095,7 +5201,9 @@ export class Queue {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -5147,7 +5255,9 @@ export class Queue {
         .unwrap();
 
         let bad_global_call = result.graph.iter_relationships().find(|rel| {
-            if !matches!(rel.rel_type, RelationshipType::Calls) || rel.reason != "global" {
+            if !matches!(rel.rel_type, RelationshipType::Calls)
+                || reason_tier(&rel.reason) != "global"
+            {
                 return false;
             }
             let Some(source) = result.graph.get_node(&rel.source_id) else {
@@ -5706,7 +5816,11 @@ class Dog(Animal):
         cleanup(&dir);
     }
 
-    fn calls_from_to(graph: &code_explorer_core::graph::KnowledgeGraph, source: &str, target: &str) -> Vec<String> {
+    fn calls_from_to(
+        graph: &code_explorer_core::graph::KnowledgeGraph,
+        source: &str,
+        target: &str,
+    ) -> Vec<String> {
         graph
             .iter_relationships()
             .filter_map(|rel| {
@@ -5716,7 +5830,10 @@ class Dog(Animal):
                 let src = graph.get_node(&rel.source_id)?;
                 let dst = graph.get_node(&rel.target_id)?;
                 if src.properties.name == source && dst.properties.name == target {
-                    Some(format!("{} -> {} [{}]", src.properties.file_path, dst.properties.file_path, rel.reason))
+                    Some(format!(
+                        "{} -> {} [{}]",
+                        src.properties.file_path, dst.properties.file_path, rel.reason
+                    ))
                 } else {
                     None
                 }
@@ -5745,12 +5862,12 @@ pub fn bare_reinject() { reinject(); }
 "#,
         )
         .unwrap();
-        fs::write(dir.join("src/transforms/mod.rs"), "pub mod gate;\npub mod live;\n").unwrap();
         fs::write(
-            dir.join("src/transforms/gate.rs"),
-            "pub fn reinject() {}\n",
+            dir.join("src/transforms/mod.rs"),
+            "pub mod gate;\npub mod live;\n",
         )
         .unwrap();
+        fs::write(dir.join("src/transforms/gate.rs"), "pub fn reinject() {}\n").unwrap();
         fs::write(
             dir.join("src/transforms/live.rs"),
             r#"
@@ -5773,7 +5890,9 @@ pub fn via_alias() {
         let graph = &result.graph;
         let linked = calls_from_to(graph, "dispatch", "reinject");
         assert!(
-            linked.iter().any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:")),
+            linked
+                .iter()
+                .any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:")),
             "crate:: path should link gate, got {linked:?}"
         );
         assert!(
@@ -5787,7 +5906,9 @@ pub fn via_alias() {
         );
         let via_alias = calls_from_to(graph, "via_alias", "reinject");
         assert!(
-            via_alias.iter().any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:g::")),
+            via_alias
+                .iter()
+                .any(|e| e.contains("transforms/gate.rs") && e.contains("rust-path:g::")),
             "use alias should link gate, got {via_alias:?}"
         );
         let ambiguous = calls_from_to(graph, "ambiguous_call", "run");
@@ -5795,7 +5916,9 @@ pub fn via_alias() {
             ambiguous.is_empty(),
             "duplicate module files must not be linked: {ambiguous:?}"
         );
-        let note = graph.iter_nodes().find(|n| n.properties.name == "ambiguous_call");
+        let note = graph
+            .iter_nodes()
+            .find(|n| n.properties.name == "ambiguous_call");
         let notes = note.and_then(|n| n.properties.ambiguous_calls.as_ref());
         assert!(
             notes.is_some_and(|n| n.iter().any(|s| s.contains("2 candidates"))),
@@ -5931,7 +6054,9 @@ pub fn via_mod() { crate::child::build(); }
             .expect("pipeline");
         let linked = calls_from_to(&result.graph, "boot", "reinject");
         assert!(
-            linked.iter().any(|e| e.contains("crates/core/src/transforms/gate.rs")),
+            linked
+                .iter()
+                .any(|e| e.contains("crates/core/src/transforms/gate.rs")),
             "path dependency should link the dependency crate, got {linked:?}"
         );
         assert!(
@@ -5991,36 +6116,56 @@ app.MapGet("/admin", (AnswerCache answers, Other other) => {
         // Source of a top-level lambda is the file node, whose name is the file name.
         let clear_named = graph
             .iter_relationships()
-            .filter(|rel| rel.rel_type == code_explorer_core::graph::RelationshipType::Calls && rel.reason.starts_with("lambda-param:"))
+            .filter(|rel| {
+                rel.rel_type == code_explorer_core::graph::RelationshipType::Calls
+                    && rel.reason.starts_with("lambda-param:")
+            })
             .filter_map(|rel| {
                 let src = graph.get_node(&rel.source_id)?;
                 let dst = graph.get_node(&rel.target_id)?;
-                Some(format!("{} -> {} ({}) [{}]", src.properties.name, dst.properties.name, dst.properties.file_path, rel.reason))
+                Some(format!(
+                    "{} -> {} ({}) [{}]",
+                    src.properties.name, dst.properties.name, dst.properties.file_path, rel.reason
+                ))
             })
             .collect::<Vec<_>>();
         assert!(
-            clear_named.iter().any(|e| e.contains("AnswerCache.cs") && e.contains("Clear") && e.contains("lambda-param:AnswerCache:")),
+            clear_named.iter().any(|e| e.contains("AnswerCache.cs")
+                && e.contains("Clear")
+                && e.contains("lambda-param:AnswerCache:")),
             "answerCache.Clear should link AnswerCache, got {clear_named:?} file-callers {clear:?}"
         );
         assert!(
-            clear_named.iter().any(|e| e.contains("Other.cs") && e.contains("lambda-param:Other:Clear")),
+            clear_named
+                .iter()
+                .any(|e| e.contains("Other.cs") && e.contains("lambda-param:Other:Clear")),
             "other.Clear should link Other, got {clear_named:?}"
         );
         assert!(
-            clear_named.iter().any(|e| e.contains("InvalidateUser") && e.contains("AnswerCache.cs")),
+            clear_named
+                .iter()
+                .any(|e| e.contains("InvalidateUser") && e.contains("AnswerCache.cs")),
             "InvalidateUser should link AnswerCache, got {clear_named:?}"
         );
-        let widget_links = clear_named.iter().filter(|e| e.contains("Run")).collect::<Vec<_>>();
+        let widget_links = clear_named
+            .iter()
+            .filter(|e| e.contains("Run"))
+            .collect::<Vec<_>>();
         assert!(
             widget_links.is_empty(),
             "two Widget.Run must not be linked: {widget_links:?}"
         );
         let declared = graph.iter_nodes().any(|n| {
             n.properties.ambiguous_calls.as_ref().is_some_and(|notes| {
-                notes.iter().any(|s| s.contains("widget.Run") && s.contains("2 candidates"))
+                notes
+                    .iter()
+                    .any(|s| s.contains("widget.Run") && s.contains("2 candidates"))
             })
         });
-        assert!(declared, "Widget.Run ambiguity should be declared on the caller");
+        assert!(
+            declared,
+            "Widget.Run ambiguity should be declared on the caller"
+        );
         cleanup(&dir);
     }
 }
