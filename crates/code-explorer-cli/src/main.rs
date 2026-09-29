@@ -135,6 +135,15 @@ enum Commands {
         /// Maximum number of results
         #[arg(short, long, default_value = "10")]
         limit: usize,
+        /// Source file extension, for example rs, ts, or cs.
+        #[arg(long)]
+        file_type: Option<String>,
+        /// One-based result page. Each page contains at most --limit results.
+        #[arg(long, default_value = "1")]
+        page: usize,
+        /// One result per line, with a short source excerpt.
+        #[arg(long)]
+        compact: bool,
         /// Post-process BM25 top-20 with an LLM reranker. Requires
         /// ~/.codeexplorer/chat-config.json. Returns only `limit` results.
         #[arg(long, default_value = "false")]
@@ -593,9 +602,24 @@ async fn async_main() -> anyhow::Result<()> {
             query,
             repo,
             limit,
+            file_type,
+            page,
+            compact,
             rerank,
             hybrid,
-        } => commands::query_cmd::run(&query, repo.as_deref(), limit, rerank, hybrid).await,
+        } => {
+            commands::query_cmd::run(
+                &query,
+                repo.as_deref(),
+                limit,
+                file_type.as_deref(),
+                page,
+                compact,
+                rerank,
+                hybrid,
+            )
+            .await
+        }
         Commands::Embed {
             model,
             tokenizer,

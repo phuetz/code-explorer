@@ -141,6 +141,18 @@ impl FtsIndex {
         table_filter: Option<&str>,
         limit: usize,
     ) -> Vec<FtsResult> {
+        self.search_with_file_type(graph, query, table_filter, None, limit)
+    }
+
+    /// Search with an optional source extension (for example `rs`, `.ts`, `cs`).
+    pub fn search_with_file_type(
+        &self,
+        graph: &KnowledgeGraph,
+        query: &str,
+        table_filter: Option<&str>,
+        file_type: Option<&str>,
+        limit: usize,
+    ) -> Vec<FtsResult> {
         let query_tokens = tokenize(query);
         if query_tokens.is_empty() {
             return Vec::new();
@@ -182,15 +194,33 @@ impl FtsIndex {
                         return None;
                     }
                 }
+                if let Some(extension) = file_type {
+                    let extension = extension.trim_start_matches('.');
+                    if extension.is_empty()
+                        || !node
+                            .properties
+                            .file_path
+                            .to_ascii_lowercase()
+                            .ends_with(&format!(".{}", extension.to_ascii_lowercase()))
+                    {
+                        return None;
+                    }
+                }
                 let weighted_score = score
                     * path_weight(&node.properties.file_path)
+                    * test_intent_weight(&node.properties.file_path, &query_tokens)
                     * label_weight(node.label)
                     * entry_intent_weight(node, &query_tokens);
                 Some((node_id, weighted_score, node))
             })
             .collect();
 
-        weighted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        weighted.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.2.properties.file_path.cmp(&b.2.properties.file_path))
+                .then_with(|| a.0.cmp(b.0))
+        });
 
         weighted
             .into_iter()
@@ -210,16 +240,35 @@ impl FtsIndex {
 
 /// Favor a declared CLI branch when the question names that command and asks
 /// about CLI dispatch. Generic function names can otherwise bury the entry.
-fn entry_intent_weight(node: &code_explorer_core::graph::types::GraphNode, tokens: &[String]) -> f64 {
+fn entry_intent_weight(
+    node: &code_explorer_core::graph::types::GraphNode,
+    tokens: &[String],
+) -> f64 {
     if node.label != NodeLabel::CodeElement
-        || !matches!(node.properties.framework.as_deref(), Some("clap" | "commander"))
-        || !tokens.iter().any(|token| matches!(token.as_str(), "cli" | "commande" | "command" | "dispatch" | "dispatché")) {
+        || !matches!(
+            node.properties.framework.as_deref(),
+            Some("clap" | "commander")
+        )
+        || !tokens.iter().any(|token| {
+            matches!(
+                token.as_str(),
+                "cli" | "commande" | "command" | "dispatch" | "dispatché"
+            )
+        })
+    {
         return 1.0;
     }
-    let command = node.properties.name.strip_prefix("Commands::")
+    let command = node
+        .properties
+        .name
+        .strip_prefix("Commands::")
         .unwrap_or(&node.properties.name);
     let parts = tokenize(command);
-    if !parts.is_empty() && parts.iter().all(|part| tokens.contains(part)) { 20.0 } else { 1.0 }
+    if !parts.is_empty() && parts.iter().all(|part| tokens.contains(part)) {
+        20.0
+    } else {
+        1.0
+    }
 }
 
 /// Deprioritize minified assets and third-party library bundles so business
@@ -283,7 +332,37 @@ pub fn path_weight(file_path: &str) -> f64 {
         return 0.1;
     }
 
+    if is_test_file(&lc) {
+        return 0.3;
+    }
+
     1.0
+}
+
+fn is_test_file(path: &str) -> bool {
+    path.split(['/', '\\'])
+        .any(|part| matches!(part, "test" | "tests" | "__tests__"))
+        || path.ends_with("tests.cs")
+        || path.ends_with("test.cs")
+        || path.ends_with("_test.rs")
+        || path.ends_with("_test.go")
+        || path.contains(".test.")
+        || path.contains(".spec.")
+}
+
+fn test_intent_weight(path: &str, tokens: &[String]) -> f64 {
+    if is_test_file(&path.to_ascii_lowercase())
+        && tokens.iter().any(|token| {
+            matches!(
+                token.as_str(),
+                "test" | "tests" | "testing" | "tested" | "spec" | "specs"
+            )
+        })
+    {
+        4.0
+    } else {
+        1.0
+    }
 }
 
 /// Boost business-logic labels (Controller, Service, Method, Class…) over
@@ -434,24 +513,62 @@ mod tests {
     fn entry_points_are_searchable_by_route_and_command() {
         let mut graph = KnowledgeGraph::new();
         for (id, label, name, path) in [
-            ("endpoint", NodeLabel::ApiEndpoint, "POST /api/chat/stream", "src/Program.cs"),
-            ("command", NodeLabel::CodeElement, "Commands::Compress", "src/main.rs"),
+            (
+                "endpoint",
+                NodeLabel::ApiEndpoint,
+                "POST /api/chat/stream",
+                "src/Program.cs",
+            ),
+            (
+                "command",
+                NodeLabel::CodeElement,
+                "Commands::Compress",
+                "src/main.rs",
+            ),
         ] {
-            graph.add_node(GraphNode { id: id.into(), label, properties: NodeProperties {
-                name: name.into(), file_path: path.into(),
-                framework: if id == "command" { Some("clap".into()) } else { Some("aspnet-minimal".into()) },
-                ..Default::default()
-            }});
+            graph.add_node(GraphNode {
+                id: id.into(),
+                label,
+                properties: NodeProperties {
+                    name: name.into(),
+                    file_path: path.into(),
+                    framework: if id == "command" {
+                        Some("clap".into())
+                    } else {
+                        Some("aspnet-minimal".into())
+                    },
+                    ..Default::default()
+                },
+            });
         }
-        graph.add_node(GraphNode { id: "noise".into(), label: NodeLabel::Function,
-            properties: NodeProperties { name: "cli_compress_dispatch_test".into(),
-                file_path: "tests/cli.rs".into(), ..Default::default() }});
+        graph.add_node(GraphNode {
+            id: "noise".into(),
+            label: NodeLabel::Function,
+            properties: NodeProperties {
+                name: "cli_compress_dispatch_test".into(),
+                file_path: "tests/cli.rs".into(),
+                ..Default::default()
+            },
+        });
         let index = FtsIndex::build(&graph);
-        assert!(index.search(&graph, "/api/chat/stream", None, 10)
-            .iter().any(|result| result.node_id == "endpoint"));
-        assert!(index.search(&graph, "Commands::Compress", None, 10)
-            .iter().any(|result| result.node_id == "command"));
-        assert_eq!(index.search(&graph, "Où le sous-programme CLI Compress est-il dispatché ?", None, 10)[0].node_id, "command");
+        assert!(index
+            .search(&graph, "/api/chat/stream", None, 10)
+            .iter()
+            .any(|result| result.node_id == "endpoint"));
+        assert!(index
+            .search(&graph, "Commands::Compress", None, 10)
+            .iter()
+            .any(|result| result.node_id == "command"));
+        assert_eq!(
+            index.search(
+                &graph,
+                "Où le sous-programme CLI Compress est-il dispatché ?",
+                None,
+                10
+            )[0]
+            .node_id,
+            "command"
+        );
     }
 
     #[test]
@@ -508,8 +625,21 @@ mod tests {
             0.1
         );
         assert_eq!(path_weight("node_modules/react/index.js"), 0.1);
-        assert_eq!(path_weight("Acme.Sample.BAL/Facture/InvoiceService.cs"), 1.0);
+        assert_eq!(
+            path_weight("Acme.Sample.BAL/Facture/InvoiceService.cs"),
+            1.0
+        );
         assert_eq!(path_weight("src/main.rs"), 1.0);
+    }
+
+    #[test]
+    fn source_file_wins_over_test_for_a_generic_question() {
+        assert!(
+            path_weight("src/SqlitePragmaInterceptor.cs")
+                > path_weight("tests/SqlitePragmaInterceptorTests.cs")
+        );
+        assert!(path_weight("src/agent-executor.ts") > path_weight("src/agent-executor.test.ts"));
+        assert!(path_weight("src/main.rs") > path_weight("src/main_test.rs"));
     }
 
     #[test]
