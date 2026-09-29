@@ -286,8 +286,16 @@ fn build_field_type_map(
 fn build_ts_type_envs(
     file_entries: &[crate::phases::structure::FileEntry],
     ts_external_imported_type_names: &HashMap<String, HashSet<String>>,
-) -> HashMap<String, TypeEnvironment> {
+) -> (
+    HashMap<String, TypeEnvironment>,
+    HashMap<String, HashSet<String>>,
+    HashMap<String, HashSet<String>>,
+    HashMap<String, Vec<TsScopeRange>>,
+) {
     let mut envs = HashMap::new();
+    let mut callable_parameter_names = HashMap::new();
+    let mut opaque_local_callable_names = HashMap::new();
+    let mut scopes_by_file = HashMap::new();
 
     for file in file_entries {
         if !is_ts_like_file(&file.path) {
@@ -295,7 +303,7 @@ fn build_ts_type_envs(
         }
 
         let mut env = TypeEnvironment::new();
-        let scope_ranges = build_ts_scope_ranges(file);
+        let mut scope_ranges = Vec::new();
 
         let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
             file.language
@@ -306,11 +314,30 @@ fn build_ts_type_envs(
         let mut parser = Parser::new();
         if parser.set_language(&ts_language).is_ok() {
             if let Some(tree) = parser.parse(&file.content, None) {
+                let root = tree.root_node();
+                collect_ts_scope_ranges(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut scope_ranges,
+                );
                 collect_ts_parameter_type_bindings(
-                    tree.root_node(),
+                    root,
                     &file.path,
                     file.content.as_bytes(),
                     &mut env,
+                );
+                collect_ts_callable_parameter_names(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut callable_parameter_names,
+                );
+                collect_ts_opaque_local_callable_names(
+                    root,
+                    &file.path,
+                    file.content.as_bytes(),
+                    &mut opaque_local_callable_names,
                 );
             }
         }
@@ -368,13 +395,20 @@ fn build_ts_type_envs(
         }
 
         envs.insert(file.path.clone(), env);
+        scopes_by_file.insert(file.path.clone(), scope_ranges);
     }
 
-    envs
+    (
+        envs,
+        callable_parameter_names,
+        opaque_local_callable_names,
+        scopes_by_file,
+    )
 }
 
 fn build_ts_external_receiver_envs(
     file_entries: &[crate::phases::structure::FileEntry],
+    scopes_by_file: &HashMap<String, Vec<TsScopeRange>>,
 ) -> HashMap<String, TypeEnvironment> {
     let mut envs = HashMap::new();
 
@@ -385,18 +419,21 @@ fn build_ts_external_receiver_envs(
 
         let fs_aliases = collect_ts_node_fs_aliases(&file.content);
         let mut env = TypeEnvironment::new();
-        let scope_ranges = build_ts_scope_ranges(file);
+        let scope_ranges = scopes_by_file
+            .get(&file.path)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
 
-        bind_ts_node_fs_stats_receivers(file, &scope_ranges, &fs_aliases, &mut env);
-        bind_ts_node_fs_dirent_arrays(file, &scope_ranges, &fs_aliases, &mut env);
-        bind_ts_external_array_derivatives(file, &scope_ranges, &mut env);
-        bind_ts_external_array_loop_items(file, &scope_ranges, &mut env);
-        bind_ts_external_array_index_items(file, &scope_ranges, &mut env);
-        bind_ts_external_array_callback_params(file, &scope_ranges, &mut env);
-        bind_ts_fetch_response_receivers(file, &scope_ranges, &mut env);
-        bind_ts_external_response_parameters(file, &scope_ranges, &mut env);
-        bind_ts_express_router_response_parameters(file, &scope_ranges, &mut env);
-        bind_ts_node_event_receivers(file, &scope_ranges, &mut env);
+        bind_ts_node_fs_stats_receivers(file, scope_ranges, &fs_aliases, &mut env);
+        bind_ts_node_fs_dirent_arrays(file, scope_ranges, &fs_aliases, &mut env);
+        bind_ts_external_array_derivatives(file, scope_ranges, &mut env);
+        bind_ts_external_array_loop_items(file, scope_ranges, &mut env);
+        bind_ts_external_array_index_items(file, scope_ranges, &mut env);
+        bind_ts_external_array_callback_params(file, scope_ranges, &mut env);
+        bind_ts_fetch_response_receivers(file, scope_ranges, &mut env);
+        bind_ts_external_response_parameters(file, scope_ranges, &mut env);
+        bind_ts_express_router_response_parameters(file, scope_ranges, &mut env);
+        bind_ts_node_event_receivers(file, scope_ranges, &mut env);
 
         envs.insert(file.path.clone(), env);
     }
@@ -736,33 +773,6 @@ fn extract_balanced_parenthesized(content: &str, open_paren_byte: usize) -> Opti
     None
 }
 
-fn build_ts_scope_ranges(file: &crate::phases::structure::FileEntry) -> Vec<TsScopeRange> {
-    let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-        file.language
-    else {
-        return Vec::new();
-    };
-
-    let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-    let mut parser = Parser::new();
-    if parser.set_language(&ts_language).is_err() {
-        return Vec::new();
-    }
-
-    let Some(tree) = parser.parse(&file.content, None) else {
-        return Vec::new();
-    };
-
-    let mut ranges = Vec::new();
-    collect_ts_scope_ranges(
-        tree.root_node(),
-        &file.path,
-        file.content.as_bytes(),
-        &mut ranges,
-    );
-    ranges
-}
-
 fn collect_ts_scope_ranges(
     node: Node,
     file_path: &str,
@@ -894,8 +904,9 @@ pub fn resolve_calls(
     // Build field→type map for receiver-aware resolution (C# DI)
     let field_type_map = build_field_type_map(file_entries);
     let ts_external_imported_type_names = build_ts_external_imported_type_names(extracted);
-    let ts_type_envs = build_ts_type_envs(file_entries, &ts_external_imported_type_names);
-    let ts_external_receiver_envs = build_ts_external_receiver_envs(file_entries);
+    let (ts_type_envs, ts_callable_parameter_names, ts_opaque_local_callable_names, ts_scopes) =
+        build_ts_type_envs(file_entries, &ts_external_imported_type_names);
+    let ts_external_receiver_envs = build_ts_external_receiver_envs(file_entries, &ts_scopes);
     let ts_global_fallback_blocked_names = build_ts_global_fallback_blocked_names(
         extracted,
         named_import_map,
@@ -903,9 +914,7 @@ pub fn resolve_calls(
         symbol_table,
         file_entries,
     );
-    let ts_callable_parameter_names = build_ts_callable_parameter_names(file_entries);
-    let ts_opaque_local_callable_names = build_ts_opaque_local_callable_names(file_entries);
-    let ts_bound_method_aliases = build_ts_bound_method_aliases(file_entries);
+    let ts_bound_method_aliases = build_ts_bound_method_aliases(file_entries, &ts_scopes);
     let ts_imported_binding_names = build_ts_imported_binding_names(extracted);
     let mut receiver_resolved = 0u32;
 
@@ -916,6 +925,7 @@ pub fn resolve_calls(
         .iter()
         .map(|f| (f.path.as_str(), f.content.as_str()))
         .collect();
+    let mut line_offsets: HashMap<String, Vec<usize>> = HashMap::new();
     // File texts stay on disk (`RustWorkspace` reads them once per file).
     // Copying every source into the workspace doubled the analyze heap.
     let mut csharp_lambda_types: HashMap<(String, String), String> = HashMap::new();
@@ -950,6 +960,69 @@ pub fn resolve_calls(
 
     for call in &extracted.calls {
         ctx.enable_cache(&call.file_path);
+        let evidence = call_site_evidence(call, &content_by_path, &mut line_offsets, graph);
+
+        if call.file_path.ends_with(".rs") {
+            let content = content_by_path
+                .get(call.file_path.as_str())
+                .copied()
+                .unwrap_or("");
+            let has_declared_receiver_type = call.receiver_type_name.is_some();
+            let typed = call.receiver_type_name.as_deref().map(|ty| {
+                rust_ws.decide_receiver_type_at(
+                    &call.file_path,
+                    content,
+                    ty,
+                    &call.called_name,
+                    symbol_table,
+                    call.start_byte,
+                )
+            });
+            let imported = if call.receiver_name.is_none() {
+                Some(rust_ws.decide_at(
+                    &call.file_path,
+                    content,
+                    "",
+                    &call.called_name,
+                    symbol_table,
+                    call.start_byte,
+                ))
+            } else {
+                None
+            };
+            if let Some(decision) = typed.or(imported) {
+                match decision {
+                    crate::phases::rust_qualified::RustCallDecision::Link { node_id, reason } => {
+                        let edge_id = format!("calls_rusttype_{}_{}", call.source_id, node_id);
+                        if graph.get_relationship(&edge_id).is_none() {
+                            graph.add_relationship(GraphRelationship {
+                                id: edge_id,
+                                source_id: call.source_id.clone(),
+                                target_id: node_id,
+                                rel_type: RelationshipType::Calls,
+                                confidence: 0.93,
+                                reason: format!("{reason} @ {evidence}"),
+                                step: None,
+                            });
+                            edge_count += 1;
+                        }
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Ambiguous { note } => {
+                        note_ambiguous_call(graph, &call.source_id, &call.file_path, &note);
+                        continue;
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::Unresolved => {
+                        // A declared receiver type or an explicit import rules out
+                        // a bare-name guess in a different file.
+                        if has_declared_receiver_type || call.receiver_name.is_none() {
+                            continue;
+                        }
+                    }
+                    crate::phases::rust_qualified::RustCallDecision::NotAModule => {}
+                }
+            }
+        }
 
         // Qualified Rust paths (`crate::`, `self::`, `super::`, modules, use aliases,
         // path-dependencies). A path that does not land stays unresolved: no
@@ -979,7 +1052,7 @@ pub fn resolve_calls(
                                 target_id: node_id,
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.95,
-                                reason,
+                                reason: format!("{reason} @ {evidence}"),
                                 step: None,
                             });
                             edge_count += 1;
@@ -1017,7 +1090,10 @@ pub fn resolve_calls(
                                             target_id: node_id,
                                             rel_type: RelationshipType::Calls,
                                             confidence: ResolutionTier::SameFile.confidence(),
-                                            reason: ResolutionTier::SameFile.as_str().to_string(),
+                                            reason: format!(
+                                                "{} @ {evidence}",
+                                                ResolutionTier::SameFile.as_str()
+                                            ),
                                             step: None,
                                         });
                                         edge_count += 1;
@@ -1075,7 +1151,10 @@ pub fn resolve_calls(
                                     target_id: target_def.node_id.clone(),
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.85,
-                                    reason: format!("field-type:{}:{}", receiver, call.called_name),
+                                    reason: format!(
+                                        "field-type:{}:{} @ {evidence}",
+                                        receiver, call.called_name
+                                    ),
                                     step: None,
                                 });
                                 edge_count += 1;
@@ -1123,7 +1202,7 @@ pub fn resolve_calls(
                                         rel_type: RelationshipType::Calls,
                                         confidence: 0.80,
                                         reason: format!(
-                                            "static-call:{}::{}",
+                                            "static-call:{}::{} @ {evidence}",
                                             receiver, call.called_name
                                         ),
                                         step: None,
@@ -1166,7 +1245,10 @@ pub fn resolve_calls(
                                     target_id: target_def.node_id.clone(),
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.9,
-                                    reason: format!("lambda-param:{ty}:{}", call.called_name),
+                                    reason: format!(
+                                        "lambda-param:{ty}:{} @ {evidence}",
+                                        call.called_name
+                                    ),
                                     step: None,
                                 });
                                 edge_count += 1;
@@ -1229,7 +1311,7 @@ pub fn resolve_calls(
                         target_id: target_def.node_id.clone(),
                         rel_type: RelationshipType::Calls,
                         confidence: 0.94,
-                        reason,
+                        reason: format!("{reason} @ {evidence}"),
                         step: None,
                     });
                     edge_count += 1;
@@ -1270,7 +1352,7 @@ pub fn resolve_calls(
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.90,
                                 reason: format!(
-                                    "receiver-type:{}:{}:{}",
+                                    "receiver-type:{}:{}:{} @ {evidence}",
                                     receiver_root, type_name, call.called_name
                                 ),
                                 step: None,
@@ -1314,7 +1396,7 @@ pub fn resolve_calls(
                                 rel_type: RelationshipType::Calls,
                                 confidence: 0.88,
                                 reason: format!(
-                                    "static-call-ts:{}::{}",
+                                    "static-call-ts:{}::{} @ {evidence}",
                                     receiver_root, call.called_name
                                 ),
                                 step: None,
@@ -1365,7 +1447,7 @@ pub fn resolve_calls(
                                     rel_type: RelationshipType::Calls,
                                     confidence: 0.93,
                                     reason: format!(
-                                        "module-alias:{}:{}",
+                                        "module-alias:{}:{} @ {evidence}",
                                         receiver_root, call.called_name
                                     ),
                                     step: None,
@@ -1411,7 +1493,7 @@ pub fn resolve_calls(
                     target_id: target_def.node_id.clone(),
                     rel_type: RelationshipType::Calls,
                     confidence: 0.89,
-                    reason,
+                    reason: format!("{reason} @ {evidence}"),
                     step: None,
                 });
                 edge_count += 1;
@@ -1449,7 +1531,7 @@ pub fn resolve_calls(
                         target_id: target_def.node_id.clone(),
                         rel_type: RelationshipType::Calls,
                         confidence,
-                        reason,
+                        reason: format!("{reason} @ {evidence}"),
                         step: None,
                     });
                     edge_count += 1;
@@ -1464,6 +1546,37 @@ pub fn resolve_calls(
         receiver_resolved
     );
     Ok(())
+}
+
+fn call_site_evidence(
+    call: &ExtractedCall,
+    content_by_path: &HashMap<&str, &str>,
+    line_offsets: &mut HashMap<String, Vec<usize>>,
+    graph: &KnowledgeGraph,
+) -> String {
+    let line = call
+        .start_byte
+        .and_then(|byte| {
+            content_by_path.get(call.file_path.as_str()).map(|content| {
+                if !line_offsets.contains_key(call.file_path.as_str()) {
+                    let mut starts = vec![0];
+                    for (index, &ch) in content.as_bytes().iter().enumerate() {
+                        if ch == b'\n' {
+                            starts.push(index + 1);
+                        }
+                    }
+                    line_offsets.insert(call.file_path.clone(), starts);
+                }
+                line_offsets[call.file_path.as_str()].partition_point(|&start| start <= byte)
+            })
+        })
+        .or_else(|| {
+            graph
+                .get_node(&call.source_id)
+                .and_then(|node| node.properties.start_line.map(|line| line as usize))
+        })
+        .unwrap_or(1);
+    format!("{}:{line}", call.file_path)
 }
 
 /// Safety net: re-point any `CALLS` edge whose `source_id` node doesn't exist to the
@@ -1491,19 +1604,15 @@ pub fn repoint_orphan_call_sources(graph: &mut KnowledgeGraph) -> usize {
 
     let mut fixed = 0;
     for (old_id, target, file_id) in fixes {
-        graph.remove_relationship(&old_id);
+        let Some(mut edge) = graph.remove_relationship(&old_id) else {
+            continue;
+        };
         if let Some(fid) = file_id {
             let new_id = format!("calls_{fid}_{target}");
             if graph.get_relationship(&new_id).is_none() {
-                graph.add_relationship(GraphRelationship {
-                    id: new_id,
-                    source_id: fid,
-                    target_id: target,
-                    rel_type: RelationshipType::Calls,
-                    confidence: 1.0,
-                    reason: "repointed_orphan_source".to_string(),
-                    step: None,
-                });
+                edge.id = new_id;
+                edge.source_id = fid;
+                graph.add_relationship(edge);
             }
         }
         fixed += 1;
@@ -2116,39 +2225,6 @@ fn is_ts_known_global_receiver(receiver: &str) -> bool {
     )
 }
 
-fn build_ts_callable_parameter_names(
-    file_entries: &[crate::phases::structure::FileEntry],
-) -> HashMap<String, HashSet<String>> {
-    let mut names_by_source: HashMap<String, HashSet<String>> = HashMap::new();
-
-    for file in file_entries {
-        let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-            file.language
-        else {
-            continue;
-        };
-
-        let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-        let mut parser = Parser::new();
-        if parser.set_language(&ts_language).is_err() {
-            continue;
-        }
-
-        let Some(tree) = parser.parse(&file.content, None) else {
-            continue;
-        };
-
-        collect_ts_callable_parameter_names(
-            tree.root_node(),
-            &file.path,
-            file.content.as_bytes(),
-            &mut names_by_source,
-        );
-    }
-
-    names_by_source
-}
-
 fn collect_ts_callable_parameter_names(
     node: Node,
     file_path: &str,
@@ -2170,39 +2246,6 @@ fn collect_ts_callable_parameter_names(
     for child in node.children(&mut cursor) {
         collect_ts_callable_parameter_names(child, file_path, content, names_by_source);
     }
-}
-
-fn build_ts_opaque_local_callable_names(
-    file_entries: &[crate::phases::structure::FileEntry],
-) -> HashMap<String, HashSet<String>> {
-    let mut names_by_source: HashMap<String, HashSet<String>> = HashMap::new();
-
-    for file in file_entries {
-        let Some(lang @ (SupportedLanguage::TypeScript | SupportedLanguage::JavaScript)) =
-            file.language
-        else {
-            continue;
-        };
-
-        let ts_language = crate::grammar::get_language_for_file(lang, &file.path);
-        let mut parser = Parser::new();
-        if parser.set_language(&ts_language).is_err() {
-            continue;
-        }
-
-        let Some(tree) = parser.parse(&file.content, None) else {
-            continue;
-        };
-
-        collect_ts_opaque_local_callable_names(
-            tree.root_node(),
-            &file.path,
-            file.content.as_bytes(),
-            &mut names_by_source,
-        );
-    }
-
-    names_by_source
 }
 
 fn collect_ts_opaque_local_callable_names(
@@ -2252,6 +2295,7 @@ fn collect_ts_opaque_local_callable_names_in_scope(
 
 fn build_ts_bound_method_aliases(
     file_entries: &[crate::phases::structure::FileEntry],
+    scopes_by_file: &HashMap<String, Vec<TsScopeRange>>,
 ) -> HashMap<String, HashMap<String, TsBoundMethodAlias>> {
     let mut aliases_by_source: HashMap<String, HashMap<String, TsBoundMethodAlias>> =
         HashMap::new();
@@ -2262,7 +2306,10 @@ fn build_ts_bound_method_aliases(
             continue;
         };
 
-        let scope_ranges = build_ts_scope_ranges(file);
+        let scope_ranges = scopes_by_file
+            .get(&file.path)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         for cap in TS_BOUND_METHOD_ALIAS_RE.captures_iter(&file.content) {
             let Some(full_match) = cap.get(0) else {
                 continue;
@@ -2272,7 +2319,7 @@ fn build_ts_bound_method_aliases(
                 continue;
             };
 
-            let scope = ts_scope_at_byte(&scope_ranges, full_match.start());
+            let scope = ts_scope_at_byte(scope_ranges, full_match.start());
             if scope.is_empty() {
                 continue;
             }
@@ -3281,8 +3328,8 @@ mod orphan_source_tests {
             source_id: src.to_string(),
             target_id: tgt.to_string(),
             rel_type: RelationshipType::Calls,
-            confidence: 1.0,
-            reason: "test".to_string(),
+            confidence: 0.8,
+            reason: "test @ x.cpp:4".to_string(),
             step: None,
         };
         // Orphan: source node `Method:x.cpp:save` does not exist.
@@ -3308,6 +3355,8 @@ mod orphan_source_tests {
             r.rel_type == RelationshipType::Calls
                 && r.source_id == "File:x.cpp"
                 && r.target_id == "Function:x.cpp:callee"
+                && r.confidence == 0.8
+                && r.reason == "test @ x.cpp:4"
         }));
         // No CALLS edge has a missing source anymore.
         let ids: std::collections::HashSet<&str> =

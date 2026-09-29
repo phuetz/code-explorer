@@ -41,7 +41,11 @@ use std::sync::Arc;
 #[path = "rust_qualified_scan.rs"]
 mod scan;
 
-use scan::{file_has_method, glob_match, glob_may_descend, innermost_block, is_glob, is_type_like, mod_decls, parse_ufcs, split_type_tail, type_base, CallMode, CfgKind, ImplBlock, InlineMod, ModDecl};
+use scan::{
+    file_has_method, glob_match, glob_may_descend, innermost_block, is_glob, is_type_like,
+    mod_decls, parse_ufcs, split_type_tail, type_base, CallMode, CfgKind, ImplBlock, InlineMod,
+    ModDecl,
+};
 
 const PUB_USE_MAX_DEPTH: usize = 8;
 
@@ -103,6 +107,7 @@ struct PubUse {
 struct FileFacts {
     aliases: Vec<Alias>,
     type_imports: Vec<TypeImport>,
+    function_imports: Vec<TypeImport>,
     inline_mods: Vec<InlineMod>,
     impls: Vec<ImplBlock>,
     pub_uses: Vec<PubUse>,
@@ -210,6 +215,11 @@ impl RustWorkspace {
         call_byte: Option<usize>,
     ) -> RustCallDecision {
         let facts = self.facts_for(from_file, content);
+        if qualifier.is_empty() {
+            return self
+                .resolve_free_import(from_file, called_name, symbols, &facts, call_byte)
+                .unwrap_or(RustCallDecision::NotAModule);
+        }
         let mode = call_mode_at(&facts.test_ranges, call_byte);
         let (locs, ambiguous) = self.resolve_locations(
             from_file,
@@ -230,9 +240,14 @@ impl RustWorkspace {
             let targets = self.lookup_locs(&locs, called_name, symbols, 0, &mut HashSet::new());
             return decision_of(&targets, qualifier, called_name, "rust-path");
         }
-        if let Some(decision) =
-            self.resolve_type_call(from_file, qualifier, called_name, symbols, &facts, call_byte)
-        {
+        if let Some(decision) = self.resolve_type_call(
+            from_file,
+            qualifier,
+            called_name,
+            symbols,
+            &facts,
+            call_byte,
+        ) {
             return decision;
         }
         // `crate::missing`, `super::nope`, `a::b` stay unresolved.
@@ -241,6 +256,71 @@ impl RustWorkspace {
             return RustCallDecision::Unresolved;
         }
         RustCallDecision::NotAModule
+    }
+
+    fn resolve_free_import(
+        &self,
+        _from_file: &str,
+        called_name: &str,
+        symbols: &SymbolTable,
+        facts: &FileFacts,
+        call_byte: Option<usize>,
+    ) -> Option<RustCallDecision> {
+        let imports = visible_type_imports(
+            &facts.function_imports,
+            called_name,
+            call_byte,
+            &facts.inline_mods,
+        );
+        if imports.is_empty() {
+            return None;
+        }
+        let mut targets = Vec::new();
+        let mut seen_ids = HashSet::new();
+        for import in imports {
+            let locations: Vec<Loc> = import.modules.iter().cloned().map(Loc::File).collect();
+            for target in self.lookup_locs(
+                &locations,
+                &import.type_name,
+                symbols,
+                0,
+                &mut HashSet::new(),
+            ) {
+                if seen_ids.insert(target.node_id.clone()) {
+                    targets.push(target);
+                }
+            }
+        }
+        Some(decision_of(&targets, "use", called_name, "rust-import"))
+    }
+
+    /// Resolve a method on a receiver whose declared type was found at the call site.
+    pub fn decide_receiver_type_at(
+        &self,
+        from_file: &str,
+        content: &str,
+        type_name: &str,
+        called_name: &str,
+        symbols: &SymbolTable,
+        call_byte: Option<usize>,
+    ) -> RustCallDecision {
+        if type_name == "Self" {
+            return self
+                .same_file_target(from_file, content, "Self", called_name, call_byte, symbols)
+                .unwrap_or(RustCallDecision::Unresolved);
+        }
+        let facts = self.facts_for(from_file, content);
+        let mode = call_mode_at(&facts.test_ranges, call_byte);
+        let (name, files) = self.files_for_type_expr(from_file, type_name, &facts, call_byte, mode);
+        if files.len() == 1 && files[0] == from_file {
+            if let Some(local) =
+                self.same_file_target(from_file, content, &name, called_name, call_byte, symbols)
+            {
+                return local;
+            }
+        }
+        let targets = self.methods_named(&files, &name, called_name, symbols);
+        decision_of(&targets, type_name, called_name, "rust-receiver-type")
     }
 
     /// Same-file tier allowed by the counter-review rule. `None` means no edge.
@@ -297,9 +377,7 @@ impl RustWorkspace {
         // `inner::f()` at file scope: parent of the inline mod is None.
         if scope.is_none() {
             if facts.inline_mods.iter().any(|m| {
-                m.parent.is_none()
-                    && m.name == base
-                    && m.functions.iter().any(|f| f == called_name)
+                m.parent.is_none() && m.name == base && m.functions.iter().any(|f| f == called_name)
             }) {
                 return link_same_file(symbols, from_file, called_name);
             }
@@ -346,7 +424,8 @@ impl RustWorkspace {
             let mut files = Vec::new();
             let mut names = Vec::new();
             for expr in [ty, tr] {
-                let (name, found) = self.files_for_type_expr(from_file, expr, facts, call_byte, mode);
+                let (name, found) =
+                    self.files_for_type_expr(from_file, expr, facts, call_byte, mode);
                 names.push(name);
                 for f in found {
                     if !files.contains(&f) {
@@ -508,7 +587,9 @@ impl RustWorkspace {
             return Arc::clone(hit);
         }
         let built = Arc::new(self.build_facts(file, content));
-        self.facts.borrow_mut().insert(file.to_string(), Arc::clone(&built));
+        self.facts
+            .borrow_mut()
+            .insert(file.to_string(), Arc::clone(&built));
         built
     }
 
@@ -539,6 +620,7 @@ impl RustWorkspace {
         let test_ranges = scan::cfg_test_ranges(content);
         let mut aliases = Vec::new();
         let mut type_imports = Vec::new();
+        let mut function_imports = Vec::new();
         let mut pub_uses = Vec::new();
         for stmt in use_statements_at(content) {
             let block = innermost_block(&blocks, stmt.byte);
@@ -611,6 +693,32 @@ impl RustWorkspace {
                     }
                     continue;
                 }
+                if item != "self" {
+                    let module_path = parent_path(&path);
+                    if !module_path.is_empty() {
+                        let (locs, ambiguous) = self.resolve_locations(
+                            from_file,
+                            &module_path,
+                            None,
+                            Some(stmt.byte),
+                            Some(&inline_mods),
+                            false,
+                            mode,
+                        );
+                        if !ambiguous {
+                            let modules = loc_files(&locs);
+                            if !modules.is_empty() {
+                                function_imports.push(TypeImport {
+                                    local: local.clone(),
+                                    type_name: item.clone(),
+                                    modules,
+                                    block,
+                                    module,
+                                });
+                            }
+                        }
+                    }
+                }
                 let (locs, ambiguous) = self.resolve_locations(
                     from_file,
                     &path,
@@ -637,6 +745,7 @@ impl RustWorkspace {
         FileFacts {
             aliases,
             type_imports,
+            function_imports,
             inline_mods,
             impls,
             pub_uses,
@@ -841,7 +950,14 @@ impl RustWorkspace {
                     let before = out.len();
                     push_callables(symbols, file, called_name, &mut out, &mut ids);
                     if out.len() == before {
-                        out.extend(self.follow_pub_use(file, called_name, symbols, depth, seen, &mut ids));
+                        out.extend(self.follow_pub_use(
+                            file,
+                            called_name,
+                            symbols,
+                            depth,
+                            seen,
+                            &mut ids,
+                        ));
                     }
                 }
             }
@@ -891,7 +1007,14 @@ impl RustWorkspace {
                 let before = out.len();
                 push_callables(symbols, &loc, item, &mut out, ids);
                 if out.len() == before && item == called_name {
-                    out.extend(self.follow_pub_use(&loc, called_name, symbols, depth + 1, seen, ids));
+                    out.extend(self.follow_pub_use(
+                        &loc,
+                        called_name,
+                        symbols,
+                        depth + 1,
+                        seen,
+                        ids,
+                    ));
                 }
             }
         }
@@ -1221,11 +1344,7 @@ fn decision_of(
     }
 }
 
-fn link_same_file(
-    symbols: &SymbolTable,
-    file: &str,
-    name: &str,
-) -> Option<RustCallDecision> {
+fn link_same_file(symbols: &SymbolTable, file: &str, name: &str) -> Option<RustCallDecision> {
     let mut targets = Vec::new();
     let mut seen = HashSet::new();
     push_callables(symbols, file, name, &mut targets, &mut seen);
@@ -2580,7 +2699,14 @@ mod tests {
         add_fn(&mut symbols, "src/gate.rs", "only_inside");
         let super_at = src.find("super::helper").unwrap();
         assert_links(
-            ws.decide_at("src/gate.rs", src, "super", "helper", &symbols, Some(super_at)),
+            ws.decide_at(
+                "src/gate.rs",
+                src,
+                "super",
+                "helper",
+                &symbols,
+                Some(super_at),
+            ),
             "src/gate.rs",
             "helper",
         );
@@ -2599,7 +2725,14 @@ mod tests {
         );
         let inner_at = src.find("inner::deep").unwrap();
         assert_links(
-            ws.decide_at("src/gate.rs", src, "inner", "deep", &symbols, Some(inner_at)),
+            ws.decide_at(
+                "src/gate.rs",
+                src,
+                "inner",
+                "deep",
+                &symbols,
+                Some(inner_at),
+            ),
             "src/gate.rs",
             "deep",
         );
@@ -2640,6 +2773,89 @@ mod tests {
     }
 
     #[test]
+    fn imported_free_function_follows_pub_use_instead_of_homonym() {
+        let files = files(&[
+            "src/lib.rs",
+            "src/transforms/mod.rs",
+            "src/transforms/content_detector.rs",
+            "src/other.rs",
+        ]);
+        let ws = RustWorkspace::new(files, vec![pkg("demo", "", "src", &[])]);
+        ws.preload_contents([
+            (
+                "src/transforms/mod.rs".to_string(),
+                "pub mod content_detector;\npub use content_detector::detect_content_type;"
+                    .to_string(),
+            ),
+            (
+                "src/transforms/content_detector.rs".to_string(),
+                "pub fn detect_content_type() {}".to_string(),
+            ),
+        ]);
+        let source =
+            "use crate::transforms::detect_content_type; fn run() { detect_content_type(); }";
+        let mut symbols = SymbolTable::new();
+        add_fn(
+            &mut symbols,
+            "src/transforms/content_detector.rs",
+            "detect_content_type",
+        );
+        add_fn(&mut symbols, "src/other.rs", "detect_content_type");
+        assert_links(
+            ws.decide_at(
+                "src/lib.rs",
+                source,
+                "",
+                "detect_content_type",
+                &symbols,
+                Some(source.find("detect_content_type();").unwrap()),
+            ),
+            "src/transforms/content_detector.rs",
+            "detect_content_type",
+        );
+    }
+
+    #[test]
+    fn declared_receiver_type_resolves_reexported_impl_method() {
+        let ws = RustWorkspace::new(
+            files(&[
+                "src/lib.rs",
+                "src/pipeline/mod.rs",
+                "src/pipeline/orchestrator.rs",
+                "src/other.rs",
+            ]),
+            vec![pkg("demo", "", "src", &[])],
+        );
+        ws.preload_contents([
+            (
+                "src/pipeline/mod.rs".to_string(),
+                "pub mod orchestrator;\npub use orchestrator::Pipeline;".to_string(),
+            ),
+            (
+                "src/pipeline/orchestrator.rs".to_string(),
+                "pub struct Pipeline;\nimpl Pipeline { pub fn run(&self) {} }".to_string(),
+            ),
+        ]);
+        let source =
+            "use crate::pipeline::Pipeline;\nfn execute(pipeline: &Pipeline) { pipeline.run(); }";
+        let mut symbols = SymbolTable::new();
+        add_fn(&mut symbols, "src/pipeline/orchestrator.rs", "run");
+        add_fn(&mut symbols, "src/other.rs", "run");
+        assert_links(
+            ws.decide_receiver_type_at(
+                "src/lib.rs",
+                source,
+                "Pipeline",
+                "run",
+                &symbols,
+                Some(source.find("pipeline.run()").unwrap()),
+            ),
+            "src/pipeline/orchestrator.rs",
+            "run",
+        );
+    }
+
+    #[test]
     fn trait_method_ufcs_and_default() {
         let shapes = "pub trait Render { fn render(&self) -> u8; }\npub struct Square;\nimpl Render for Square { fn render(&self) -> u8 { 1 } }\nimpl Default for Square { fn default() -> Self { Square } }\n";
         let user = "use crate::shapes::{Render, Square};\nfn by_trait() { Render::render(); }\nfn by_ufcs() { <Square as Render>::render(); }\nfn by_default() { Square::default(); }\n";
@@ -2658,7 +2874,13 @@ mod tests {
             "render",
         );
         assert_links(
-            ws.decide("src/user.rs", user, "<Square as Render>", "render", &symbols),
+            ws.decide(
+                "src/user.rs",
+                user,
+                "<Square as Render>",
+                "render",
+                &symbols,
+            ),
             "src/shapes.rs",
             "render",
         );
@@ -2717,7 +2939,10 @@ mod tests {
             ("src/lib.rs".to_string(), lib.to_string()),
             ("src/transforms/mod.rs".to_string(), transforms.to_string()),
             ("src/transforms/gate.rs".to_string(), gate.to_string()),
-            ("src/other.rs".to_string(), "pub fn reinject() {}\n".to_string()),
+            (
+                "src/other.rs".to_string(),
+                "pub fn reinject() {}\n".to_string(),
+            ),
         ]);
         let mut symbols = SymbolTable::new();
         add_fn(&mut symbols, "src/transforms/gate.rs", "reinject");
@@ -2754,7 +2979,13 @@ mod tests {
         ]);
         let symbols = SymbolTable::new();
         assert_eq!(
-            ws.decide("src/lib.rs", "fn t() { crate::a::reinject(); }\n", "crate::a", "reinject", &symbols),
+            ws.decide(
+                "src/lib.rs",
+                "fn t() { crate::a::reinject(); }\n",
+                "crate::a",
+                "reinject",
+                &symbols
+            ),
             RustCallDecision::Unresolved
         );
     }
@@ -2782,11 +3013,7 @@ mod tests {
     fn workspace_glob_exclude_and_inherited_dependency() {
         let dir = std::env::temp_dir().join(format!("ce-ws-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        for rel in [
-            "crates/a/src",
-            "crates/b/src",
-            "crates/secret/src",
-        ] {
+        for rel in ["crates/a/src", "crates/b/src", "crates/secret/src"] {
             std::fs::create_dir_all(dir.join(rel)).unwrap();
         }
         std::fs::write(
@@ -2949,7 +3176,14 @@ mod tests {
             "reinject",
         );
         assert_links(
-            ws.decide_at("src/user.rs", src, "g", "reinject", &symbols, Some(other_at)),
+            ws.decide_at(
+                "src/user.rs",
+                src,
+                "g",
+                "reinject",
+                &symbols,
+                Some(other_at),
+            ),
             "src/other.rs",
             "reinject",
         );
@@ -2966,7 +3200,10 @@ mod tests {
         );
         ws.preload_contents([
             ("src/lib.rs".to_string(), lib.to_string()),
-            ("src/gate.rs".to_string(), "pub fn reinject() -> u8 { 1 }\n".to_string()),
+            (
+                "src/gate.rs".to_string(),
+                "pub fn reinject() -> u8 { 1 }\n".to_string(),
+            ),
             (
                 "src/gate_v2.rs".to_string(),
                 "pub fn reinject() -> u8 { 2 }\n".to_string(),
@@ -2993,7 +3230,10 @@ mod tests {
         );
         ws.preload_contents([
             ("src/lib.rs".to_string(), lib.to_string()),
-            ("src/clock.rs".to_string(), "pub fn now() -> u64 { 1 }\n".to_string()),
+            (
+                "src/clock.rs".to_string(),
+                "pub fn now() -> u64 { 1 }\n".to_string(),
+            ),
             (
                 "src/clock_mock.rs".to_string(),
                 "pub fn now() -> u64 { 2 }\n".to_string(),
@@ -3004,13 +3244,27 @@ mod tests {
         add_fn(&mut symbols, "src/clock_mock.rs", "now");
         let prod_at = lib.find("fn prod").unwrap();
         assert_links(
-            ws.decide_at("src/lib.rs", lib, "crate::clock", "now", &symbols, Some(prod_at)),
+            ws.decide_at(
+                "src/lib.rs",
+                lib,
+                "crate::clock",
+                "now",
+                &symbols,
+                Some(prod_at),
+            ),
             "src/clock.rs",
             "now",
         );
         let test_at = lib.find("fn t()").unwrap();
         assert_links(
-            ws.decide_at("src/lib.rs", lib, "crate::clock", "now", &symbols, Some(test_at)),
+            ws.decide_at(
+                "src/lib.rs",
+                lib,
+                "crate::clock",
+                "now",
+                &symbols,
+                Some(test_at),
+            ),
             "src/clock_mock.rs",
             "now",
         );
@@ -3019,7 +3273,8 @@ mod tests {
     /// Le `#[path]` d'un module inline ne s'applique pas au `mod` homonyme du fichier.
     #[test]
     fn ambiguity_path_nested_does_not_steal() {
-        let lib = "pub mod gate;\npub mod legacy {\n    #[path = \"gate_v1.rs\"]\n    pub mod gate;\n}\n";
+        let lib =
+            "pub mod gate;\npub mod legacy {\n    #[path = \"gate_v1.rs\"]\n    pub mod gate;\n}\n";
         let user = "pub fn current() -> u8 { crate::gate::reinject() }\n";
         let ws = RustWorkspace::new(
             files(&[
@@ -3032,7 +3287,10 @@ mod tests {
         );
         ws.preload_contents([
             ("src/lib.rs".to_string(), lib.to_string()),
-            ("src/gate.rs".to_string(), "pub fn reinject() -> u8 { 1 }\n".to_string()),
+            (
+                "src/gate.rs".to_string(),
+                "pub fn reinject() -> u8 { 1 }\n".to_string(),
+            ),
             (
                 "src/legacy/gate_v1.rs".to_string(),
                 "pub fn reinject() -> u8 { 0 }\n".to_string(),
@@ -3078,7 +3336,8 @@ mod tests {
         );
         // `Gate` n'est pas un module. Le pipeline retombe alors sur le palier
         // même fichier, qui voit l'`impl Gate` local — pas l'import du parent.
-        let type_decision = ws.decide_at("src/user.rs", user, "Gate", "open", &symbols, Some(type_at));
+        let type_decision =
+            ws.decide_at("src/user.rs", user, "Gate", "open", &symbols, Some(type_at));
         assert!(
             !matches!(type_decision, RustCallDecision::Link { ref node_id, .. } if node_id.contains("gate.rs")),
             "parent import must not win: {type_decision:?}"
@@ -3142,7 +3401,8 @@ mod tests {
     fn ambiguity_extern_use_inside_child_module_resolves() {
         let lib = "pub mod gate;\n";
         let gate = "pub struct Gate;\nimpl Gate { pub fn open() -> u8 { 1 } }\n";
-        let user = "mod tests {\n    use demo::gate::Gate;\n    fn t() { let _ = Gate::open(); }\n}\n";
+        let user =
+            "mod tests {\n    use demo::gate::Gate;\n    fn t() { let _ = Gate::open(); }\n}\n";
         let ws = RustWorkspace::new(
             files(&["src/lib.rs", "src/gate.rs", "src/user.rs"]),
             vec![pkg("demo", "", "src", &[])],
@@ -3184,7 +3444,14 @@ mod tests {
             "open",
         );
         assert_links(
-            ws.decide_at("src/user.rs", user, "g2::Gate", "open", &symbols, Some(alias_at)),
+            ws.decide_at(
+                "src/user.rs",
+                user,
+                "g2::Gate",
+                "open",
+                &symbols,
+                Some(alias_at),
+            ),
             "src/gate.rs",
             "open",
         );
@@ -3201,8 +3468,14 @@ mod tests {
         );
         ws.preload_contents([
             ("src/lib.rs".to_string(), lib.to_string()),
-            ("src/clock_unix.rs".to_string(), "pub fn now() -> u64 { 1 }\n".to_string()),
-            ("src/clock_win.rs".to_string(), "pub fn tick() -> u64 { 2 }\n".to_string()),
+            (
+                "src/clock_unix.rs".to_string(),
+                "pub fn now() -> u64 { 1 }\n".to_string(),
+            ),
+            (
+                "src/clock_win.rs".to_string(),
+                "pub fn tick() -> u64 { 2 }\n".to_string(),
+            ),
         ]);
         let mut symbols = SymbolTable::new();
         add_fn(&mut symbols, "src/clock_unix.rs", "now");

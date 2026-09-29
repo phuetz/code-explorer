@@ -6,6 +6,7 @@ pub mod community;
 pub mod config_inventory;
 pub mod db_schema;
 pub mod docs;
+pub mod entry_points;
 pub mod dead_code;
 pub mod file_type;
 pub mod heritage;

@@ -24,8 +24,8 @@ mod ruby;
 mod rust;
 mod typescript;
 
-pub use csharp::detect_csproj_components;
 pub(crate) use cpp::reconcile_out_of_class_methods;
+pub use csharp::detect_csproj_components;
 pub(crate) use go::reconcile_cross_file_methods;
 
 /// Data extracted from parsing phase (before resolution).
@@ -148,6 +148,72 @@ pub(crate) fn parse_files_cached(
     storage: &std::path::Path,
     incremental: bool,
 ) -> Result<(ExtractedData, usize, Option<String>), crate::IngestError> {
+    // Keeping a second copy of every parsed node/call for incremental runs
+    // dominates memory on large repositories. Bound the source represented by
+    // the cache; oversized repositories still get the same complete graph and
+    // can be reparsed on the next incremental run.
+    const PARSE_CACHE_SOURCE_BUDGET: usize = 64 * 1024 * 1024;
+    const MAX_PARSE_BATCH_FILES: usize = 512;
+    const PARSE_BATCH_BYTES: usize = 20 * 1024 * 1024;
+    let batch_files = rayon::current_num_threads()
+        .saturating_mul(4)
+        .clamp(64, MAX_PARSE_BATCH_FILES);
+    let source_bytes: usize = files.iter().map(|file| file.content.len()).sum();
+    if source_bytes > PARSE_CACHE_SOURCE_BUDGET {
+        let path = storage.join("parse-cache.bin");
+        if let Err(error) = std::fs::remove_file(&path) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!(%error, "Could not remove oversized parse cache");
+            }
+        }
+        tracing::info!(
+            source_bytes,
+            budget_bytes = PARSE_CACHE_SOURCE_BUDGET,
+            batch_files,
+            batch_bytes = PARSE_BATCH_BYTES,
+            "Parse cache skipped; parsing in bounded batches"
+        );
+        let mut extracted = ExtractedData::default();
+        let mut parsed_files = 0;
+        let mut start = 0;
+        while start < files.len() {
+            let mut end = start;
+            let mut bytes: usize = 0;
+            while end < files.len() && end - start < batch_files {
+                let next = files[end].content.len();
+                if end > start && bytes.saturating_add(next) > PARSE_BATCH_BYTES {
+                    break;
+                }
+                bytes = bytes.saturating_add(next);
+                end += 1;
+            }
+            let batch: Vec<_> = files[start..end]
+                .par_iter()
+                .filter_map(|file| {
+                    let lang = file
+                        .language
+                        .filter(|lang| grammar::is_language_available(*lang))?;
+                    Some(parse_single_file(file, lang))
+                })
+                .collect();
+            parsed_files += batch.len();
+            for result in batch {
+                for node in result.nodes {
+                    graph.add_node(node);
+                }
+                for rel in result.relationships {
+                    graph.add_relationship(rel);
+                }
+                extracted.merge(result.extracted);
+            }
+            start = end;
+        }
+        let fallback = incremental.then(|| format!(
+            "parse cache disabled: {source_bytes} source bytes exceeds {PARSE_CACHE_SOURCE_BUDGET} byte budget"
+        ));
+        return Ok((extracted, parsed_files, fallback));
+    }
+
     // A changed executable invalidates parsing semantics, grammar and feature changes.
     let executable = std::env::current_exe()
         .ok()
@@ -1326,9 +1392,10 @@ pub(super) fn nest_function_methods(
                     break; // local function inside a method → not a class method
                 }
                 if container_kinds.contains(&p.kind()) {
-                    if let (Some(cname), Some(mname)) =
-                        (ts_like_decl_name(&p, content), ts_like_decl_name(&node, content))
-                    {
+                    if let (Some(cname), Some(mname)) = (
+                        ts_like_decl_name(&p, content),
+                        ts_like_decl_name(&node, content),
+                    ) {
                         if let Some(&owner_id) = type_ids.get(cname) {
                             let method_id =
                                 generate_id("Function", &format!("{}:{}", file.path, mname));
@@ -1373,9 +1440,12 @@ fn ts_like_decl_name<'a>(node: &tree_sitter::Node, content: &'a [u8]) -> Option<
         return n.utf8_text(content).ok();
     }
     let mut cur = node.walk();
-    let found = node
-        .children(&mut cur)
-        .find(|ch| matches!(ch.kind(), "simple_identifier" | "type_identifier" | "identifier"));
+    let found = node.children(&mut cur).find(|ch| {
+        matches!(
+            ch.kind(),
+            "simple_identifier" | "type_identifier" | "identifier"
+        )
+    });
     found.and_then(|ch| ch.utf8_text(content).ok())
 }
 
@@ -1749,6 +1819,15 @@ fn extract_call(
         .unwrap_or_else(|| file_node_id.to_string());
 
     let start_byte = captures.get("call").map(|(_, node)| node.start_byte());
+    let receiver_type_name = if lang == SupportedLanguage::Rust {
+        captures.get("call").and_then(|(_, node)| {
+            receiver_name.as_deref().and_then(|receiver| {
+                rust_receiver_type_at(*node, receiver, file.content.as_bytes())
+            })
+        })
+    } else {
+        None
+    };
 
     extracted.calls.push(ExtractedCall {
         file_path: file.path.clone(),
@@ -1757,9 +1836,81 @@ fn extract_call(
         arg_count,
         call_form,
         receiver_name,
-        receiver_type_name: None,
+        receiver_type_name,
         start_byte,
     });
+}
+
+/// Read a Rust receiver's explicit type from the containing function. Local
+/// declarations closer to the call take precedence over function parameters.
+fn rust_receiver_type_at(call: tree_sitter::Node, receiver: &str, source: &[u8]) -> Option<String> {
+    if receiver == "self" {
+        return Some("Self".to_string());
+    }
+    if !receiver
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return None;
+    }
+    let mut current = call.parent();
+    let function = loop {
+        let node = current?;
+        if node.kind() == "function_item" {
+            break node;
+        }
+        current = node.parent();
+    };
+    let mut found = None;
+    if let Some(params) = function.child_by_field_name("parameters") {
+        let mut cursor = params.walk();
+        for param in params.named_children(&mut cursor) {
+            if let (Some(pattern), Some(ty)) = (
+                param.child_by_field_name("pattern"),
+                param.child_by_field_name("type"),
+            ) {
+                if pattern.utf8_text(source).ok()? == receiver {
+                    found = rust_type_base(ty.utf8_text(source).ok()?);
+                }
+            }
+        }
+    }
+    let mut stack = vec![function];
+    while let Some(node) = stack.pop() {
+        if node.start_byte() >= call.start_byte() {
+            continue;
+        }
+        if node.kind() == "let_declaration" {
+            if let (Some(pattern), Some(ty)) = (
+                node.child_by_field_name("pattern"),
+                node.child_by_field_name("type"),
+            ) {
+                if pattern.utf8_text(source).ok()? == receiver {
+                    found = rust_type_base(ty.utf8_text(source).ok()?);
+                }
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.named_children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+    found
+}
+
+fn rust_type_base(ty: &str) -> Option<String> {
+    let base = ty
+        .split('<')
+        .next()?
+        .split_whitespace()
+        .last()?
+        .trim_start_matches('&');
+    let base = base.rsplit("::").next()?;
+    if base.is_empty() || !base.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        None
+    } else {
+        Some(base.to_string())
+    }
 }
 
 /// Extract constructor call (new expression) information.
@@ -1875,9 +2026,14 @@ fn extract_assignment(
 pub fn build_symbol_table(graph: &KnowledgeGraph, table: &mut SymbolTable) {
     // Resolve ownership once before sharing definitions between indexes. Calling
     // set_owner_id for each edge scans the whole table three times per member.
-    let owners: HashMap<&str, &str> = graph.iter_relationships()
-        .filter(|rel| matches!(rel.rel_type,
-            RelationshipType::HasMethod | RelationshipType::HasProperty))
+    let owners: HashMap<&str, &str> = graph
+        .iter_relationships()
+        .filter(|rel| {
+            matches!(
+                rel.rel_type,
+                RelationshipType::HasMethod | RelationshipType::HasProperty
+            )
+        })
         .map(|rel| (rel.target_id.as_str(), rel.source_id.as_str()))
         .collect();
     graph.for_each_node(|node| match node.label {
@@ -1904,7 +2060,9 @@ pub fn build_symbol_table(graph: &KnowledgeGraph, table: &mut SymbolTable) {
                 parameter_types: None,
                 return_type: node.properties.return_type.clone(),
                 declared_type: None,
-                owner_id: owners.get(node.id.as_str()).map(|owner| (*owner).to_string()),
+                owner_id: owners
+                    .get(node.id.as_str())
+                    .map(|owner| (*owner).to_string()),
                 is_exported: node.properties.is_exported.unwrap_or(false),
             };
             table.add(node.properties.name.clone(), def);
@@ -2091,6 +2249,24 @@ trait T {
     }
 
     #[test]
+    fn rust_method_call_carries_its_parameter_receiver_type() {
+        let content = "struct Pipeline; impl Pipeline { fn run(&self) {} } fn execute(pipeline: &Pipeline) { pipeline.run(); }";
+        let file = FileEntry {
+            path: "src/lib.rs".to_string(),
+            content: content.to_string(),
+            size: content.len(),
+            language: Some(SupportedLanguage::Rust),
+        };
+        let mut graph = KnowledgeGraph::new();
+        let extracted = parse_files(&mut graph, &[file], None).unwrap();
+        assert!(extracted.calls.iter().any(|call| {
+            call.called_name == "run"
+                && call.receiver_name.as_deref() == Some("pipeline")
+                && call.receiver_type_name.as_deref() == Some("Pipeline")
+        }));
+    }
+
+    #[test]
     fn test_parse_python_methods_nest_under_class() {
         let content = r#"
 class Foo:
@@ -2148,11 +2324,26 @@ def free_function():
         };
 
         // Plain, @property, @staticmethod, and async methods all nest under the class.
-        assert!(has_method("Class:mod.py:Foo", "Function:mod.py:bar"), "plain method nests");
-        assert!(has_method("Class:mod.py:Foo", "Function:mod.py:prop"), "@property method nests");
-        assert!(has_method("Class:mod.py:Foo", "Function:mod.py:helper"), "@staticmethod nests");
-        assert!(has_method("Class:mod.py:Foo", "Function:mod.py:fetch"), "async method nests");
-        assert!(has_method("Class:mod.py:Bar", "Function:mod.py:baz"), "subclass method nests");
+        assert!(
+            has_method("Class:mod.py:Foo", "Function:mod.py:bar"),
+            "plain method nests"
+        );
+        assert!(
+            has_method("Class:mod.py:Foo", "Function:mod.py:prop"),
+            "@property method nests"
+        );
+        assert!(
+            has_method("Class:mod.py:Foo", "Function:mod.py:helper"),
+            "@staticmethod nests"
+        );
+        assert!(
+            has_method("Class:mod.py:Foo", "Function:mod.py:fetch"),
+            "async method nests"
+        );
+        assert!(
+            has_method("Class:mod.py:Bar", "Function:mod.py:baz"),
+            "subclass method nests"
+        );
 
         // A `def` nested inside a method must NOT be attached to the class.
         assert!(
@@ -2161,8 +2352,10 @@ def free_function():
         );
         // A module-level function must not nest under any class.
         assert!(
-            !graph.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.target_id == "Function:mod.py:free_function"),
+            !graph
+                .iter_relationships()
+                .any(|r| r.rel_type == RelationshipType::HasMethod
+                    && r.target_id == "Function:mod.py:free_function"),
             "module-level function must not nest"
         );
     }
@@ -2845,7 +3038,8 @@ export default Dialog;
             id: "Class:src/main.ts:Login".into(),
             label: NodeLabel::Class,
             properties: NodeProperties {
-                name: "Login".into(), file_path: "src/main.ts".into(),
+                name: "Login".into(),
+                file_path: "src/main.ts".into(),
                 ..Default::default()
             },
         });
@@ -2854,7 +3048,9 @@ export default Dialog;
             source_id: "Class:src/main.ts:Login".into(),
             target_id: "Function:src/main.ts:handleLogin".into(),
             rel_type: RelationshipType::HasMethod,
-            confidence: 1.0, reason: "ast".into(), step: None,
+            confidence: 1.0,
+            reason: "ast".into(),
+            step: None,
         });
         let mut table = SymbolTable::new();
         build_symbol_table(&graph, &mut table);
