@@ -46,7 +46,14 @@ pub async fn run(
     llm_max_symbols: Option<usize>,
     include_docs: Option<bool>,
     walk: WalkOptions,
+    #[cfg(feature = "kuzu-backend")]
+    kuzu: bool,
 ) -> anyhow::Result<()> {
+    #[cfg(feature = "kuzu-backend")]
+    if kuzu {
+        anyhow::bail!("kuzu-backend est expérimental et actuellement désactivé. Veuillez ne pas l'utiliser pour le moment.");
+    }
+
     let repo_path = Path::new(path)
         .canonicalize()
         .unwrap_or_else(|_| Path::new(path).to_path_buf());
@@ -281,18 +288,6 @@ pub async fn run(
             std::fs::create_dir_all(&csv_dir)?;
             code_explorer_db::csv_generator::generate_all_csvs(&result.graph, &repo_path, &csv_dir)?;
             println!("  CSVs saved ({} ms)", csv_start.elapsed().as_millis());
-
-            // Load CSVs into KuzuDB (when the kuzu-backend feature is enabled)
-            #[cfg(feature = "kuzu-backend")]
-            {
-                println!("  Loading into KuzuDB...");
-                let mut db = code_explorer_db::adapter::DbAdapter::new_kuzu();
-                db.open(&storage_paths.lbug_path)?;
-                db.create_schema()?;
-                db.bulk_load_csv(&csv_dir)?;
-                db.close()?;
-                println!("  KuzuDB loaded successfully.");
-            }
 
             println!("  Done! Run 'code-explorer mcp' to start the MCP server.");
             Ok(())

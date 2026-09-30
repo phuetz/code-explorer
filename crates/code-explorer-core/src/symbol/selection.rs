@@ -99,10 +99,7 @@ pub fn find_symbols<'a>(graph: &'a KnowledgeGraph, input: &str) -> Vec<&'a Graph
                 is_test_path(&a.properties.file_path).cmp(&is_test_path(&b.properties.file_path))
             })
             .then_with(|| {
-                owners
-                    .get(a.id.as_str())
-                    .is_none()
-                    .cmp(&owners.get(b.id.as_str()).is_none())
+                (!owners.contains_key(a.id.as_str())).cmp(&!owners.contains_key(b.id.as_str()))
             })
             .then_with(|| owners.get(a.id.as_str()).cmp(&owners.get(b.id.as_str())))
             .then_with(|| a.properties.file_path.cmp(&b.properties.file_path))

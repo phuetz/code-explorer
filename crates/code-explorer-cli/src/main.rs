@@ -26,6 +26,9 @@ enum Commands {
         after_help = "Examples:\n  code-explorer analyze\n  code-explorer analyze D:\\taf\\MyProject\n  code-explorer analyze --force --verbose\n  code-explorer analyze --llm-enrich"
     )]
     Analyze {
+        #[cfg(feature = "kuzu-backend")]
+        #[arg(long, help = "Utiliser KuzuDB (backend expérimental et non fonctionnel pour le moment)")]
+        kuzu: bool,
         /// Path to the repository (defaults to current directory)
         #[arg(default_value = ".")]
         path: String,
@@ -549,6 +552,8 @@ async fn async_main() -> anyhow::Result<()> {
             include,
             no_default_excludes,
             max_files,
+            #[cfg(feature = "kuzu-backend")]
+            kuzu,
         } => {
             let docs = match (include_docs, no_docs) {
                 (true, _) => Some(true),
@@ -572,6 +577,8 @@ async fn async_main() -> anyhow::Result<()> {
                     no_default_excludes,
                     max_files,
                 },
+                #[cfg(feature = "kuzu-backend")]
+                kuzu,
             )
             .await
         }

@@ -51,6 +51,8 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
             None,
             None,
             crate::commands::analyze::WalkOptions::default(),
+            #[cfg(feature = "kuzu-backend")]
+            false,
         )
         .await?;
         println!();
