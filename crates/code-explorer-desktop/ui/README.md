@@ -1,73 +1,34 @@
-# React + TypeScript + Vite
+# Code Explorer Desktop UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend React de l'application Tauri Code Explorer. Prérequis : Node.js 22.12+.
+Les commandes suivantes se lancent depuis ce dossier :
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run build
+npm run lint
+npm run test:config
+npx playwright install chromium
+npm run test:e2e
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+`test:config` exécute le hook de compilation déclaré dans `tauri.conf.json` et
+vérifie l'icône requise par AppImage. Les tests E2E utilisent des réponses Tauri
+simulées ; ils ne remplacent pas une vérification de l'application native.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Pour tester également le HTML généré, passer le chemin du fichier :
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+CODE_EXPLORER_HTML_PATH=/chemin/vers/projet/.codeexplorer/docs/index.html npm run test:e2e
 ```
+
+Pour démarrer l'application native, depuis `crates/code-explorer-desktop` :
+
+```bash
+cargo tauri dev
+```
+
+Le hook Tauri démarre Vite sur le port 1421. `npm run dev` seul utilise le port
+1420 et présente uniquement le frontend, sans les commandes natives Tauri.
+Voir [l'installation Ubuntu](../../../INSTALLATION_UBUNTU.md) pour les dépendances
+système et la [construction des installateurs](../../../build-release.sh).

@@ -4,7 +4,8 @@ This guide installs Code Explorer as a local MCP server for AI coding agents.
 
 ## 1. Build Or Install The Binary
 
-From source:
+Use the matching binary from [GitHub Releases](https://github.com/phuetz/code-explorer/releases),
+or build from source with Rust stable (1.88 or newer):
 
 ```bash
 git clone https://github.com/phuetz/code-explorer.git
@@ -65,6 +66,8 @@ Global install:
 code-explorer mcp-install --client claude --scope global
 ```
 
+This merges the server into `~/.claude.json`, the Claude Code user configuration.
+
 Restart Claude Code after installation.
 
 Claude Code skill:
@@ -112,19 +115,19 @@ Restart Codex after installation.
 
 Codex skill:
 
-- Bundled in this repo: `.codex/skills/code-explorer/SKILL.md`
+- Recommended variant: `skills/grok/code-explorer/SKILL.md` (the tested installer supports Codex).
+- The repo-local `.codex/skills/code-explorer` variant contains older command examples.
 - Optional global copy:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R .codex/skills/code-explorer ~/.codex/skills/code-explorer
+./scripts/install-grok-skill.sh --target codex
 ```
 
 On Windows PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force $env:USERPROFILE\.codex\skills
-Copy-Item -Recurse .codex\skills\code-explorer $env:USERPROFILE\.codex\skills\code-explorer -Force
+Copy-Item -Recurse skills\grok\code-explorer $env:USERPROFILE\.codex\skills\code-explorer -Force
 ```
 
 ## 5. Install Both Agents
@@ -263,6 +266,9 @@ code-explorer context PaymentService
 code-explorer impact PaymentService --direction both
 code-explorer report
 ```
+
+Replace `PaymentService` with a symbol present in your project (find one with
+`code-explorer query`). An example name does not create that symbol.
 
 ## 11. Troubleshooting
 

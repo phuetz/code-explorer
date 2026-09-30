@@ -53,7 +53,7 @@ sudo apt install -y \
 Notes:
 
 - `build-essential` compile les grammaires tree-sitter.
-- `cmake` est utile pour le backend KuzuDB optionnel.
+- `cmake` sert à compiler le backend KuzuDB expérimental, actuellement non opérationnel à l’indexation.
 - Les paquets `libwebkit2gtk-4.1-dev`, `libxdo-dev`,
   `libayatana-appindicator3-dev` et `librsvg2-dev` sont requis pour Tauri v2.
 
@@ -67,8 +67,8 @@ rustc --version
 cargo --version
 ```
 
-Le workspace Code Explorer declare `rust-version = "1.75"`. Utiliser Rust stable est
-le chemin le plus simple.
+Les dépendances actuelles requièrent Rust 1.88 ou plus récent. Utiliser Rust stable
+est le chemin le plus simple ; Rust 1.75 ne peut plus compiler ce lockfile.
 
 ## 4. Installer Node.js
 
@@ -78,6 +78,8 @@ Node.js 22 LTS ou plus recent; Node 18 n'est plus suffisant pour tout compiler.
 Installation conseillee via `nvm`:
 
 ```bash
+export NVM_DIR="$HOME/.nvm"
+mkdir -p "$NVM_DIR"
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source "$HOME/.nvm/nvm.sh"
 nvm install 22
@@ -214,9 +216,12 @@ Le serveur ecoute par defaut sur `127.0.0.1`. Si vous le liez a une interface
 reseau, definir d'abord un token:
 
 ```bash
-export CODE_EXPLORER_HTTP_TOKEN='changer-cette-valeur'
+export CODE_EXPLORER_HTTP_TOKEN='remplacer-par-un-long-jeton-aleatoire'
 code-explorer serve --host 0.0.0.0 --port 3010
 ```
+
+Les clients réseau doivent envoyer `Authorization: Bearer <jeton>` sur les
+requêtes authentifiées.
 
 ## 11. Lancer le chat React
 
@@ -389,6 +394,8 @@ sudo apt install -y git curl wget ca-certificates gnupg build-essential pkg-conf
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
+export NVM_DIR="$HOME/.nvm"
+mkdir -p "$NVM_DIR"
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source "$HOME/.nvm/nvm.sh"
 nvm install 22

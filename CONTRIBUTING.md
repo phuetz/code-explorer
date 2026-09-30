@@ -10,8 +10,8 @@ Code Explorer is licensed under the [Business Source License 1.1](LICENSE). By c
 
 ### Prerequisites
 
-- **Rust** 1.75+ (`rustup` recommended)
-- **Node.js** 20+ (for the desktop app frontend)
+- **Rust** 1.88+ (`rustup` recommended)
+- **Node.js** 22.12+ (for the desktop app frontend)
 - **git** (for git analytics features)
 
 ### Build

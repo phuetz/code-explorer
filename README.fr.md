@@ -47,13 +47,13 @@ C'est la différence entre demander à quelqu'un de **lire un livre** et lui don
 - **Feedback par Page** — Widget de feedback intégré sur chaque page pour suivre la qualité et l'utilité du contenu.
 - **Application Desktop** — Application Tauri v2 avec visualisation interactive du graphe, vue treemap, chat intelligent et palette de commandes (Ctrl+K)
 - **Chat Intelligent** — Q&A de code assisté par IA avec réponses en streaming, analyse de complexité des requêtes, plans de recherche multi-étapes et mode recherche approfondie. Supporte Ollama, OpenAI, Anthropic, OpenRouter et Gemini (avec mode raisonnement)
-- **Serveur MCP** — 27 outils accessibles à tout agent IA compatible MCP (Claude, Cursor, VS Code, etc.)
+- **Serveur MCP** — 30 outils accessibles à tout agent IA compatible MCP (Claude, Cursor, VS Code, etc.)
 - **Skill Claude Code** — Skill `/code-explorer` intégré qui permet à Claude d'interroger le graphe de connaissances pendant votre conversation, avec invocation automatique sur les questions en langage naturel
 - **Rapport de Santé du Code** — Commande `code-explorer report` combinant hotspots, couplage temporel, ownership et métriques du graphe en un score de santé (A-E)
 - **Recherche Hybride** — Recherche lexicale BM25 + embeddings sémantiques ONNX optionnels, fusionnés par Reciprocal Rank Fusion. Reranker LLM optionnel pour réordonner les résultats en post-traitement, avec repli automatique si le modèle est indisponible.
 - **Analyse d'Impact** — Trace les appelants amont, les appelés aval et l'impact transitif de tout symbole
 - **Modes Interactifs** — Shell REPL, dashboard TUI, surveillance de fichiers avec réindexation automatique
-- **Stockage Modulaire** — Backend en mémoire (par défaut) ou base de données graphe KuzuDB
+- **Stockage Modulaire** — Backend en mémoire (par défaut). Le backend KuzuDB expérimental échoue actuellement à l’indexation.
 
 ## Support ASP.NET MVC 5 / Legacy .NET
 
@@ -103,11 +103,11 @@ Le site HTML inclut :
 
 | Dépendance | Version | Nécessaire pour | Installation |
 |-----------|---------|----------------|--------------|
-| **Rust** | 1.75+ | Tout | [rustup.rs](https://rustup.rs/) |
+| **Rust** | stable, 1.88+ | Compilation depuis les sources | [rustup.rs](https://rustup.rs/) |
 | **Compilateur C/C++** | - | Grammaires tree-sitter | Windows: Visual Studio Build Tools. Linux: `apt install build-essential`. macOS: `xcode-select --install` |
-| **Node.js** | 18+ | Frontend de l'app desktop | [nodejs.org](https://nodejs.org/) |
+| **Node.js** | 22.12+ | Frontend de l'app desktop | [nodejs.org](https://nodejs.org/) |
 | **git** | 2.0+ | Analytics git (hotspots, couplage, ownership) | Déjà installé sur la plupart des systèmes |
-| **CMake** | 3.15+ | Backend KuzuDB (optionnel) | Windows: `winget install cmake`. Linux: `apt install cmake` |
+| **CMake** | 3.15+ | Backend KuzuDB expérimental (non opérationnel) | Windows: `winget install cmake`. Linux: `apt install cmake` |
 
 ### Installation & Compilation
 
@@ -176,20 +176,23 @@ l'authentification, le registre, les modèles et les dépôts indexés portables
 restent à côté de l'exécutable au lieu d'écrire dans `%USERPROFILE%\.codeexplorer`
 sur la machine de l'opérateur.
 
+Les binaires précompilés v0.2.1 précèdent certains ajouts du code source actuel,
+notamment `query --file-type`, `--page` et `--compact`. Consulter le `--help` du
+binaire utilisé ; compiler les sources actuelles pour ces options.
+
 ### Compilation avec fonctionnalités optionnelles
 
-```bash
-# Avec le backend KuzuDB (pour les très gros repos, nécessite CMake)
-cargo build --release -p code-explorer-cli --features code-explorer-cli/kuzu-backend
+Le backend `kuzu-backend` compile, mais sa création de schéma échoue dès
+l’indexation. Il reste expérimental et ne doit pas être activé pour une
+installation utilisateur. Le backend en mémoire est le parcours pris en charge.
 
+```bash
 # Avec la recherche sémantique ONNX (BM25 + embeddings hybrides)
 cargo build --release -p code-explorer-cli --features code-explorer-search/embeddings
 
 # Avec le reranker LLM (post-traitement via API OpenAI-compatible)
 cargo build --release -p code-explorer-cli --features code-explorer-search/reranker-llm
 
-# Avec tout (KuzuDB + embeddings + reranker)
-cargo build --release -p code-explorer-cli --features code-explorer-cli/kuzu-backend,code-explorer-search/embeddings,code-explorer-search/reranker-llm
 ```
 
 > **Note :** la build par défaut de `code-explorer-cli` active déjà `embeddings` et `reranker-llm`. Les commandes ci-dessus sont des activations explicites pour les crates qui consomment la lib à la carte.
@@ -281,10 +284,10 @@ cargo tauri dev
 code-explorer analyze
 
 # Indexer un chemin spécifique (ex: un projet ASP.NET MVC legacy)
-code-explorer analyze D:\chemin\vers\projet
+code-explorer analyze /chemin/vers/projet
 
 # Forcer la réindexation (réinitialise le graphe)
-code-explorer analyze D:\chemin\vers\projet --force
+code-explorer analyze /chemin/vers/projet --force
 ```
 
 Cela crée un répertoire `.codeexplorer/` contenant le graphe de connaissances sérialisé.
@@ -293,26 +296,47 @@ Cela crée un répertoire `.codeexplorer/` contenant le graphe de connaissances 
 
 ```bash
 # Générer le site HTML (recommandé)
-code-explorer generate --path D:\chemin\vers\projet html
+code-explorer generate --path /chemin/vers/projet html
 # → Ouvrir .codeexplorer/docs/index.html dans le navigateur
 
 # Générer avec enrichissement LLM (nécessite un LLM configuré)
-code-explorer generate --path D:\chemin\vers\projet html --enrich
-code-explorer generate --path D:\chemin\vers\projet html --enrich --enrich-profile strict
-code-explorer generate --path D:\chemin\vers\projet html --enrich --enrich-lang en
+code-explorer generate --path /chemin/vers/projet html --enrich
+code-explorer generate --path /chemin/vers/projet html --enrich --enrich-profile strict
+code-explorer generate --path /chemin/vers/projet html --enrich --enrich-lang en
 
 # Tout générer (AGENTS.md, wiki, skills, docs, DOCX, HTML)
-code-explorer generate --path D:\chemin\vers\projet all
+code-explorer generate --path /chemin/vers/projet all
 
 # Générer des formats spécifiques
-code-explorer generate --path D:\chemin\vers\projet docs     # Pages Markdown
-code-explorer generate --path D:\chemin\vers\projet docx     # Document Word (header + footer + brand)
-code-explorer generate --path D:\chemin\vers\projet pdf      # PDF (basé Puppeteer, depuis l'HTML)
-code-explorer generate --path D:\chemin\vers\projet context  # AGENTS.md uniquement
-code-explorer generate --path D:\chemin\vers\projet wiki     # Pages wiki
-code-explorer generate --path D:\chemin\vers\projet skills   # Fichiers skills
-code-explorer generate --path D:\chemin\vers\projet inject   # Re-injecter les fragments LLM sans tout regénérer
+code-explorer generate --path /chemin/vers/projet docs     # Pages Markdown
+code-explorer generate --path /chemin/vers/projet docx     # Document Word (header + footer + brand)
+code-explorer generate --path /chemin/vers/projet pdf      # PDF (Playwright/Chromium, depuis les pages Markdown)
+code-explorer generate --path /chemin/vers/projet context  # AGENTS.md uniquement
+code-explorer generate --path /chemin/vers/projet wiki     # Pages wiki
+code-explorer generate --path /chemin/vers/projet skills   # Fichiers skills
+code-explorer generate --path /chemin/vers/projet inject --input inject.json  # Manifeste de fragments requis
 ```
+
+`pdf` nécessite Node.js, le paquet Playwright et son navigateur Chromium :
+
+```bash
+npm install -g playwright
+npx playwright install chromium
+```
+
+`inject` nécessite des pages Markdown déjà générées et un manifeste JSON :
+
+```json
+{
+  "fragments": [
+    {"page": "overview", "anchor": "GNX:FRAGMENT:example", "type": "markdown", "content": "Texte à insérer."}
+  ]
+}
+```
+
+Ajouter `<!-- GNX:FRAGMENT:example -->` dans `overview.md` avant l'injection.
+Les noms de symboles des exemples (`UserService`, `handleRequest`, etc.) doivent
+être remplacés par des symboles présents dans votre projet.
 
 ### Word DOCX — personnalisation client
 
@@ -336,8 +360,8 @@ Les diagrammes Mermaid présents dans le markdown source sont rendus en PNG via 
 Avant d'envoyer un document Word/HTML à un client, lancer le linter pour repérer ce qui pourrait nous embarrasser :
 
 ```bash
-code-explorer validate-docs --repo D:\chemin\vers\projet
-code-explorer validate-docs --repo D:\chemin\vers\projet --json   # rapport JSON
+code-explorer validate-docs --repo /chemin/vers/projet
+code-explorer validate-docs --repo /chemin/vers/projet --json   # rapport JSON
 ```
 
 Cinq vérifications à deux niveaux de sévérité :
@@ -381,21 +405,29 @@ code-explorer cypher "MATCH (n:Function) RETURN n.name LIMIT 10"
 
 Pour activer `--hybrid`, il faut d'abord générer les embeddings du graphe indexé.
 Le modèle par défaut est `Xenova/all-MiniLM-L6-v2` (384d, ~90 Mo), adapté à
-l'anglais et à la plupart des contenus en alphabet latin. Pour les corpus
-français ou multilingues, préférer BGE-M3 ou Qwen3-Embedding (option `--model`).
+l'anglais et à la plupart des contenus en alphabet latin. Les exports ONNX BGE-M3 et Qwen3-Embedding ne sont pas validés ici ; leur
+compatibilité dépend des entrées, du tokenizer et de la dimension de l’export.
 
 ```bash
 # 1. Indexer le code comme d'habitude
-code-explorer analyze D:\chemin\vers\projet
+code-explorer analyze /chemin/vers/projet
 
-# 2. Générer les embeddings (écrit .codeexplorer/embeddings.bin + embeddings.meta.json)
-code-explorer embed --repo D:\chemin\vers\projet --model ~/.codeexplorer/models/all-MiniLM-L6-v2/model.onnx
-code-explorer embed --repo D:\chemin\vers\projet --model ~/.codeexplorer/models/bge-m3/model.onnx
-code-explorer embed --repo D:\chemin\vers\projet --model ~/.codeexplorer/models/all-MiniLM-L6-v2/model.onnx --batch 16
+# 2. Télécharger le modèle anglais et son tokenizer (aucun modèle n'est livré)
+mkdir -p ~/.codeexplorer/models/all-MiniLM-L6-v2
+curl -fL https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx -o ~/.codeexplorer/models/all-MiniLM-L6-v2/model.onnx
+curl -fL https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/tokenizer.json -o ~/.codeexplorer/models/all-MiniLM-L6-v2/tokenizer.json
 
-# 3. Rechercher en hybride ; --rerank ajoute le reranker LLM
-code-explorer query "où est gérée l'annulation du chat ?" --hybrid --repo D:\chemin\vers\projet
-code-explorer query "où est gérée l'annulation du chat ?" --hybrid --rerank --repo D:\chemin\vers\projet
+# 3. Générer les embeddings (écrit .codeexplorer/embeddings.bin + embeddings.meta.json)
+code-explorer embed --repo /chemin/vers/projet --model ~/.codeexplorer/models/all-MiniLM-L6-v2/model.onnx
+# Autres modèles : fournir votre export ONNX et son tokenizer ; BGE-M3 requiert
+# une dimension adaptée (--dim 1024), sa compatibilité dépend de l'export.
+code-explorer embed --repo /chemin/vers/projet --model ~/.codeexplorer/models/all-MiniLM-L6-v2/model.onnx --batch 16
+
+# Après installation du modèle, `analyze --embeddings` crée aussi les vecteurs.
+
+# 4. Rechercher en hybride ; --rerank ajoute le reranker LLM
+code-explorer query "où est gérée l'annulation du chat ?" --hybrid --repo /chemin/vers/projet
+code-explorer query "où est gérée l'annulation du chat ?" --hybrid --rerank --repo /chemin/vers/projet
 ```
 
 Le reranker LLM réutilise `~/.codeexplorer/chat-config.json` et bascule automatiquement
@@ -417,8 +449,10 @@ code-explorer watch         # Surveillance & réindexation automatique
 # Transport stdio (pour Claude, Cursor, VS Code, etc.)
 code-explorer mcp
 
-# Configuration automatique MCP dans votre éditeur
+# Afficher les instructions MCP (ne modifie pas la configuration)
 code-explorer setup
+# Écrire la configuration Claude Code du projet
+code-explorer mcp-install --client claude --scope project
 
 # Serveur HTTP
 code-explorer serve         # Port 3010 par défaut
@@ -536,7 +570,7 @@ sans plugin :
 # Claude Code (par projet, ou ~/.claude/skills pour tous les projets)
 cp -r .claude/skills/code-explorer /chemin/vers/votre/depot/.claude/skills/
 # Codex
-cp -r .codex/skills/code-explorer ~/.codex/skills/
+./scripts/install-grok-skill.sh --target codex
 # skills.sh
 npx skills add phuetz/code-explorer
 ```
@@ -636,7 +670,7 @@ Code Explorer est sa propre base de code Rust, centrée sur :
 - **La Performance** : Indexation parallèle ultra-rapide de grands dépôts via Rayon et Tree-sitter.
 - **L'expérience Desktop Native** : Une application Tauri v2 avec visualisation interactive du graphe intégrée.
 - **L'Enrichissement Entreprise** : Parsers spécialisés pour les stacks legacy (ASP.NET MVC 5, EF6, Telerik).
-- **Le stockage Graphe Embarqué** : Intégration étroite avec KuzuDB pour un stockage persistant à faible consommation mémoire.
+- **Le stockage Graphe Embarqué** : Graphe en mémoire persisté en snapshot JSON. Le backend KuzuDB expérimental n’est pas opérationnel.
 
 ## Licence
 

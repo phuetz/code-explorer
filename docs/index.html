@@ -176,9 +176,12 @@
     <section id="install" class="section alt">
       <div class="wrap narrow">
         <h2>Quick start</h2>
-        <pre class="code"><code># 1. Build (release, ~35 MB binary)
-cargo build --release        # binary at target/release/code-explorer
+        <pre class="code"><code># 1. Clone and build with Rust stable (1.88+)
+git clone https://github.com/phuetz/code-explorer.git
+cd code-explorer
+cargo build --release -p code-explorer-cli  # binary at target/release/code-explorer
 
+# Add target/release to PATH, then cd to the project to index.
 # 2. Index your repo once (re-run with --incremental after changes)
 code-explorer analyze .
 

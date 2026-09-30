@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/phuetz/code-explorer/actions/workflows/ci.yml"><img src="https://github.com/phuetz/code-explorer/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-BSL_1.1-3b82f6?style=flat-square" alt="License: Business Source License 1.1"/></a>
-  <img src="https://img.shields.io/badge/Rust-1.75+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
+  <img src="https://img.shields.io/badge/Rust-1.88+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
   <img src="https://img.shields.io/badge/languages-14-22c55e?style=flat-square" alt="14 languages"/>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-30_tools-a855f7?style=flat-square" alt="MCP server"/></a>
   <img src="https://img.shields.io/badge/tests-1007-16a34a?style=flat-square" alt="1007 tests"/>
@@ -68,7 +68,7 @@ Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of
 
 > It's the difference between asking someone to **read a book** versus handing them the **index and table of contents**.
 
-- **Written in Rust** — a 64 MB static binary, no runtime; indexes thousands of files in seconds (the very largest repos in minutes).
+- **Written in Rust** — a native binary (Linux builds link the system C/C++ libraries); indexes thousands of files in seconds (the very largest repos in minutes).
 - **14 languages** via tree-sitter — JavaScript, TypeScript, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor.
 - **MCP-native** — drops straight into Claude Code, Codex, Cursor, VS Code, or any MCP client.
 - **100% local & offline** — your code never leaves your machine. No API key required to index or query.
@@ -189,7 +189,7 @@ The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic,
 ```bash
 # 1. Get the binary — either grab a prebuilt one (no Rust toolchain needed):
 #      https://github.com/phuetz/code-explorer/releases   (Linux / macOS / Windows)
-#    …or build from source (release: ~64 MB static binary):
+#    …or build from source (use Rust stable, 1.88 or newer):
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 cargo build --release -p code-explorer-cli
@@ -204,17 +204,24 @@ cd /path/to/your/project
 code-explorer analyze .
 
 # 3. Ask the graph — from the project directory
-code-explorer context  handleLogin          # 360° view: callers, callees, imports, hierarchy
-code-explorer impact   PaymentService       # blast radius, upstream + downstream
+code-explorer context  YOUR_SYMBOL          # 360° view: callers, callees, imports, hierarchy
+code-explorer impact   YOUR_SYMBOL       # blast radius, upstream + downstream
 code-explorer query    "where do we verify auth"   # full-text + symbol search
 code-explorer cypher   "MATCH (n:Function) RETURN n.name LIMIT 10"
 ```
+
+The prebuilt v0.2.1 binaries predate some commands and flags on the current source
+branch (for example `query --file-type`, `--page` and `--compact`). Check the
+binary’s `--help`; build the current source for those additions.
+
+Replace `YOUR_SYMBOL` with a function or class from your project; the example names
+elsewhere in this guide only return results when those symbols exist.
 
 No internet, no API key needed for indexing or graph queries. (LLM features like `ask` and `--enrich` are optional and bring-your-own-key.) By default, Code Explorer selects parsers from file extensions. The optional `magika-detect` feature adds Magika-backed ONNX detection for extensionless files while keeping the normal extension path as the fast default.
 
 ---
 
-## Install as a Claude Code plugin (one command)
+## Install as a Claude Code plugin
 
 The repository is its own plugin marketplace. With the `code-explorer` binary on
 your `PATH` and an index built (`code-explorer analyze .`), this installs the
@@ -237,10 +244,12 @@ measure the blast radius of a change, and cite `file:line` evidence instead of
 grepping blindly — no plugin required:
 
 ```bash
+# Run these copies from the Code Explorer source checkout.
 # Claude Code (project-scoped, or ~/.claude/skills for every project)
+mkdir -p /path/to/your/repo/.claude/skills
 cp -r .claude/skills/code-explorer /path/to/your/repo/.claude/skills/
 # Codex
-cp -r .codex/skills/code-explorer ~/.codex/skills/
+./scripts/install-grok-skill.sh --target codex
 # skills.sh
 npx skills add phuetz/code-explorer
 ```
@@ -308,10 +317,12 @@ When something does not answer, `code-explorer doctor <path>` says why in one pa
 There are also bundled skills for **Claude Code** (`.claude/skills/code-explorer`) and **Codex** (`.codex/skills/code-explorer`) so the agent knows when to reach for the graph on natural-language code questions.
 
 ```bash
+# Run these copies from the Code Explorer source checkout.
 # Claude Code (project-scoped, or ~/.claude/skills for every project)
+mkdir -p /path/to/your/repo/.claude/skills
 cp -r .claude/skills/code-explorer /path/to/your/repo/.claude/skills/
 # Codex
-cp -r .codex/skills/code-explorer ~/.codex/skills/
+./scripts/install-grok-skill.sh --target codex
 ```
 
 The skill checks `code-explorer status`, indexes if needed, then answers with `context`, `impact` and `query` before reading files. Pair it with the [lm-resizer](https://github.com/phuetz/lm-resizer) skill so the commands run afterwards stay quiet.
@@ -331,7 +342,7 @@ The skill checks `code-explorer status`, indexes if needed, then answers with `c
 | **HTML Docs Generator** | DeepWiki-style site: full-text search, Mermaid diagrams, cross-links, embedded chat, DOCX/PDF export |
 | **Desktop App** | Tauri v2 + React 19 — interactive graph, treemap, analytics cockpit, command palette |
 | **Enterprise / legacy .NET** | Deep ASP.NET MVC 5 / EF6 support: controllers, Razor views, EDMX entities, Telerik/Kendo grids, jQuery→action mapping, DI graphs |
-| **Pluggable Storage** | In-memory backend (default) or KuzuDB graph database for very large repos |
+| **Pluggable Storage** | In-memory backend (default); KuzuDB backend is experimental and currently fails indexing |
 
 ---
 
@@ -362,7 +373,7 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture and design notes.
 
 **tree-sitter for parsing.** One battle-tested incremental-parsing engine with grammars for all 14 languages, instead of 14 bespoke parsers. Each language adds a thin post-pass (call resolution, member nesting) on top of the shared AST walk.
 
-**In-memory knowledge graph, no database required.** The graph lives in a `HashMap`-backed store with O(1) node/edge lookup and deterministic IDs (`"Label:qualifiedName"`), persisted as a JSON snapshot (`graph.bin`). Zero setup, works offline. A real graph DB ([KuzuDB](https://kuzudb.com/)) is an **opt-in** feature flag for very large repos — you don't pay for it unless you need it.
+**In-memory knowledge graph, no database required.** The graph lives in a `HashMap`-backed store with O(1) node/edge lookup and deterministic IDs (`"Label:qualifiedName"`), persisted as a JSON snapshot (`graph.bin`). Zero setup, works offline. The optional KuzuDB backend currently fails schema creation during indexing. Use the default in-memory backend; KuzuDB is not a supported installation path.
 
 **MCP as the integration surface.** Rather than a bespoke plugin per editor, Code Explorer speaks the [Model Context Protocol](https://modelcontextprotocol.io/) — so the same server works with Claude Code, Codex, Cursor, VS Code and anything else that speaks MCP, over stdio or HTTP.
 
