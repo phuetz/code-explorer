@@ -39,10 +39,12 @@ pub fn run(path: Option<&str>, json: bool) -> Result<()> {
     };
 
     // Git analytics
-    let hotspots = code_explorer_git::hotspots::analyze_hotspots(&repo_path, 90).unwrap_or_default();
+    let hotspots =
+        code_explorer_git::hotspots::analyze_hotspots(&repo_path, 90).unwrap_or_default();
     let couplings =
         code_explorer_git::coupling::analyze_coupling(&repo_path, 3, Some(180)).unwrap_or_default();
-    let ownerships = code_explorer_git::ownership::analyze_ownership(&repo_path).unwrap_or_default();
+    let ownerships =
+        code_explorer_git::ownership::analyze_ownership(&repo_path).unwrap_or_default();
 
     // Compute score (0-100); healthy projects score ~85-95
     let mut score: f64 = 100.0;

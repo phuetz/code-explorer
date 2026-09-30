@@ -32,7 +32,7 @@ mod tests {
         assert_eq!(floor_char_boundary(s, 2), 2); // already a boundary
         assert_eq!(floor_char_boundary(s, 5), 5); // boundary just after the em-dash
         assert_eq!(floor_char_boundary(s, 100), s.len()); // clamp past end
-        // The result is always sliceable.
+                                                          // The result is always sliceable.
         for i in 0..=s.len() + 3 {
             let b = floor_char_boundary(s, i);
             let _ = &s[..b]; // must not panic

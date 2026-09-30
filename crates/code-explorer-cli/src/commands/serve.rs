@@ -561,12 +561,13 @@ async fn workdoc_extract_handler(
     let temp_path = write_workdoc_temp_file(&body)
         .await
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
-    let markdown = code_explorer_rag::docx::docx_to_markdown_with_images(&temp_path).map_err(|err| {
-        (
-            StatusCode::BAD_REQUEST,
-            format!("Impossible de lire le document DOCX: {err}"),
-        )
-    });
+    let markdown =
+        code_explorer_rag::docx::docx_to_markdown_with_images(&temp_path).map_err(|err| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Impossible de lire le document DOCX: {err}"),
+            )
+        });
     let colored_paragraphs =
         code_explorer_rag::docx::docx_colored_paragraphs(&temp_path).unwrap_or_default();
     let _ = tokio::fs::remove_file(&temp_path).await;
@@ -1037,10 +1038,7 @@ async fn workdoc_temp_output_path(extension: &str) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn extract_workdoc_questions(markdown: &str) -> Vec<WorkdocQuestion> {
-    let lines: Vec<String> = markdown
-        .lines()
-        .map(normalize_workdoc_line)
-        .collect();
+    let lines: Vec<String> = markdown.lines().map(normalize_workdoc_line).collect();
 
     let candidates = collect_workdoc_question_candidates(&lines);
 
@@ -1437,15 +1435,12 @@ fn resolve_chat_repo_entry(
 ) -> Result<RegistryEntry, (StatusCode, String)> {
     let requested_repo = requested_repo.trim();
     if requested_repo.is_empty() {
-        return registry
-            .first()
-            .cloned()
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    "No repository found. Run 'code-explorer analyze' first.".to_string(),
-                )
-            });
+        return registry.first().cloned().ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                "No repository found. Run 'code-explorer analyze' first.".to_string(),
+            )
+        });
     }
 
     backend.resolve_repo(Some(requested_repo)).map_err(|_| {
@@ -1652,9 +1647,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            parse_workdoc_question_line(
-                "https://example.test/records/Details?id=12345"
-            ),
+            parse_workdoc_question_line("https://example.test/records/Details?id=12345"),
             None
         );
     }

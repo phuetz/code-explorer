@@ -140,22 +140,29 @@ fn incremental_matches_full_and_parses_only_changes() {
 #[test]
 #[ignore = "wall-clock requirement on 320 generated files; run on a quiet machine"]
 fn large_repository_timing() {
-    let root = std::env::temp_dir().join(format!("large-incremental-oracle-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("large-incremental-oracle-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     for i in 0..320 {
-        fs::write(root.join(format!("module{i}.rs")),
-            format!("pub fn value_{i}() -> usize {{ {i} }}\n")).unwrap();
+        fs::write(
+            root.join(format!("module{i}.rs")),
+            format!("pub fn value_{i}() -> usize {{ {i} }}\n"),
+        )
+        .unwrap();
     }
     analyze(&root, "--force");
     let a = fs::read(root.join(".codeexplorer/graph.bin")).unwrap();
     for i in 0..3 {
-        fs::write(root.join(format!("module{i}.rs")),
-            format!("pub fn updated_{i}() -> usize {{ {} }}\n", i + 1)).unwrap();
+        fs::write(
+            root.join(format!("module{i}.rs")),
+            format!("pub fn updated_{i}() -> usize {{ {} }}\n", i + 1),
+        )
+        .unwrap();
     }
     let incremental = analyze(&root, "--incremental");
-    let report: Value = serde_json::from_slice(
-        &fs::read(root.join(".codeexplorer/analyze.json")).unwrap(),
-    ).unwrap();
+    let report: Value =
+        serde_json::from_slice(&fs::read(root.join(".codeexplorer/analyze.json")).unwrap())
+            .unwrap();
     assert_eq!(report["total_files"], 320);
     assert_eq!(report["parsed_files"], 3);
     let b = fs::read(root.join(".codeexplorer/graph.bin")).unwrap();
@@ -163,8 +170,10 @@ fn large_repository_timing() {
     let full = analyze(&root, "--force");
     assert!(b == fs::read(root.join(".codeexplorer/graph.bin")).unwrap());
     eprintln!("three changed files: incremental={incremental:?}, full={full:?}");
-    assert!(incremental.as_secs_f64() <= full.as_secs_f64() * 0.3,
-        "incremental {incremental:?} exceeds 30% of full {full:?}");
+    assert!(
+        incremental.as_secs_f64() <= full.as_secs_f64() * 0.3,
+        "incremental {incremental:?} exceeds 30% of full {full:?}"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

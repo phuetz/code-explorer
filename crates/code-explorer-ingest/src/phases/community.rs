@@ -386,8 +386,12 @@ mod tests {
         let mut expected = None;
         for _ in 0..32 {
             let mut graph = KnowledgeGraph::new();
-            for (id, path) in [("a", "src/alpha/a.ts"), ("b", "src/beta/b.ts"),
-                               ("c", "src/alpha/c.ts"), ("d", "src/beta/d.ts")] {
+            for (id, path) in [
+                ("a", "src/alpha/a.ts"),
+                ("b", "src/beta/b.ts"),
+                ("c", "src/alpha/c.ts"),
+                ("d", "src/beta/d.ts"),
+            ] {
                 graph.add_node(make_node(id, NodeLabel::Function, path));
             }
             for (a, b) in [("a", "b"), ("b", "c"), ("c", "d"), ("d", "a")] {

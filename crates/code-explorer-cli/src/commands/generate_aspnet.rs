@@ -15,9 +15,9 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use colored::Colorize;
 use code_explorer_core::graph::types::*;
 use code_explorer_core::graph::KnowledgeGraph;
+use colored::Colorize;
 
 /// Check if the graph contains any ASP.NET-specific nodes.
 pub fn has_aspnet_content(graph: &KnowledgeGraph) -> bool {

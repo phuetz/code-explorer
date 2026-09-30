@@ -3146,7 +3146,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("code-explorer-{name}-{}-{nanos}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "code-explorer-{name}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 
     #[test]
@@ -3554,8 +3557,9 @@ mod tests {
         assert!(candidates
             .iter()
             .any(|path| path.ends_with("chat-ui/node_modules/mermaid/dist/mermaid.min.js")));
-        assert!(candidates.iter().any(|path| path
-            .ends_with("crates/code-explorer-desktop/ui/node_modules/mermaid/dist/mermaid.min.js")));
+        assert!(candidates.iter().any(|path| path.ends_with(
+            "crates/code-explorer-desktop/ui/node_modules/mermaid/dist/mermaid.min.js"
+        )));
     }
 
     #[test]

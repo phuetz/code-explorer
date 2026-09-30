@@ -129,9 +129,7 @@ impl KnowledgeGraph {
             let empty: Vec<String> = self
                 .nodes
                 .iter()
-                .filter(|(id, n)| {
-                    n.label == NodeLabel::Folder && !has_child.contains(id.as_str())
-                })
+                .filter(|(id, n)| n.label == NodeLabel::Folder && !has_child.contains(id.as_str()))
                 .map(|(id, _)| id.clone())
                 .collect();
             if empty.is_empty() {

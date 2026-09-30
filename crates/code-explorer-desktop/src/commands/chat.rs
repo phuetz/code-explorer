@@ -468,12 +468,12 @@ async fn load_config(state: &AppState) -> ChatConfig {
 
 // ─── Tauri Commands ──────────────────────────────────────────────────
 
-use futures_util::{stream, StreamExt};
 use code_explorer_core::llm::openai::OpenAILlmProvider;
 use code_explorer_core::llm::{
     FunctionDefinition, LlmProvider, LlmResponseChunk, LlmStream, Message, Role, ToolCall,
     ToolDefinition,
 };
+use futures_util::{stream, StreamExt};
 
 struct ChatGptResponsesLlmProvider {
     client: reqwest::Client,
@@ -1092,7 +1092,9 @@ async fn execute_mcp_tool(
             };
             match code_explorer_db::inmemory::cypher::parse(query) {
                 Ok(stmt) => {
-                    match code_explorer_db::inmemory::cypher::execute(&stmt, graph, indexes, fts_index) {
+                    match code_explorer_db::inmemory::cypher::execute(
+                        &stmt, graph, indexes, fts_index,
+                    ) {
                         Ok(rows) => {
                             if rows.is_empty() {
                                 "Query returned 0 results.".to_string()
@@ -1155,7 +1157,9 @@ async fn execute_mcp_tool(
             );
             match code_explorer_db::inmemory::cypher::parse(&cypher) {
                 Ok(stmt) => {
-                    match code_explorer_db::inmemory::cypher::execute(&stmt, graph, indexes, fts_index) {
+                    match code_explorer_db::inmemory::cypher::execute(
+                        &stmt, graph, indexes, fts_index,
+                    ) {
                         Ok(rows) => {
                             if rows.is_empty() {
                                 format!("No business processes found for '{}'.", query)

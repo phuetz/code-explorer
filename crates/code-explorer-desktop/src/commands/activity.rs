@@ -135,8 +135,10 @@ mod tests {
 
     #[test]
     fn test_save_load_caps_at_200() {
-        let dir =
-            std::env::temp_dir().join(format!("code-explorer-activity-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "code-explorer-activity-test-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("activity.json");
         let mut file = ActivityFile::default();

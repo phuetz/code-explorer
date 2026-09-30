@@ -344,15 +344,30 @@ class Other:
         };
 
         // Instance attributes assigned on self nest under their class.
-        assert!(has_prop("Class:acct.py:Account", "owner"), "self.owner nests");
-        assert!(has_prop("Class:acct.py:Account", "_balance"), "self._balance nests");
-        assert!(has_prop("Class:acct.py:Account", "history"), "self.history (in another method) nests");
+        assert!(
+            has_prop("Class:acct.py:Account", "owner"),
+            "self.owner nests"
+        );
+        assert!(
+            has_prop("Class:acct.py:Account", "_balance"),
+            "self._balance nests"
+        );
+        assert!(
+            has_prop("Class:acct.py:Account", "history"),
+            "self.history (in another method) nests"
+        );
         // Tuple-target instance attributes nest.
         assert!(has_prop("Class:acct.py:Account", "x"), "tuple self.x nests");
         assert!(has_prop("Class:acct.py:Account", "y"), "tuple self.y nests");
         // The Property nodes were synthesized.
-        assert!(graph.get_node("Property:acct.py:history").is_some(), "history Property node created");
+        assert!(
+            graph.get_node("Property:acct.py:history").is_some(),
+            "history Property node created"
+        );
         // A different class with the same attr name also gets its own edge.
-        assert!(has_prop("Class:acct.py:Other", "owner"), "Other.owner nests (shared node, own edge)");
+        assert!(
+            has_prop("Class:acct.py:Other", "owner"),
+            "Other.owner nests (shared node, own edge)"
+        );
     }
 }

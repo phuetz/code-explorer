@@ -61,9 +61,10 @@ pub fn process_heritage(
                 "trait" | "heritage.trait" | "uses" => RelationshipType::Implements,
                 _ => {
                     // Check language-specific interface patterns
-                    let lang = code_explorer_core::config::languages::SupportedLanguage::from_filename(
-                        &heritage.file_path,
-                    );
+                    let lang =
+                        code_explorer_core::config::languages::SupportedLanguage::from_filename(
+                            &heritage.file_path,
+                        );
                     if let Some(lang) = lang {
                         let provider = get_provider(lang);
                         if let Some(pattern) = provider.interface_name_pattern() {

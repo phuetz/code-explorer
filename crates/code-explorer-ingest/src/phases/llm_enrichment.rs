@@ -722,8 +722,10 @@ mod tests {
 
     #[test]
     fn resolve_repo_file_accepts_files_inside_repo() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-llm-enrich-inside-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-llm-enrich-inside-{}",
+            std::process::id()
+        ));
         let repo = root.join("repo");
         std::fs::create_dir_all(repo.join("src")).unwrap();
         let file = repo.join("src").join("service.cs");
@@ -737,8 +739,10 @@ mod tests {
 
     #[test]
     fn resolve_repo_file_rejects_parent_escape() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-llm-enrich-escape-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-llm-enrich-escape-{}",
+            std::process::id()
+        ));
         let repo = root.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         let outside = root.join("outside.cs");

@@ -87,7 +87,12 @@ fn run_single_class(
     // Find the Class/Service node
     let candidates: Vec<_> = find_symbols(graph, target_name)
         .into_iter()
-        .filter(|n| matches!(n.label, NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller))
+        .filter(|n| {
+            matches!(
+                n.label,
+                NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller
+            )
+        })
         .collect();
 
     let class_node = match candidates.first() {
@@ -337,7 +342,10 @@ struct ClassStats {
     dead_count: usize,
 }
 
-fn print_text_single(class_node: &code_explorer_core::graph::types::GraphNode, methods: &[MethodInfo]) {
+fn print_text_single(
+    class_node: &code_explorer_core::graph::types::GraphNode,
+    methods: &[MethodInfo],
+) {
     let traced_count = methods.iter().filter(|m| m.is_traced).count();
     let dead_count = methods
         .iter()
@@ -398,7 +406,10 @@ fn print_text_single(class_node: &code_explorer_core::graph::types::GraphNode, m
     println!();
 }
 
-fn print_json_single(class_node: &code_explorer_core::graph::types::GraphNode, methods: &[MethodInfo]) {
+fn print_json_single(
+    class_node: &code_explorer_core::graph::types::GraphNode,
+    methods: &[MethodInfo],
+) {
     let traced_count = methods.iter().filter(|m| m.is_traced).count();
     let total = methods.len();
 
@@ -434,7 +445,12 @@ fn run_flow_trace(
     // Find the Class/Service/Controller node
     let candidates: Vec<_> = find_symbols(graph, target_name)
         .into_iter()
-        .filter(|n| matches!(n.label, NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller))
+        .filter(|n| {
+            matches!(
+                n.label,
+                NodeLabel::Class | NodeLabel::Service | NodeLabel::Controller
+            )
+        })
         .collect();
 
     let start_node = match candidates.first() {

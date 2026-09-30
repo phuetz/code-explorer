@@ -371,8 +371,7 @@ impl App {
             }
         }
 
-        self.symbols
-            .sort_by_key(|a| a.name.to_lowercase());
+        self.symbols.sort_by_key(|a| a.name.to_lowercase());
         self.load_details_for_selected_symbol();
     }
 

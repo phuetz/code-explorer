@@ -558,16 +558,18 @@ fn parse_blueprint_from_markdown(md: &str) -> Blueprint {
                 });
             }
             Some("seq")
-                if (trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ")) => {
-                    let cleaned = trimmed
-                        .trim_start_matches(|c: char| {
-                            c.is_ascii_digit() || c == '.' || c == ' ' || c == '-'
-                        })
-                        .to_string();
-                    if !cleaned.is_empty() {
-                        bp.build_sequence.push(cleaned);
-                    }
+                if (trimmed.starts_with(|c: char| c.is_ascii_digit())
+                    || trimmed.starts_with("- ")) =>
+            {
+                let cleaned = trimmed
+                    .trim_start_matches(|c: char| {
+                        c.is_ascii_digit() || c == '.' || c == ' ' || c == '-'
+                    })
+                    .to_string();
+                if !cleaned.is_empty() {
+                    bp.build_sequence.push(cleaned);
                 }
+            }
             _ => {}
         }
     }
@@ -646,11 +648,13 @@ fn parse_review_from_markdown(md: &str) -> Review {
                 }
             }
             Some("issues")
-                if (trimmed.starts_with(|c: char| c.is_ascii_digit()) || trimmed.starts_with("- ")) => {
-                    if let Some(issue) = parse_issue_line(trimmed) {
-                        review.issues.push(issue);
-                    }
+                if (trimmed.starts_with(|c: char| c.is_ascii_digit())
+                    || trimmed.starts_with("- ")) =>
+            {
+                if let Some(issue) = parse_issue_line(trimmed) {
+                    review.issues.push(issue);
                 }
+            }
             Some("impact") => {
                 if !impact_buf.is_empty() {
                     impact_buf.push(' ');

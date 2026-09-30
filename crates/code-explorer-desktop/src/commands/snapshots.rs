@@ -164,8 +164,7 @@ pub async fn snapshot_create(
 /// Helper: enforce MAX_SNAPSHOTS, sort, persist.
 fn enforce_cap_and_save(storage: &str, idx: &mut SnapshotIndex) -> Result<(), String> {
     if idx.snapshots.len() > MAX_SNAPSHOTS {
-        idx.snapshots
-            .sort_by_key(|a| a.created_at);
+        idx.snapshots.sort_by_key(|a| a.created_at);
         let drop = idx.snapshots.len() - MAX_SNAPSHOTS;
         for evicted in idx.snapshots.drain(0..drop) {
             let _ = std::fs::remove_file(snapshot_file_path(storage, &evicted.id));
@@ -665,8 +664,10 @@ mod tests {
 
     #[test]
     fn test_index_roundtrip() {
-        let dir =
-            std::env::temp_dir().join(format!("code-explorer-snapshots-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "code-explorer-snapshots-test-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::create_dir_all(dir.join("snapshots")).unwrap();
         let storage = dir.to_string_lossy().to_string();

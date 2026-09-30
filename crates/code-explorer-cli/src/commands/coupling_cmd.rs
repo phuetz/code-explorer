@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use colored::Colorize;
 use code_explorer_git::coupling::analyze_coupling;
 use code_explorer_output::terminal::TerminalFormatter;
 use code_explorer_output::traits::OutputFormatter;
+use colored::Colorize;
 
 pub fn run(min_shared: u32, path: Option<&str>, json: bool) -> anyhow::Result<()> {
     let repo_path = match path {

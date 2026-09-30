@@ -41,7 +41,10 @@ pub(super) fn generate_agent_skill(graph: &KnowledgeGraph, repo_path: &Path) -> 
         println!("  {} {}", "OK".green(), target.display());
     }
 
-    info!("Generated Code Explorer agent skill for {}", repo_path.display());
+    info!(
+        "Generated Code Explorer agent skill for {}",
+        repo_path.display()
+    );
     Ok(())
 }
 
@@ -89,7 +92,9 @@ fn render_code_explorer_agent_skill(
 
     md.push_str("## Default Workflow\n\n");
     md.push_str("1. Check the index: `code-explorer status`.\n");
-    md.push_str("2. If missing or stale, run: `code-explorer analyze <repo-path> --incremental`.\n");
+    md.push_str(
+        "2. If missing or stale, run: `code-explorer analyze <repo-path> --incremental`.\n",
+    );
     md.push_str("3. For a direct question, start with `code-explorer query`, then `code-explorer context` or `code-explorer impact` on the best symbol.\n");
     md.push_str("4. For algorithm or business-flow answers, verify with `code-explorer trace-files`, `code-explorer diagram`, and targeted source reads.\n");
     md.push_str("5. Cite only paths returned by Code Explorer or files you actually read.\n\n");
@@ -111,7 +116,9 @@ fn render_code_explorer_agent_skill(
     md.push_str("- Native PDF: `code-explorer generate pdf --path <repo-path>`\n");
     md.push_str("- Obsidian vault: `code-explorer generate obsidian --path <repo-path>`\n");
     md.push_str("- Everything: `code-explorer generate all --path <repo-path> --enrich --enrich-profile strict --enrich-lang fr`\n");
-    md.push_str("- Validate deliverables: `code-explorer validate-docs --repo <repo-path> --json`\n\n");
+    md.push_str(
+        "- Validate deliverables: `code-explorer validate-docs --repo <repo-path> --json`\n\n",
+    );
 
     md.push_str("## GraphRAG And Specifications\n\n");
     md.push_str(

@@ -656,15 +656,25 @@ mod tests {
             "r.GET(\"/users\", listUsers)\nrouter.POST(\"/users\", create)\nmux.HandleFunc(\"/health\", h)\n",
             SupportedLanguage::Go,
         ));
-        assert!(eps.iter().any(|e| e.framework == "go" && e.http_method == "GET" && e.route == "/users"));
-        assert!(eps.iter().any(|e| e.http_method == "POST" && e.route == "/users"));
-        assert!(eps.iter().any(|e| e.http_method == "ANY" && e.route == "/health"));
+        assert!(eps
+            .iter()
+            .any(|e| e.framework == "go" && e.http_method == "GET" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.http_method == "POST" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.http_method == "ANY" && e.route == "/health"));
     }
 
     #[test]
     fn test_go_route_ignores_non_path_string() {
         // `cache.Get("key")` is not a route (no leading slash) — must not match.
-        let eps = scan_file(&fe("x.go", "v := cache.Get(\"key\")\n", SupportedLanguage::Go));
+        let eps = scan_file(&fe(
+            "x.go",
+            "v := cache.Get(\"key\")\n",
+            SupportedLanguage::Go,
+        ));
         assert!(eps.is_empty());
     }
 
@@ -675,9 +685,15 @@ mod tests {
             "Route::get('/users', [UserController::class, 'index']);\nRoute::post('/users', 'UserController@store');\nRoute::match(['get','post'], '/x', $h);\n",
             SupportedLanguage::Php,
         ));
-        assert!(eps.iter().any(|e| e.framework == "laravel" && e.http_method == "GET" && e.route == "/users"));
-        assert!(eps.iter().any(|e| e.http_method == "POST" && e.route == "/users"));
-        assert!(eps.iter().any(|e| e.http_method == "ANY" && e.route == "/x"));
+        assert!(eps
+            .iter()
+            .any(|e| e.framework == "laravel" && e.http_method == "GET" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.http_method == "POST" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.http_method == "ANY" && e.route == "/x"));
     }
 
     #[test]
@@ -687,14 +703,22 @@ mod tests {
             "get '/users'\npost \"/users\", to: 'users#create'\n",
             SupportedLanguage::Ruby,
         ));
-        assert!(eps.iter().any(|e| e.framework == "rails" && e.http_method == "GET" && e.route == "/users"));
-        assert!(eps.iter().any(|e| e.http_method == "POST" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.framework == "rails" && e.http_method == "GET" && e.route == "/users"));
+        assert!(eps
+            .iter()
+            .any(|e| e.http_method == "POST" && e.route == "/users"));
     }
 
     #[test]
     fn test_ruby_routes_gated_to_routes_files() {
         // `get '/users'` in a normal model file must NOT be treated as a route.
-        let eps = scan_file(&fe("app/models/user.rb", "get '/users'\n", SupportedLanguage::Ruby));
+        let eps = scan_file(&fe(
+            "app/models/user.rb",
+            "get '/users'\n",
+            SupportedLanguage::Ruby,
+        ));
         assert!(eps.is_empty());
     }
 

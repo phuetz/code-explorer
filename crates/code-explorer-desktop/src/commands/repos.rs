@@ -135,8 +135,16 @@ pub async fn analyze_repo(
             edges: edge_count,
             communities: community_count,
             processes: process_count,
-            files_per_sec: if secs > 0.0 { file_count as f64 / secs } else { 0.0 },
-            nodes_per_sec: if secs > 0.0 { node_count as f64 / secs } else { 0.0 },
+            files_per_sec: if secs > 0.0 {
+                file_count as f64 / secs
+            } else {
+                0.0
+            },
+            nodes_per_sec: if secs > 0.0 {
+                node_count as f64 / secs
+            } else {
+                0.0
+            },
         };
         repo_manager::save_metrics(&storage_paths.storage_path, &metrics)
             .map_err(|e| format!("Failed to save metrics: {}", e))?;
@@ -156,7 +164,8 @@ pub async fn analyze_repo(
         let file_entries = code_explorer_ingest::phases::structure::walk_repository(&repo_path)
             .map_err(|e| format!("Failed to walk repo for manifest: {}", e))?;
         let manifest = code_explorer_ingest::manifest::build_manifest_from_entries(&file_entries);
-        let manifest_file = code_explorer_ingest::manifest::manifest_path(&storage_paths.storage_path);
+        let manifest_file =
+            code_explorer_ingest::manifest::manifest_path(&storage_paths.storage_path);
         code_explorer_ingest::manifest::save_manifest(&manifest, &manifest_file)
             .map_err(|e| format!("Failed to save manifest: {}", e))?;
     }

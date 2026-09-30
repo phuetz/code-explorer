@@ -12,7 +12,10 @@ use crate::types::{DocContent, DocIndex};
 #[tauri::command]
 pub async fn get_doc_index(state: State<'_, AppState>) -> Result<Option<DocIndex>, String> {
     let repo_path = get_active_repo_path(&state).await?;
-    let index_path = repo_path.join(".codeexplorer").join("docs").join("_index.json");
+    let index_path = repo_path
+        .join(".codeexplorer")
+        .join("docs")
+        .join("_index.json");
 
     if !index_path.exists() {
         return Ok(None);

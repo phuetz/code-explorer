@@ -125,7 +125,9 @@ pub fn walk_documents_with(
         let Some(kind) = DocKind::from_path(&rel_path) else {
             continue;
         };
-        let size = std::fs::metadata(abs_path).map(|m| m.len() as usize).unwrap_or(0);
+        let size = std::fs::metadata(abs_path)
+            .map(|m| m.len() as usize)
+            .unwrap_or(0);
         if size > 2 * 1024 * 1024 {
             tracing::debug!("Skipping large document ({} KB): {}", size / 1024, rel_path);
             continue;
@@ -145,16 +147,18 @@ pub fn walk_documents_with(
 /// Read the contents of documents discovered by [`walk_documents`].
 /// Unreadable files are dropped with a warning.
 pub fn load_document_contents(repo_path: &Path, docs: &mut Vec<DocEntry>) {
-    docs.retain_mut(|doc| match std::fs::read_to_string(repo_path.join(&doc.path)) {
-        Ok(content) => {
-            doc.content = content;
-            true
-        }
-        Err(e) => {
-            tracing::warn!("Cannot read {}: {}", doc.path, e);
-            false
-        }
-    });
+    docs.retain_mut(
+        |doc| match std::fs::read_to_string(repo_path.join(&doc.path)) {
+            Ok(content) => {
+                doc.content = content;
+                true
+            }
+            Err(e) => {
+                tracing::warn!("Cannot read {}: {}", doc.path, e);
+                false
+            }
+        },
+    );
 }
 
 /// Default decision: index prose when the repository is mostly prose.
@@ -245,7 +249,8 @@ pub fn extract_headings(content: &str, kind: DocKind) -> Vec<Heading> {
                 if let Some((_, next)) = lines.get(i + 1) {
                     let underline = next.trim();
                     if underline.len() >= 2
-                        && (underline.chars().all(|c| c == '=') || underline.chars().all(|c| c == '-'))
+                        && (underline.chars().all(|c| c == '=')
+                            || underline.chars().all(|c| c == '-'))
                         && !trimmed.is_empty()
                         && !trimmed.starts_with('|')
                     {
@@ -279,7 +284,9 @@ pub fn extract_headings(content: &str, kind: DocKind) -> Vec<Heading> {
                 if underline.len() >= title.len()
                     && underline.len() >= 2
                     && underline.chars().all(|c| "=-~^\"'`#*+".contains(c))
-                    && underline.chars().all(|c| c == underline.chars().next().unwrap())
+                    && underline
+                        .chars()
+                        .all(|c| c == underline.chars().next().unwrap())
                 {
                     headings.push(Heading {
                         level: 1,
@@ -433,7 +440,11 @@ pub fn create_document_nodes(
             }
             current.push_str(part);
             let is_file = i == parts.len() - 1;
-            let label = if is_file { NodeLabel::File } else { NodeLabel::Folder };
+            let label = if is_file {
+                NodeLabel::File
+            } else {
+                NodeLabel::Folder
+            };
             let node_id = generate_id(label.as_str(), &current);
             if is_file || created_folders.insert(current.clone()) {
                 graph.add_node(GraphNode {
@@ -583,10 +594,16 @@ mod tests {
     #[test]
     fn recognises_prose_extensions() {
         assert_eq!(DocKind::from_path("a/b.md"), Some(DocKind::Markdown));
-        assert_eq!(DocKind::from_path("NOTES.MARKDOWN"), Some(DocKind::Markdown));
+        assert_eq!(
+            DocKind::from_path("NOTES.MARKDOWN"),
+            Some(DocKind::Markdown)
+        );
         assert_eq!(DocKind::from_path("x.mdx"), Some(DocKind::Markdown));
         assert_eq!(DocKind::from_path("readme.txt"), Some(DocKind::Text));
-        assert_eq!(DocKind::from_path("guide.rst"), Some(DocKind::RestructuredText));
+        assert_eq!(
+            DocKind::from_path("guide.rst"),
+            Some(DocKind::RestructuredText)
+        );
         assert_eq!(DocKind::from_path("main.rs"), None);
         assert_eq!(DocKind::from_path("Makefile"), None);
     }
@@ -607,10 +624,14 @@ mod tests {
 
     #[test]
     fn extracts_atx_and_setext_headings() {
-        let md = "# Title\n\nintro\n\n## Chapter one\n\ntext\n\nSetext heading\n====\n\n### Deep ###\n";
+        let md =
+            "# Title\n\nintro\n\n## Chapter one\n\ntext\n\nSetext heading\n====\n\n### Deep ###\n";
         let headings = extract_headings(md, DocKind::Markdown);
         let names: Vec<&str> = headings.iter().map(|h| h.text.as_str()).collect();
-        assert_eq!(names, vec!["Title", "Chapter one", "Setext heading", "Deep"]);
+        assert_eq!(
+            names,
+            vec!["Title", "Chapter one", "Setext heading", "Deep"]
+        );
         assert_eq!(headings[0].level, 1);
         assert_eq!(headings[1].level, 2);
         assert_eq!(headings[2].level, 1);
@@ -646,7 +667,8 @@ mod tests {
 
     #[test]
     fn extracts_links_but_not_images_or_fenced_examples() {
-        let md = "See [one](a/b.md) and ![pic](img.png).\n\n```\n[fake](x.md)\n```\n\n[two](../c.md)\n";
+        let md =
+            "See [one](a/b.md) and ![pic](img.png).\n\n```\n[fake](x.md)\n```\n\n[two](../c.md)\n";
         let links = extract_links(md, DocKind::Markdown);
         let targets: Vec<&str> = links.iter().map(|l| l.target.as_str()).collect();
         assert_eq!(targets, vec!["a/b.md", "../c.md"]);
@@ -677,7 +699,8 @@ mod tests {
         let docs = vec![
             DocEntry {
                 path: "index.md".to_string(),
-                content: "# Home\n\nSee [chapter](chapters/one.md).\n\n## Sub\n\ntext\n".to_string(),
+                content: "# Home\n\nSee [chapter](chapters/one.md).\n\n## Sub\n\ntext\n"
+                    .to_string(),
                 size: 0,
                 kind: DocKind::Markdown,
             },
@@ -769,6 +792,9 @@ mod tests {
         let stats = create_document_nodes(&mut graph, &docs, &HashSet::new());
         assert_eq!(stats.links_resolved, 0);
         assert_eq!(stats.links_unresolved, 1);
-        assert!(graph.relationships().iter().all(|r| r.reason != "markdown-link"));
+        assert!(graph
+            .relationships()
+            .iter()
+            .all(|r| r.reason != "markdown-link"));
     }
 }

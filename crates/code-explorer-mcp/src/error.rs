@@ -165,6 +165,9 @@ mod tests {
         let error = McpError::RepoNotFound("/repos/thing".into());
         let data = error.error_data();
         assert_eq!(data["code"], "REPO_NOT_FOUND");
-        assert!(data["hint"].as_str().unwrap().contains("code-explorer analyze"));
+        assert!(data["hint"]
+            .as_str()
+            .unwrap()
+            .contains("code-explorer analyze"));
     }
 }

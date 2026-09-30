@@ -192,7 +192,10 @@ fn go_struct_field_names<'a>(struct_type: &tree_sitter::Node, content: &'a [u8])
 /// to a `Struct`/`Interface` of its receiver type in the SAME DIRECTORY (unambiguous).
 /// Only methods without an existing `HasMethod` edge are touched, so this never
 /// duplicates the same-file links. Returns the number of edges added.
-pub(crate) fn reconcile_cross_file_methods(graph: &mut KnowledgeGraph, files: &[FileEntry]) -> usize {
+pub(crate) fn reconcile_cross_file_methods(
+    graph: &mut KnowledgeGraph,
+    files: &[FileEntry],
+) -> usize {
     fn dir_of(path: &str) -> &str {
         path.rsplit_once('/').map(|(d, _)| d).unwrap_or("")
     }
@@ -320,26 +323,44 @@ func freeFunc() {}
 
         // Pointer- and value-receiver methods both nest under the receiver type.
         assert!(
-            edge(RelationshipType::HasMethod, "Struct:m.go:User", "Method:m.go:Save"),
+            edge(
+                RelationshipType::HasMethod,
+                "Struct:m.go:User",
+                "Method:m.go:Save"
+            ),
             "pointer-receiver method nests"
         );
         assert!(
-            edge(RelationshipType::HasMethod, "Struct:m.go:User", "Method:m.go:Greet"),
+            edge(
+                RelationshipType::HasMethod,
+                "Struct:m.go:User",
+                "Method:m.go:Greet"
+            ),
             "value-receiver method nests"
         );
         // Struct fields nest under the struct.
         assert!(
-            edge(RelationshipType::HasProperty, "Struct:m.go:User", "Property:m.go:Name"),
+            edge(
+                RelationshipType::HasProperty,
+                "Struct:m.go:User",
+                "Property:m.go:Name"
+            ),
             "exported field nests"
         );
         assert!(
-            edge(RelationshipType::HasProperty, "Struct:m.go:User", "Property:m.go:age"),
+            edge(
+                RelationshipType::HasProperty,
+                "Struct:m.go:User",
+                "Property:m.go:age"
+            ),
             "unexported field nests"
         );
         // A free function is not a method and must not nest.
         assert!(
-            !graph.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.target_id.ends_with(":freeFunc")),
+            !graph
+                .iter_relationships()
+                .any(|r| r.rel_type == RelationshipType::HasMethod
+                    && r.target_id.ends_with(":freeFunc")),
             "free function must not nest"
         );
     }
@@ -354,8 +375,14 @@ func freeFunc() {}
             language: Some(SupportedLanguage::Go),
         };
         let files = [
-            mk("pkg/user.go", "package pkg\n\ntype User struct {\n  Name string\n}\n"),
-            mk("pkg/user_methods.go", "package pkg\n\nfunc (u *User) Save() {}\n"),
+            mk(
+                "pkg/user.go",
+                "package pkg\n\ntype User struct {\n  Name string\n}\n",
+            ),
+            mk(
+                "pkg/user_methods.go",
+                "package pkg\n\nfunc (u *User) Save() {}\n",
+            ),
         ];
         let mut graph = KnowledgeGraph::new();
         for p in ["pkg/user.go", "pkg/user_methods.go"] {
@@ -372,20 +399,30 @@ func freeFunc() {}
         let _ = parse_files(&mut graph, &files, None).unwrap();
 
         fn has(g: &KnowledgeGraph, src: &str, tgt: &str) -> bool {
-            g.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.source_id == src
-                && r.target_id == tgt)
+            g.iter_relationships().any(|r| {
+                r.rel_type == RelationshipType::HasMethod
+                    && r.source_id == src
+                    && r.target_id == tgt
+            })
         }
         // Same-file post-pass can't link Save (User is in a different file).
         assert!(
-            !has(&graph, "Struct:pkg/user.go:User", "Method:pkg/user_methods.go:Save"),
+            !has(
+                &graph,
+                "Struct:pkg/user.go:User",
+                "Method:pkg/user_methods.go:Save"
+            ),
             "cross-file method should not be linked by the per-file pass"
         );
         // The reconciler links it via same-directory (same-package) resolution.
         let n = reconcile_cross_file_methods(&mut graph, &files);
         assert!(n >= 1, "reconciler links at least one cross-file method");
         assert!(
-            has(&graph, "Struct:pkg/user.go:User", "Method:pkg/user_methods.go:Save"),
+            has(
+                &graph,
+                "Struct:pkg/user.go:User",
+                "Method:pkg/user_methods.go:Save"
+            ),
             "cross-file method linked after reconcile"
         );
     }

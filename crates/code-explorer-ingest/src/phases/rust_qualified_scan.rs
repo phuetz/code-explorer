@@ -139,7 +139,12 @@ pub(super) fn scan_items(content: &str) -> (Vec<InlineMod>, Vec<ImplBlock>, Vec<
         } else if (name == "impl" || name == "trait") && in_mod {
             if let Some(brace_at) = sig_brace(&tokens, i + 1) {
                 let (owner, trait_name) = if name == "trait" {
-                    (next_ident(&tokens, i + 1).map(|(_, n)| n).unwrap_or_default(), None)
+                    (
+                        next_ident(&tokens, i + 1)
+                            .map(|(_, n)| n)
+                            .unwrap_or_default(),
+                        None,
+                    )
                 } else {
                     parse_impl_head(&tokens[i + 1..brace_at])
                 };
@@ -490,7 +495,10 @@ fn classify_pred(raw: &str) -> CfgKind {
         return acc;
     }
     if let Some(inner) = stripped_call(s, "any") {
-        let parts: Vec<CfgKind> = split_cfg_args(inner).into_iter().map(classify_pred).collect();
+        let parts: Vec<CfgKind> = split_cfg_args(inner)
+            .into_iter()
+            .map(classify_pred)
+            .collect();
         if !parts.is_empty() && parts.iter().all(|p| *p == CfgKind::Test) {
             return CfgKind::Test;
         }
@@ -842,7 +850,12 @@ fn skip_trivia_or_literal(content: &str, i: usize) -> Option<usize> {
         return Some(j);
     }
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
-        return Some(content[i..].find('\n').map(|n| i + n + 1).unwrap_or(content.len()));
+        return Some(
+            content[i..]
+                .find('\n')
+                .map(|n| i + n + 1)
+                .unwrap_or(content.len()),
+        );
     }
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
         let mut j = i + 2;

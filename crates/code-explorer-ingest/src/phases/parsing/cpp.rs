@@ -81,7 +81,11 @@ pub(super) fn enclosing_cpp_fn<'a>(
         }
         found
     };
-    let label = if qualified || in_class { "Method" } else { "Function" };
+    let label = if qualified || in_class {
+        "Method"
+    } else {
+        "Function"
+    };
     Some((name, label))
 }
 
@@ -237,23 +241,37 @@ mod tests {
         let _ = parse_files(&mut graph, &files, None).unwrap();
 
         fn has(g: &KnowledgeGraph, src: &str, tgt: &str) -> bool {
-            g.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.source_id == src
-                && r.target_id == tgt)
+            g.iter_relationships().any(|r| {
+                r.rel_type == RelationshipType::HasMethod
+                    && r.source_id == src
+                    && r.target_id == tgt
+            })
         }
         // The out-of-class definition floats until reconciliation.
         assert!(
-            !has(&graph, "Struct:lib/user.hpp:User", "Method:lib/user.cpp:save"),
+            !has(
+                &graph,
+                "Struct:lib/user.hpp:User",
+                "Method:lib/user.cpp:save"
+            ),
             "out-of-class def not linked by per-file pass"
         );
         let n = reconcile_out_of_class_methods(&mut graph, &files);
         assert!(n >= 2, "links both out-of-class methods");
         assert!(
-            has(&graph, "Struct:lib/user.hpp:User", "Method:lib/user.cpp:save"),
+            has(
+                &graph,
+                "Struct:lib/user.hpp:User",
+                "Method:lib/user.cpp:save"
+            ),
             "save() def linked to User after reconcile"
         );
         assert!(
-            has(&graph, "Struct:lib/user.hpp:User", "Method:lib/user.cpp:count"),
+            has(
+                &graph,
+                "Struct:lib/user.hpp:User",
+                "Method:lib/user.cpp:count"
+            ),
             "count() def linked to User after reconcile"
         );
     }

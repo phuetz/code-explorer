@@ -133,12 +133,9 @@ pub async fn handle_request(
 
             match backend.call_tool(tool_name, &arguments).await {
                 Ok(result) => JsonRpcResponse::success(id, result),
-                Err(e) => JsonRpcResponse::error(
-                    id,
-                    e.error_code(),
-                    e.to_string(),
-                    Some(e.error_data()),
-                ),
+                Err(e) => {
+                    JsonRpcResponse::error(id, e.error_code(), e.to_string(), Some(e.error_data()))
+                }
             }
         }
         "resources/list" => JsonRpcResponse::success(id, resources::resource_definitions()),
@@ -255,7 +252,10 @@ mod tests {
         let mut backend = LocalBackend::new();
 
         let unknown = handle_request(
-            &make_request("tools/call", json!({"name": "no_such_tool", "arguments": {}})),
+            &make_request(
+                "tools/call",
+                json!({"name": "no_such_tool", "arguments": {}}),
+            ),
             &mut backend,
         )
         .await;

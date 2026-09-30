@@ -197,9 +197,7 @@ impl LocalBackend {
                 Ok(graph) => graph,
                 Err(error) => {
                     self.invalidate_snapshot_caches(&key);
-                    return Err(McpError::Internal(format!(
-                        "Failed to load graph: {error}"
-                    )));
+                    return Err(McpError::Internal(format!("Failed to load graph: {error}")));
                 }
             };
             let loaded_fingerprint = match FileFingerprint::read(snap_path) {
@@ -1461,11 +1459,14 @@ impl LocalBackend {
         let entry = self.resolve_repo(repo_name)?;
         let repo_path = std::path::Path::new(&entry.path);
 
-        let mut hotspots = match code_explorer_git::hotspots::analyze_hotspots(repo_path, since_days) {
-            Ok(hotspots) => hotspots,
-            Err(HotspotError::NotGitRepo(_)) => return Err(git_history_required_error("hotspots")),
-            Err(e) => return Err(McpError::Internal(e.to_string())),
-        };
+        let mut hotspots =
+            match code_explorer_git::hotspots::analyze_hotspots(repo_path, since_days) {
+                Ok(hotspots) => hotspots,
+                Err(HotspotError::NotGitRepo(_)) => {
+                    return Err(git_history_required_error("hotspots"))
+                }
+                Err(e) => return Err(McpError::Internal(e.to_string())),
+            };
 
         hotspots.truncate(limit);
 
@@ -1829,10 +1830,12 @@ impl LocalBackend {
         };
 
         // Git analytics
-        let hotspots = code_explorer_git::hotspots::analyze_hotspots(repo_path, 90).unwrap_or_default();
-        let couplings =
-            code_explorer_git::coupling::analyze_coupling(repo_path, 3, Some(180)).unwrap_or_default();
-        let ownerships = code_explorer_git::ownership::analyze_ownership(repo_path).unwrap_or_default();
+        let hotspots =
+            code_explorer_git::hotspots::analyze_hotspots(repo_path, 90).unwrap_or_default();
+        let couplings = code_explorer_git::coupling::analyze_coupling(repo_path, 3, Some(180))
+            .unwrap_or_default();
+        let ownerships =
+            code_explorer_git::ownership::analyze_ownership(repo_path).unwrap_or_default();
 
         // Compute health score (0-100); healthy projects score ~85-95
         let mut score: f64 = 100.0;
@@ -1995,9 +1998,11 @@ impl LocalBackend {
                                 if let (Some(start), Some(end)) =
                                     (node.properties.start_line, node.properties.end_line)
                                 {
-                                    if let Some(source) = code_explorer_core::trace::extract_source_lines(
-                                        &full_path, start, end,
-                                    ) {
+                                    if let Some(source) =
+                                        code_explorer_core::trace::extract_source_lines(
+                                            &full_path, start, end,
+                                        )
+                                    {
                                         obj.insert("sourceCode".to_string(), json!(source));
                                     }
                                 }
@@ -2125,7 +2130,6 @@ impl LocalBackend {
             }
         }))
     }
-
 
     // ─── New Tools ─────────────────────────────────────────────────
 
@@ -2455,8 +2459,9 @@ impl LocalBackend {
             .ok_or_else(|| McpError::Internal(format!("Cannot read file: {file_path}")))?;
 
         // Load graph for symbol annotations
-        let snap_path =
-            code_explorer_db::snapshot::snapshot_path(&std::path::PathBuf::from(&entry.storage_path));
+        let snap_path = code_explorer_db::snapshot::snapshot_path(&std::path::PathBuf::from(
+            &entry.storage_path,
+        ));
         let graph = self.load_cached_snapshot(&snap_path)?;
 
         // Find symbols defined in this file
@@ -2524,8 +2529,9 @@ impl LocalBackend {
         let repo_name = args["repo"].as_str();
 
         let entry = self.resolve_repo(repo_name)?;
-        let snap_path =
-            code_explorer_db::snapshot::snapshot_path(&std::path::PathBuf::from(&entry.storage_path));
+        let snap_path = code_explorer_db::snapshot::snapshot_path(&std::path::PathBuf::from(
+            &entry.storage_path,
+        ));
         let (graph, indexes, _fts) = self.load_cached_indexes(&snap_path)?;
 
         // Try exact node ID first, then name match
@@ -3240,12 +3246,13 @@ impl LocalBackend {
             })?;
         let entry = self.resolve_repo(repo_name)?;
         let repo_path = std::path::Path::new(&entry.path);
-        let written = code_explorer_rag::sfd::write_draft(repo_path, page, content).map_err(|e| {
-            McpError::InvalidArguments {
-                tool: "write_sfd_draft".into(),
-                reason: e.to_string(),
-            }
-        })?;
+        let written =
+            code_explorer_rag::sfd::write_draft(repo_path, page, content).map_err(|e| {
+                McpError::InvalidArguments {
+                    tool: "write_sfd_draft".into(),
+                    reason: e.to_string(),
+                }
+            })?;
         let summary = format!(
             "Draft written: {} ({} bytes). Call `validate_sfd` with `path: \"_drafts\"` \
              to lint it before promotion.",

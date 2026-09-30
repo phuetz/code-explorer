@@ -52,22 +52,44 @@ mod tests {
         let _ = parse_files(&mut graph, &[file], None).unwrap();
 
         // Extraction works (query compiles against kotlin-ng).
-        assert!(graph.get_node("Class:k.kt:Foo").is_some(), "class extracted");
-        assert!(graph.get_node("Function:k.kt:bar").is_some(), "method extracted");
-        assert!(graph.get_node("Property:k.kt:y").is_some(), "property extracted");
+        assert!(
+            graph.get_node("Class:k.kt:Foo").is_some(),
+            "class extracted"
+        );
+        assert!(
+            graph.get_node("Function:k.kt:bar").is_some(),
+            "method extracted"
+        );
+        assert!(
+            graph.get_node("Property:k.kt:y").is_some(),
+            "property extracted"
+        );
 
         // Methods nest under their class/object.
         let has = |src: &str, tgt: &str| {
-            graph.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.source_id == src
-                && r.target_id == tgt)
+            graph.iter_relationships().any(|r| {
+                r.rel_type == RelationshipType::HasMethod
+                    && r.source_id == src
+                    && r.target_id == tgt
+            })
         };
-        assert!(has("Class:k.kt:Foo", "Function:k.kt:bar"), "method bar nests");
-        assert!(has("Class:k.kt:Foo", "Function:k.kt:baz"), "method baz nests");
-        assert!(has("Class:k.kt:Sing", "Function:k.kt:ping"), "object method nests");
         assert!(
-            !graph.iter_relationships().any(|r| r.rel_type == RelationshipType::HasMethod
-                && r.target_id == "Function:k.kt:topLevel"),
+            has("Class:k.kt:Foo", "Function:k.kt:bar"),
+            "method bar nests"
+        );
+        assert!(
+            has("Class:k.kt:Foo", "Function:k.kt:baz"),
+            "method baz nests"
+        );
+        assert!(
+            has("Class:k.kt:Sing", "Function:k.kt:ping"),
+            "object method nests"
+        );
+        assert!(
+            !graph
+                .iter_relationships()
+                .any(|r| r.rel_type == RelationshipType::HasMethod
+                    && r.target_id == "Function:k.kt:topLevel"),
             "top-level function must not nest"
         );
     }

@@ -340,9 +340,7 @@ pub fn save_meta(storage_path: &Path, meta: &RepoMeta) -> Result<()> {
 }
 
 /// Load detailed indexing metrics, if a `metrics.json` exists.
-pub fn load_metrics(
-    storage_path: &Path,
-) -> Result<Option<crate::pipeline::types::IndexMetrics>> {
+pub fn load_metrics(storage_path: &Path) -> Result<Option<crate::pipeline::types::IndexMetrics>> {
     let metrics_path = storage_path.join("metrics.json");
     match std::fs::read_to_string(&metrics_path) {
         Ok(raw) => Ok(Some(serde_json::from_str(&raw)?)),
@@ -493,8 +491,14 @@ mod tests {
             indexed_at: "2026-06-21T00:00:00Z".to_string(),
             total_duration_ms: 1234,
             phases: vec![
-                PhaseTiming { name: "parsing".to_string(), duration_ms: 1000 },
-                PhaseTiming { name: "calls".to_string(), duration_ms: 234 },
+                PhaseTiming {
+                    name: "parsing".to_string(),
+                    duration_ms: 1000,
+                },
+                PhaseTiming {
+                    name: "calls".to_string(),
+                    duration_ms: 234,
+                },
             ],
             files: 10,
             nodes: 100,

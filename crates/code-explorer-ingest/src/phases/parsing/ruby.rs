@@ -153,23 +153,35 @@ end
         let _ = parse_files(&mut graph, &[file], None).unwrap();
 
         let has_method = |src: &str, tgt: &str| {
-            graph
-                .iter_relationships()
-                .any(|r| r.rel_type == RelationshipType::HasMethod
+            graph.iter_relationships().any(|r| {
+                r.rel_type == RelationshipType::HasMethod
                     && r.source_id == src
-                    && r.target_id == tgt)
+                    && r.target_id == tgt
+            })
         };
 
         // Instance and singleton methods directly in the module nest under it.
-        assert!(has_method("Module:t.rb:Greeter", "Method:t.rb:hello"), "module instance method nests");
-        assert!(has_method("Module:t.rb:Greeter", "Method:t.rb:version"), "module singleton method nests");
+        assert!(
+            has_method("Module:t.rb:Greeter", "Method:t.rb:hello"),
+            "module instance method nests"
+        );
+        assert!(
+            has_method("Module:t.rb:Greeter", "Method:t.rb:version"),
+            "module singleton method nests"
+        );
         // A method inside a class nested in the module nests under the class, not the module.
         assert!(
             !has_method("Module:t.rb:Greeter", "Method:t.rb:deep"),
             "nested-class method must not nest under the module"
         );
-        assert!(has_method("Class:t.rb:Inner", "Method:t.rb:deep"), "nested-class method nests under its class");
+        assert!(
+            has_method("Class:t.rb:Inner", "Method:t.rb:deep"),
+            "nested-class method nests under its class"
+        );
         // Sanity: top-level class methods still nest (generic path).
-        assert!(has_method("Class:t.rb:Foo", "Method:t.rb:bar"), "class method nests");
+        assert!(
+            has_method("Class:t.rb:Foo", "Method:t.rb:bar"),
+            "class method nests"
+        );
     }
 }

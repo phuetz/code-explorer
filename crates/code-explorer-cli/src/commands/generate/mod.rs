@@ -513,10 +513,7 @@ mod tests {
     #[test]
     fn test_sanitize_filename() {
         assert_eq!(sanitize_filename("Hello World"), "hello_world");
-        assert_eq!(
-            sanitize_filename("CasesController"),
-            "casescontroller"
-        );
+        assert_eq!(sanitize_filename("CasesController"), "casescontroller");
         assert_eq!(sanitize_filename("a-b_c"), "a-b_c");
     }
 

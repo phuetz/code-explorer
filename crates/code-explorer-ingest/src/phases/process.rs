@@ -159,9 +159,7 @@ pub fn detect_processes(graph: &mut KnowledgeGraph) -> Result<usize, crate::Inge
 }
 
 /// Adjacency lists for CALLS edges.
-fn build_call_adjacency(
-    graph: &KnowledgeGraph,
-) -> HashMap<String, Vec<String>> {
+fn build_call_adjacency(graph: &KnowledgeGraph) -> HashMap<String, Vec<String>> {
     let mut callees_of: HashMap<String, Vec<String>> = HashMap::new();
 
     graph.for_each_relationship(|rel| {
@@ -195,9 +193,14 @@ fn build_function_call_graph(
     let mut functions_by_file: HashMap<&str, Vec<&str>> = HashMap::new();
     for rel in graph.iter_relationships() {
         if rel.rel_type == RelationshipType::Defines
-            && graph.get_node(&rel.source_id).is_some_and(|n| n.label == NodeLabel::File)
+            && graph
+                .get_node(&rel.source_id)
+                .is_some_and(|n| n.label == NodeLabel::File)
             && graph.get_node(&rel.target_id).is_some_and(|n| {
-                matches!(n.label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Constructor)
+                matches!(
+                    n.label,
+                    NodeLabel::Function | NodeLabel::Method | NodeLabel::Constructor
+                )
             })
         {
             functions_by_file
@@ -213,7 +216,11 @@ fn build_function_call_graph(
 
         if is_file {
             // Find functions defined in this file (via DEFINES edges)
-            for &func_id in functions_by_file.get(source_id.as_str()).into_iter().flatten() {
+            for &func_id in functions_by_file
+                .get(source_id.as_str())
+                .into_iter()
+                .flatten()
+            {
                 for target in targets {
                     let is_func_target = graph.get_node(target).is_some_and(|n| {
                         matches!(
@@ -418,7 +425,12 @@ fn bfs_trace(start_id: &str, callees_of: &HashMap<String, Vec<String>>) -> Vec<P
 /// Deduplicate traces: remove subsets, keep longest per entry->terminal pair.
 fn deduplicate_traces(mut traces: Vec<ProcessTrace>) -> Vec<ProcessTrace> {
     // Sort by length descending so longer traces take priority
-    traces.sort_by(|a, b| b.steps.len().cmp(&a.steps.len()).then_with(|| a.steps.cmp(&b.steps)));
+    traces.sort_by(|a, b| {
+        b.steps
+            .len()
+            .cmp(&a.steps.len())
+            .then_with(|| a.steps.cmp(&b.steps))
+    });
 
     let mut kept: Vec<ProcessTrace> = Vec::new();
     let mut seen_pairs: HashSet<(String, String)> = HashSet::new();

@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use code_explorer_core::config::exclusions::ExclusionRules;
 use code_explorer_core::config::languages::SupportedLanguage;
-use code_explorer_ingest::phases::docs::DocKind;
 use code_explorer_core::storage::{git, repo_manager};
+use code_explorer_ingest::phases::docs::DocKind;
 use serde::Serialize;
 
 // ─── Verdict model ───────────────────────────────────────────────────────
@@ -137,13 +137,19 @@ pub fn diagnose(requested: &str, registry_path: &Path) -> DoctorReport {
 
     // 2/3. The index and its layout version.
     let storage = repo_manager::get_storage_paths(&repo_path);
-    let meta = repo_manager::load_meta(&storage.storage_path).ok().flatten();
+    let meta = repo_manager::load_meta(&storage.storage_path)
+        .ok()
+        .flatten();
     let (index_check, index_usable) = index_check(&repo_path, &storage.storage_path, meta.as_ref());
     checks.push(index_check);
     checks.push(schema_check(meta.as_ref()));
 
     // 4. Registry coherence — the check that explains "Repository not found".
-    checks.push(registry_check(&repo_path, &storage.storage_path, registry_path));
+    checks.push(registry_check(
+        &repo_path,
+        &storage.storage_path,
+        registry_path,
+    ));
 
     // 5. Coverage: what the repository holds versus what the index holds.
     checks.push(coverage_check(&repo_path, meta.as_ref()));
@@ -196,7 +202,11 @@ fn absolutize(base: &Path, raw: &str) -> PathBuf {
     joined.canonicalize().unwrap_or(joined)
 }
 
-fn index_check(repo_path: &Path, storage: &Path, meta: Option<&repo_manager::RepoMeta>) -> (Check, bool) {
+fn index_check(
+    repo_path: &Path,
+    storage: &Path,
+    meta: Option<&repo_manager::RepoMeta>,
+) -> (Check, bool) {
     let analyze = format!("code-explorer analyze {}", repo_path.display());
     if !storage.exists() {
         return (
@@ -234,13 +244,18 @@ fn index_check(repo_path: &Path, storage: &Path, meta: Option<&repo_manager::Rep
             false,
         ),
         Some(0) => (
-            Check::new("index", Level::Error, "graph snapshot is empty").fix(format!("{analyze} --force")),
+            Check::new("index", Level::Error, "graph snapshot is empty")
+                .fix(format!("{analyze} --force")),
             false,
         ),
         Some(len) => match code_explorer_db::snapshot::load_snapshot(&snapshot) {
             Err(e) => (
-                Check::new("index", Level::Error, format!("graph snapshot is unreadable: {e}"))
-                    .fix(format!("{analyze} --force")),
+                Check::new(
+                    "index",
+                    Level::Error,
+                    format!("graph snapshot is unreadable: {e}"),
+                )
+                .fix(format!("{analyze} --force")),
                 false,
             ),
             Ok(graph) => (
@@ -271,7 +286,9 @@ fn schema_check(meta: Option<&repo_manager::RepoMeta>) -> Check {
         );
     };
     match meta.schema_version {
-        Some(v) if v == current => Check::new("schema", Level::Ok, format!("index schema {v} (current)")),
+        Some(v) if v == current => {
+            Check::new("schema", Level::Ok, format!("index schema {v} (current)"))
+        }
         Some(v) if v < current => Check::new(
             "schema",
             Level::Warn,
@@ -297,9 +314,13 @@ fn registry_check(repo_path: &Path, storage: &Path, registry_path: &Path) -> Che
     let entries = match repo_manager::read_registry_from(registry_path) {
         Ok(e) => e,
         Err(e) => {
-            return Check::new("registry", Level::Error, format!("registry unreadable: {e}"))
-                .detail(format!("file: {}", registry_path.display()))
-                .fix(format!("code-explorer analyze {}", repo_path.display()));
+            return Check::new(
+                "registry",
+                Level::Error,
+                format!("registry unreadable: {e}"),
+            )
+            .detail(format!("file: {}", registry_path.display()))
+            .fix(format!("code-explorer analyze {}", repo_path.display()));
         }
     };
 
@@ -331,7 +352,10 @@ fn registry_check(repo_path: &Path, storage: &Path, registry_path: &Path) -> Che
         return Check::new(
             "registry",
             Level::Warn,
-            format!("{} registry entries point at this repository", matching.len()),
+            format!(
+                "{} registry entries point at this repository",
+                matching.len()
+            ),
         )
         .detail("a stale spelling of the path is still registered")
         .fix(format!("code-explorer analyze {}", repo_path.display()));
@@ -344,7 +368,9 @@ fn registry_check(repo_path: &Path, storage: &Path, registry_path: &Path) -> Che
     let registered_storage = registered_storage_raw
         .canonicalize()
         .unwrap_or_else(|_| registered_storage_raw.to_path_buf());
-    let storage_canonical = storage.canonicalize().unwrap_or_else(|_| storage.to_path_buf());
+    let storage_canonical = storage
+        .canonicalize()
+        .unwrap_or_else(|_| storage.to_path_buf());
     if registered_storage != storage_canonical {
         return Check::new(
             "registry",
@@ -353,11 +379,18 @@ fn registry_check(repo_path: &Path, storage: &Path, registry_path: &Path) -> Che
         )
         .detail(format!("registered: {}", registered_storage.display()))
         .detail(format!("on disk:    {}", storage.display()))
-        .fix(format!("code-explorer analyze {} --force", repo_path.display()));
+        .fix(format!(
+            "code-explorer analyze {} --force",
+            repo_path.display()
+        ));
     }
 
-    Check::new("registry", Level::Ok, format!("registered as '{}'", entry.name))
-        .detail(format!("indexed at {}", entry.indexed_at))
+    Check::new(
+        "registry",
+        Level::Ok,
+        format!("registered as '{}'", entry.name),
+    )
+    .detail(format!("indexed at {}", entry.indexed_at))
 }
 
 /// Count files on disk by extension, using the same exclusions as the indexer,
@@ -493,9 +526,7 @@ struct BulkDir {
 impl BulkDir {
     /// Does this directory carry a parsing cost nobody asked for?
     fn is_costly(&self) -> bool {
-        self.excluded_by.is_none()
-            && !self.dominant
-            && self.tally.candidates >= BULK_FILE_THRESHOLD
+        self.excluded_by.is_none() && !self.dominant && self.tally.candidates >= BULK_FILE_THRESHOLD
     }
 }
 
@@ -508,9 +539,10 @@ impl BulkDir {
 /// before it is asked.
 fn scan_bulk_dirs(repo_path: &Path) -> Vec<BulkDir> {
     let rules = ExclusionRules::for_repo(repo_path);
-    let Ok(scan) =
-        code_explorer_ingest::phases::structure::scan_candidates(repo_path, &ExclusionRules::none())
-    else {
+    let Ok(scan) = code_explorer_ingest::phases::structure::scan_candidates(
+        repo_path,
+        &ExclusionRules::none(),
+    ) else {
         return Vec::new();
     };
     let indexed_candidates: usize = scan
@@ -618,10 +650,18 @@ fn freshness_check(
     index_usable: bool,
 ) -> Check {
     let Some(meta) = meta else {
-        return Check::new("freshness", Level::Warn, "no index metadata to compare with HEAD");
+        return Check::new(
+            "freshness",
+            Level::Warn,
+            "no index metadata to compare with HEAD",
+        );
     };
     if !git::is_git_repo(repo_path) {
-        return Check::new("freshness", Level::Ok, "not a git repository, nothing to compare");
+        return Check::new(
+            "freshness",
+            Level::Ok,
+            "not a git repository, nothing to compare",
+        );
     }
     let Some(head) = git::current_commit(repo_path) else {
         return Check::new("freshness", Level::Warn, "git HEAD could not be read");
@@ -635,7 +675,11 @@ fn freshness_check(
             .fix(analyze);
     }
     if indexed == head {
-        let check = Check::new("freshness", Level::Ok, format!("index at HEAD ({})", short(&head)));
+        let check = Check::new(
+            "freshness",
+            Level::Ok,
+            format!("index at HEAD ({})", short(&head)),
+        );
         return if index_usable {
             check
         } else {
@@ -646,7 +690,10 @@ fn freshness_check(
         return Check::new(
             "freshness",
             Level::Warn,
-            format!("indexed commit {} is unknown to this checkout", short(indexed)),
+            format!(
+                "indexed commit {} is unknown to this checkout",
+                short(indexed)
+            ),
         )
         .detail("the branch was switched, rebased or the commit was pruned")
         .detail(format!("HEAD is {}", short(&head)))
@@ -660,12 +707,28 @@ fn freshness_check(
         )
         .detail(format!("HEAD is {}", short(&head)))
         .fix(analyze),
-        Some(n) => Check::new("freshness", Level::Warn, format!("index is {n} commit(s) behind HEAD"))
-            .detail(format!("indexed {} → HEAD {}", short(indexed), short(&head)))
-            .fix(analyze),
-        None => Check::new("freshness", Level::Warn, "index and HEAD could not be compared")
-            .detail(format!("indexed {} → HEAD {}", short(indexed), short(&head)))
-            .fix(analyze),
+        Some(n) => Check::new(
+            "freshness",
+            Level::Warn,
+            format!("index is {n} commit(s) behind HEAD"),
+        )
+        .detail(format!(
+            "indexed {} → HEAD {}",
+            short(indexed),
+            short(&head)
+        ))
+        .fix(analyze),
+        None => Check::new(
+            "freshness",
+            Level::Warn,
+            "index and HEAD could not be compared",
+        )
+        .detail(format!(
+            "indexed {} → HEAD {}",
+            short(indexed),
+            short(&head)
+        ))
+        .fix(analyze),
     }
 }
 
@@ -701,8 +764,16 @@ pub fn render_text(report: &DoctorReport) -> String {
     }
     out.push('\n');
     let (errors, warns) = (
-        report.checks.iter().filter(|c| c.level == Level::Error).count(),
-        report.checks.iter().filter(|c| c.level == Level::Warn).count(),
+        report
+            .checks
+            .iter()
+            .filter(|c| c.level == Level::Error)
+            .count(),
+        report
+            .checks
+            .iter()
+            .filter(|c| c.level == Level::Warn)
+            .count(),
     );
     out.push_str(&match report.status {
         Level::Ok => "  Verdict: healthy.\n".to_string(),
@@ -859,7 +930,8 @@ mod tests {
 
         assert_eq!(bulk.level, Level::Warn);
         assert!(
-            bulk.summary.contains("1 large directory would be indexed for nothing"),
+            bulk.summary
+                .contains("1 large directory would be indexed for nothing"),
             "{}",
             bulk.summary
         );
@@ -870,7 +942,10 @@ mod tests {
             .find(|d| d.contains("vendor"))
             .expect("vendor must be named");
         assert!(vendor.contains("600 files"), "{vendor}");
-        assert!(vendor.contains("KB") || vendor.contains("MB"), "size must be shown: {vendor}");
+        assert!(
+            vendor.contains("KB") || vendor.contains("MB"),
+            "size must be shown: {vendor}"
+        );
         assert!(vendor.contains("consider --exclude vendor"), "{vendor}");
 
         let vendored = bulk
@@ -882,8 +957,14 @@ mod tests {
 
         let fix = bulk.fix.as_deref().expect("a warn must carry a fix");
         assert!(fix.contains("--exclude vendor"), "{fix}");
-        assert!(!fix.contains("--exclude node_modules"), "already handled: {fix}");
-        assert!(!fix.contains("--exclude src"), "never offer to drop the source: {fix}");
+        assert!(
+            !fix.contains("--exclude node_modules"),
+            "already handled: {fix}"
+        );
+        assert!(
+            !fix.contains("--exclude src"),
+            "never offer to drop the source: {fix}"
+        );
     }
 
     #[test]
@@ -897,9 +978,15 @@ mod tests {
         let bulk = check(&report, "bulk");
 
         assert_eq!(bulk.level, Level::Ok, "a big src/ is not a defect");
-        assert!(bulk.fix.is_none(), "there is nothing to fix: {:?}", bulk.fix);
         assert!(
-            bulk.details.iter().any(|d| d.contains("this repository's own source")),
+            bulk.fix.is_none(),
+            "there is nothing to fix: {:?}",
+            bulk.fix
+        );
+        assert!(
+            bulk.details
+                .iter()
+                .any(|d| d.contains("this repository's own source")),
             "{:?}",
             bulk.details
         );
@@ -927,9 +1014,20 @@ mod tests {
 
         let report = diagnose(&repo.display().to_string(), &sandbox.empty_registry());
         let bulk = check(&report, "bulk");
-        assert_eq!(bulk.level, Level::Ok, "a default exclusion is not a problem");
-        assert!(bulk.summary.contains("none of them a problem"), "{}", bulk.summary);
-        assert!(bulk.details.iter().any(|d| d.contains("dropped by '_archive'")));
+        assert_eq!(
+            bulk.level,
+            Level::Ok,
+            "a default exclusion is not a problem"
+        );
+        assert!(
+            bulk.summary.contains("none of them a problem"),
+            "{}",
+            bulk.summary
+        );
+        assert!(bulk
+            .details
+            .iter()
+            .any(|d| d.contains("dropped by '_archive'")));
         assert!(bulk.fix.is_none());
     }
 
@@ -953,7 +1051,11 @@ mod tests {
 
         let index = check(&report, "index");
         assert_eq!(index.level, Level::Error);
-        assert!(index.fix.as_deref().unwrap().contains("code-explorer analyze"));
+        assert!(index
+            .fix
+            .as_deref()
+            .unwrap()
+            .contains("code-explorer analyze"));
         assert_eq!(report.status, Level::Error);
     }
 
@@ -967,7 +1069,12 @@ mod tests {
 
         let report = diagnose(&repo.display().to_string(), &registry);
 
-        assert_eq!(check(&report, "index").level, Level::Ok, "{:?}", report.checks);
+        assert_eq!(
+            check(&report, "index").level,
+            Level::Ok,
+            "{:?}",
+            report.checks
+        );
         assert_eq!(check(&report, "registry").level, Level::Ok);
         assert_eq!(check(&report, "coverage").level, Level::Ok);
         // `schema` is stamped by save_meta, `freshness` has no git to compare.
@@ -983,7 +1090,10 @@ mod tests {
 
         let raw = std::fs::read_to_string(repo.join(".codeexplorer/meta.json")).unwrap();
         let meta: repo_manager::RepoMeta = serde_json::from_str(&raw).unwrap();
-        assert_eq!(meta.schema_version, Some(repo_manager::INDEX_SCHEMA_VERSION));
+        assert_eq!(
+            meta.schema_version,
+            Some(repo_manager::INDEX_SCHEMA_VERSION)
+        );
 
         let report = diagnose(&repo.display().to_string(), &sandbox.empty_registry());
         assert_eq!(check(&report, "schema").level, Level::Ok);
@@ -998,7 +1108,10 @@ mod tests {
         let raw = std::fs::read_to_string(&meta_path).unwrap();
         let bumped = raw.replace(
             &format!("\"schemaVersion\": {}", repo_manager::INDEX_SCHEMA_VERSION),
-            &format!("\"schemaVersion\": {}", repo_manager::INDEX_SCHEMA_VERSION + 7),
+            &format!(
+                "\"schemaVersion\": {}",
+                repo_manager::INDEX_SCHEMA_VERSION + 7
+            ),
         );
         assert_ne!(raw, bumped, "meta.json should carry a schemaVersion field");
         std::fs::write(&meta_path, bumped).unwrap();
@@ -1027,7 +1140,11 @@ mod tests {
         let repo = sandbox.repo("moved");
         write_index(&repo, "unknown", Some(1));
         let mut entry = entry_for(&repo);
-        entry.storage_path = sandbox.root.join("elsewhere/.codeexplorer").display().to_string();
+        entry.storage_path = sandbox
+            .root
+            .join("elsewhere/.codeexplorer")
+            .display()
+            .to_string();
         let registry = sandbox.registry(&[entry]);
 
         let report = diagnose(&repo.display().to_string(), &registry);
@@ -1077,7 +1194,11 @@ mod tests {
         let report = diagnose(&repo.display().to_string(), &sandbox.empty_registry());
         let coverage = check(&report, "coverage");
         assert_eq!(coverage.level, Level::Ok, "{:?}", coverage);
-        assert!(coverage.summary.contains("4 prose documents"), "{}", coverage.summary);
+        assert!(
+            coverage.summary.contains("4 prose documents"),
+            "{}",
+            coverage.summary
+        );
     }
 
     #[test]
@@ -1175,7 +1296,15 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            vec!["path", "index", "schema", "registry", "coverage", "bulk", "freshness"]
+            vec![
+                "path",
+                "index",
+                "schema",
+                "registry",
+                "coverage",
+                "bulk",
+                "freshness"
+            ]
         );
     }
 
@@ -1185,9 +1314,19 @@ mod tests {
         let repo = sandbox.repo("textrepo");
         write_index(&repo, "unknown", Some(1));
 
-        let text = render_text(&diagnose(&repo.display().to_string(), &sandbox.empty_registry()));
+        let text = render_text(&diagnose(
+            &repo.display().to_string(),
+            &sandbox.empty_registry(),
+        ));
 
-        for id in ["path", "index", "schema", "registry", "coverage", "freshness"] {
+        for id in [
+            "path",
+            "index",
+            "schema",
+            "registry",
+            "coverage",
+            "freshness",
+        ] {
             assert!(text.contains(id), "missing '{id}' in:\n{text}");
         }
         assert!(text.contains("Verdict:"), "{text}");

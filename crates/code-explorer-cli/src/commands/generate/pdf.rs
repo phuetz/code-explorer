@@ -280,8 +280,7 @@ fn extract_table_value(row: &str) -> String {
 }
 
 fn sanitize_pdf_markdown(content: &str) -> String {
-    content
-        .replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FE0F}'], "")
+    content.replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FE0F}'], "")
 }
 
 fn chrono_date() -> String {

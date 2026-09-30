@@ -1448,14 +1448,15 @@ fn cmd_cypher(query: &str, ctx: &ShellContext) -> anyhow::Result<()> {
         }
     };
 
-    let results =
-        match code_explorer_db::inmemory::cypher::execute(&stmt, &ctx.graph, &indexes, &fts_index) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("  {} {}", "Query error:".red().bold(), e);
-                return Ok(());
-            }
-        };
+    let results = match code_explorer_db::inmemory::cypher::execute(
+        &stmt, &ctx.graph, &indexes, &fts_index,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("  {} {}", "Query error:".red().bold(), e);
+            return Ok(());
+        }
+    };
 
     if results.is_empty() {
         println!("  {} No results.", "Info:".yellow().bold());
@@ -1762,8 +1763,9 @@ fn cmd_hotspots(args: &str, ctx: &ShellContext) -> anyhow::Result<()> {
 fn cmd_coupling(args: &str, ctx: &ShellContext) -> anyhow::Result<()> {
     let min_shared: u32 = args.trim().parse().unwrap_or(3);
 
-    let couplings = code_explorer_git::coupling::analyze_coupling(&ctx.repo_path, min_shared, Some(180))
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let couplings =
+        code_explorer_git::coupling::analyze_coupling(&ctx.repo_path, min_shared, Some(180))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     if couplings.is_empty() {
         println!(

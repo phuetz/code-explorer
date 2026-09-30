@@ -186,10 +186,7 @@ impl ExclusionRules {
 
 /// Lower-case, strip surrounding slashes and whitespace.
 fn normalize_pattern(raw: &str) -> String {
-    raw.trim()
-        .trim_matches('/')
-        .trim()
-        .to_lowercase()
+    raw.trim().trim_matches('/').trim().to_lowercase()
 }
 
 /// Minimal glob: `*` matches any run of characters, everything else is literal.

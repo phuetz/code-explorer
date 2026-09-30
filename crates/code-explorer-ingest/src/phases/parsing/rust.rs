@@ -119,7 +119,10 @@ pub(super) fn post_parse(
 /// (`impl Foo<T>`) to its base `type_identifier` (`Foo`). Mirrors the `@definition.impl`
 /// patterns in `queries/rust_lang.rs` so the resolved name matches the `Impl`/`Struct`
 /// node naming.
-fn rust_impl_type_base_name<'a>(impl_node: &tree_sitter::Node, content: &'a [u8]) -> Option<&'a str> {
+fn rust_impl_type_base_name<'a>(
+    impl_node: &tree_sitter::Node,
+    content: &'a [u8],
+) -> Option<&'a str> {
     let type_node = impl_node.child_by_field_name("type")?;
     let base = match type_node.kind() {
         "generic_type" => type_node.child_by_field_name("type")?,

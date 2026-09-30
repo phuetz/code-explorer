@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use colored::Colorize;
 use code_explorer_git::ownership::analyze_ownership;
 use code_explorer_output::terminal::TerminalFormatter;
 use code_explorer_output::traits::OutputFormatter;
+use colored::Colorize;
 
 pub fn run(path: Option<&str>, json: bool) -> anyhow::Result<()> {
     let repo_path = match path {

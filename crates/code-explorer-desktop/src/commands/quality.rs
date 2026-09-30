@@ -13,7 +13,9 @@ use tauri::State;
 
 use code_explorer_core::graph::types::NodeLabel;
 use code_explorer_db::analytics::clones::{find_clones, CloneCluster, CloneOptions};
-use code_explorer_db::analytics::complexity::{get_complexity, ComplexityOptions, ComplexityReport};
+use code_explorer_db::analytics::complexity::{
+    get_complexity, ComplexityOptions, ComplexityReport,
+};
 use code_explorer_db::analytics::cycles::{find_cycles, Cycle, CycleScope};
 
 use crate::state::AppState;

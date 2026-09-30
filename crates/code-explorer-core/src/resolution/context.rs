@@ -629,21 +629,40 @@ mod tests {
     fn import_scoped_candidate_order_is_stable() {
         let mut symbols = SymbolTable::new();
         for file in ["a.ts", "z.ts"] {
-            symbols.add("destroy".into(),
-                make_def(&format!("Method:{file}:destroy"), file, NodeLabel::Method, true));
+            symbols.add(
+                "destroy".into(),
+                make_def(
+                    &format!("Method:{file}:destroy"),
+                    file,
+                    NodeLabel::Method,
+                    true,
+                ),
+            );
         }
         let packages = PackageMap::new();
         let named = NamedImportMap::new();
         let re_exports = ReExportMap::new();
         let aliases = ModuleAliasMap::new();
         for _ in 0..32 {
-            let imports = ImportMap::from([("main.ts".into(),
-                HashSet::from(["z.ts".into(), "a.ts".into()]))]);
-            let mut context = ResolutionContext::new(&symbols, &imports, &packages,
-                &named, &re_exports, &aliases);
+            let imports = ImportMap::from([(
+                "main.ts".into(),
+                HashSet::from(["z.ts".into(), "a.ts".into()]),
+            )]);
+            let mut context = ResolutionContext::new(
+                &symbols,
+                &imports,
+                &packages,
+                &named,
+                &re_exports,
+                &aliases,
+            );
             let result = context.resolve("destroy", "main.ts").unwrap();
             assert_eq!(result.tier, ResolutionTier::ImportScoped);
-            let ids: Vec<_> = result.candidates.iter().map(|c| c.node_id.as_str()).collect();
+            let ids: Vec<_> = result
+                .candidates
+                .iter()
+                .map(|c| c.node_id.as_str())
+                .collect();
             assert_eq!(ids, ["Method:a.ts:destroy", "Method:z.ts:destroy"]);
         }
     }

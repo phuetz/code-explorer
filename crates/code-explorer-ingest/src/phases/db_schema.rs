@@ -614,7 +614,10 @@ mod tests {
         content.push_str("\n    docstring tail\n    \"\"\"\n    __tablename__ = \"widgets\"\n");
         // Preconditions that make this exercise the bug:
         assert!(content.len() > 2000, "window must not be clamped to len");
-        assert!(!content.is_char_boundary(2000), "byte 2000 must be mid-char");
+        assert!(
+            !content.is_char_boundary(2000),
+            "byte 2000 must be mid-char"
+        );
 
         let file = fe("models.py", &content, SupportedLanguage::Python);
         // Must not panic.

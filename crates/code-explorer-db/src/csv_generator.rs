@@ -456,7 +456,9 @@ mod tests {
     fn cached_line_ranges_match_string_lines() {
         for text in ["", "\n", "\nfirst\n", "α\r\nβ\n\r", "last\r"] {
             let cached = CachedFile::new(text.to_string());
-            let indexed: Vec<&str> = cached.lines.iter()
+            let indexed: Vec<&str> = cached
+                .lines
+                .iter()
                 .map(|&(start, end)| &cached.text[start..end])
                 .collect();
             assert_eq!(indexed, text.lines().collect::<Vec<_>>());

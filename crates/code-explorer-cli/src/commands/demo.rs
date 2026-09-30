@@ -87,8 +87,7 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
     //    noisy substring match). Also compute the whole-repo corpus as the upper bound.
     use std::collections::HashSet;
     let files = code_explorer_ingest::phases::structure::walk_repository(&repo_path)?;
-    let mut size_by_path: std::collections::HashMap<&str, usize> =
-        std::collections::HashMap::new();
+    let mut size_by_path: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     let mut corpus_bytes = 0usize;
     for f in &files {
         size_by_path.insert(f.path.as_str(), f.size);
@@ -105,10 +104,7 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
         }
     }
     let ref_files = spanned.len();
-    let ref_bytes: usize = spanned
-        .iter()
-        .filter_map(|p| size_by_path.get(p))
-        .sum();
+    let ref_bytes: usize = spanned.iter().filter_map(|p| size_by_path.get(p)).sum();
     let without_tokens = tokens(ref_bytes);
     let corpus_tokens = tokens(corpus_bytes);
     let ratio = if with_tokens > 0 {
@@ -153,12 +149,7 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
     );
     println!();
     if ratio >= 1.5 {
-        println!(
-            "  → {}",
-            format!("{ratio:.0}× less context")
-                .bold()
-                .green()
-        );
+        println!("  → {}", format!("{ratio:.0}× less context").bold().green());
         println!("    for a complete, instant, reusable answer.");
     }
     println!();
@@ -179,8 +170,10 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
     }
     println!(
         "  {}",
-        format!("Code Explorer distills it into a {total_nodes}-node graph you query in one command.")
-            .dimmed()
+        format!(
+            "Code Explorer distills it into a {total_nodes}-node graph you query in one command."
+        )
+        .dimmed()
     );
     println!();
     println!(

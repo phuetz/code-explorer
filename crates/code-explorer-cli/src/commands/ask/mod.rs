@@ -88,7 +88,10 @@ pub fn ask_question(
     question: &str,
     path: Option<&str>,
     stream_cb: Option<StreamCallback>,
-) -> Result<(String, Vec<(code_explorer_core::graph::types::GraphNode, f64)>)> {
+) -> Result<(
+    String,
+    Vec<(code_explorer_core::graph::types::GraphNode, f64)>,
+)> {
     let repo_path = if let Some(p) = path {
         std::path::PathBuf::from(p)
     } else {
@@ -353,10 +356,14 @@ pub async fn ask_question_with_tools(
     mcp_backend: Arc<TokioMutex<LocalBackend>>,
     tool_repo_label: Option<&str>,
     stream_cb: Option<ToolStreamCallback>,
-) -> Result<(String, Vec<(code_explorer_core::graph::types::GraphNode, f64)>)> {
+) -> Result<(
+    String,
+    Vec<(code_explorer_core::graph::types::GraphNode, f64)>,
+)> {
     // ── Phase 1: bootstrap context (same logic as legacy ask_question) ───
-    let config = super::generate::load_llm_config()
-        .ok_or_else(|| anyhow::anyhow!("No LLM configured. Create ~/.codeexplorer/chat-config.json"))?;
+    let config = super::generate::load_llm_config().ok_or_else(|| {
+        anyhow::anyhow!("No LLM configured. Create ~/.codeexplorer/chat-config.json")
+    })?;
     let local_openai_compat = !config.provider.eq_ignore_ascii_case("chatgpt")
         && should_compact_openai_compat_tool_results(&config.provider, &config.base_url);
 

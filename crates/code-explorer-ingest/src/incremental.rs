@@ -473,7 +473,9 @@ mod watch_engine_tests {
                 .iter()
                 .map(|(rel, abs)| (rel.as_str(), abs.as_path()))
                 .collect();
-            manifest.files.extend(manifest::build_manifest(&borrowed).files);
+            manifest
+                .files
+                .extend(manifest::build_manifest(&borrowed).files);
         }
         manifest::save_manifest(&manifest, &manifest::manifest_path(&sandbox.storage())).unwrap();
     }
@@ -530,8 +532,14 @@ mod watch_engine_tests {
         // No relationship may still point at a node that is gone.
         let ids: HashSet<&str> = graph.iter_nodes().map(|n| n.id.as_str()).collect();
         for rel in graph.iter_relationships() {
-            assert!(ids.contains(rel.source_id.as_str()), "dangling source {rel:?}");
-            assert!(ids.contains(rel.target_id.as_str()), "dangling target {rel:?}");
+            assert!(
+                ids.contains(rel.source_id.as_str()),
+                "dangling source {rel:?}"
+            );
+            assert!(
+                ids.contains(rel.target_id.as_str()),
+                "dangling target {rel:?}"
+            );
         }
     }
 
@@ -565,7 +573,10 @@ mod watch_engine_tests {
         let mut graph = KnowledgeGraph::new();
         seed(&sandbox, &mut graph);
 
-        sandbox.write("guide.md", "# New title\n\nbody\n\n## Added section\n\nmore\n");
+        sandbox.write(
+            "guide.md",
+            "# New title\n\nbody\n\n## Added section\n\nmore\n",
+        );
         let result = incremental_update(&sandbox.root, &sandbox.storage(), &mut graph).unwrap();
 
         assert_eq!(result.modified, 1);

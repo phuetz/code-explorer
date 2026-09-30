@@ -118,15 +118,14 @@ pub async fn call_responses_turn(
                 }
             }
 
-            "response.output_text.done"
-                if full_text.is_empty() => {
-                    if let Some(text) = event["text"].as_str().filter(|text| !text.is_empty()) {
-                        full_text.push_str(text);
-                        if let Some(cb) = stream_cb {
-                            cb(StreamEvent::Delta(text.to_string()));
-                        }
+            "response.output_text.done" if full_text.is_empty() => {
+                if let Some(text) = event["text"].as_str().filter(|text| !text.is_empty()) {
+                    full_text.push_str(text);
+                    if let Some(cb) = stream_cb {
+                        cb(StreamEvent::Delta(text.to_string()));
                     }
                 }
+            }
 
             "response.output_item.done" => {
                 if let Some(item) = event["item"].as_object() {

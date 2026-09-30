@@ -24,7 +24,9 @@ use tokio::{process::Command, sync::Mutex, time::timeout};
 use tower_http::cors::CorsLayer;
 
 use code_explorer_core::llm::sanitize_llm_error_body;
-use code_explorer_core::secret_store::{decode_secret_from_storage, secret_payload_needs_migration};
+use code_explorer_core::secret_store::{
+    decode_secret_from_storage, secret_payload_needs_migration,
+};
 use code_explorer_core::storage::repo_manager::registry_entry_id;
 use code_explorer_core::{
     config::languages::SupportedLanguage,
@@ -50,7 +52,9 @@ fn http_auth_token() -> Option<Arc<String>> {
 
 fn expose_repo_paths() -> bool {
     matches!(
-        std::env::var("CODE_EXPLORER_EXPOSE_REPO_PATHS").ok().as_deref(),
+        std::env::var("CODE_EXPLORER_EXPOSE_REPO_PATHS")
+            .ok()
+            .as_deref(),
         Some("1" | "true" | "TRUE" | "yes" | "YES")
     )
 }

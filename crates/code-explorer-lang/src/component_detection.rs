@@ -270,30 +270,28 @@ impl ComponentDetector {
                             });
                         }
                     }
-                    PatternType::ProjectReference
-                        if content.contains(&pattern.value) => {
-                            detected.push(DetectedComponent {
-                                library_name: lib.name.clone(),
-                                vendor: lib.vendor.clone(),
-                                category: lib.category.clone(),
-                                detected_by: pattern.pattern_type,
-                                matched_value: pattern.value.clone(),
-                                confidence: pattern.confidence,
-                                detected_version: None,
-                            });
-                        }
-                    PatternType::PackagesConfig
-                        if content.contains(&pattern.value) => {
-                            detected.push(DetectedComponent {
-                                library_name: lib.name.clone(),
-                                vendor: lib.vendor.clone(),
-                                category: lib.category.clone(),
-                                detected_by: pattern.pattern_type,
-                                matched_value: pattern.value.clone(),
-                                confidence: pattern.confidence,
-                                detected_version: None,
-                            });
-                        }
+                    PatternType::ProjectReference if content.contains(&pattern.value) => {
+                        detected.push(DetectedComponent {
+                            library_name: lib.name.clone(),
+                            vendor: lib.vendor.clone(),
+                            category: lib.category.clone(),
+                            detected_by: pattern.pattern_type,
+                            matched_value: pattern.value.clone(),
+                            confidence: pattern.confidence,
+                            detected_version: None,
+                        });
+                    }
+                    PatternType::PackagesConfig if content.contains(&pattern.value) => {
+                        detected.push(DetectedComponent {
+                            library_name: lib.name.clone(),
+                            vendor: lib.vendor.clone(),
+                            category: lib.category.clone(),
+                            detected_by: pattern.pattern_type,
+                            matched_value: pattern.value.clone(),
+                            confidence: pattern.confidence,
+                            detected_version: None,
+                        });
+                    }
                     _ => {} // Other pattern types don't apply to .csproj
                 }
             }

@@ -809,7 +809,9 @@ mod tests {
             "src/foo.rs",
         );
 
-        assert!(node_note_path(&file).starts_with("Fichiers/crates_code-explorer-cli_src_main.rs--"));
+        assert!(
+            node_note_path(&file).starts_with("Fichiers/crates_code-explorer-cli_src_main.rs--")
+        );
         assert!(node_note_path(&method).starts_with("Symboles/Method/run--"));
     }
 

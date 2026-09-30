@@ -569,7 +569,8 @@ mod tests {
 
     #[test]
     fn project_health_page_hides_internal_markers_and_uses_french_labels() {
-        let root = std::env::temp_dir().join(format!("code-explorer-health-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("code-explorer-health-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("docs dir");
 
         let mut graph = KnowledgeGraph::new();

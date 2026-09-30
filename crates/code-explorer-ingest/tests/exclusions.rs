@@ -46,7 +46,10 @@ fn write(path: &Path, body: &str) {
 fn build_repo(root: &Path, node_modules_files: usize) {
     for i in 0..node_modules_files {
         write(
-            &root.join("node_modules").join(format!("pkg{}", i / 100)).join(format!("m{i}.js")),
+            &root
+                .join("node_modules")
+                .join(format!("pkg{}", i / 100))
+                .join(format!("m{i}.js")),
             "module.exports = {};\n",
         );
     }
@@ -76,7 +79,11 @@ fn default_exclusions_drop_node_modules_and_archive() {
     assert!(
         !paths.iter().any(|p| p.starts_with("node_modules/")),
         "node_modules must not be indexed, got {:?}",
-        paths.iter().filter(|p| p.starts_with("node_modules/")).take(3).collect::<Vec<_>>()
+        paths
+            .iter()
+            .filter(|p| p.starts_with("node_modules/"))
+            .take(3)
+            .collect::<Vec<_>>()
     );
     assert!(
         !paths.iter().any(|p| p.starts_with("_archive/")),
@@ -93,10 +100,19 @@ fn no_default_excludes_indexes_everything() {
     build_repo(&sandbox.root, 5_000);
 
     let files = walk_repository_with(&sandbox.root, &ExclusionRules::none()).unwrap();
-    let node_modules = files.iter().filter(|f| f.path.starts_with("node_modules/")).count();
-    let archive = files.iter().filter(|f| f.path.starts_with("_archive/")).count();
+    let node_modules = files
+        .iter()
+        .filter(|f| f.path.starts_with("node_modules/"))
+        .count();
+    let archive = files
+        .iter()
+        .filter(|f| f.path.starts_with("_archive/"))
+        .count();
 
-    assert_eq!(node_modules, 5_000, "--no-default-excludes must keep the 5000 vendored files");
+    assert_eq!(
+        node_modules, 5_000,
+        "--no-default-excludes must keep the 5000 vendored files"
+    );
     assert_eq!(archive, 40, "--no-default-excludes must keep the backups");
     assert_eq!(files.len(), 5_046);
 }
@@ -131,7 +147,13 @@ fn an_explicit_include_reopens_a_default_exclusion() {
 
     let rules = ExclusionRules::from_parts(true, &[] as &[&str], &["_archive"]);
     let files = walk_repository_with(&sandbox.root, &rules).unwrap();
-    assert_eq!(files.iter().filter(|f| f.path.starts_with("_archive/")).count(), 40);
+    assert_eq!(
+        files
+            .iter()
+            .filter(|f| f.path.starts_with("_archive/"))
+            .count(),
+        40
+    );
     assert!(!files.iter().any(|f| f.path.starts_with("node_modules/")));
 }
 
@@ -148,7 +170,10 @@ fn scanning_counts_the_job_without_reading_it() {
     assert_eq!(with_defaults.candidates, 6);
     assert_eq!(with_defaults.walked, 7);
     assert!(
-        with_defaults.dirs.iter().all(|d| d.path != "node_modules" && d.path != "_archive"),
+        with_defaults
+            .dirs
+            .iter()
+            .all(|d| d.path != "node_modules" && d.path != "_archive"),
         "excluded directories must not even be tallied"
     );
 
@@ -168,7 +193,12 @@ fn scanning_counts_the_job_without_reading_it() {
 #[test]
 fn a_tally_reports_its_weight_in_readable_units() {
     use code_explorer_ingest::phases::structure::DirTally;
-    let tally = |bytes| DirTally { path: "x".into(), candidates: 0, walked: 0, bytes };
+    let tally = |bytes| DirTally {
+        path: "x".into(),
+        candidates: 0,
+        walked: 0,
+        bytes,
+    };
     assert_eq!(tally(512).human_bytes(), "512 B");
     assert_eq!(tally(2048).human_bytes(), "2.0 KB");
     assert_eq!(tally(2_200_000_000).human_bytes(), "2.0 GB");

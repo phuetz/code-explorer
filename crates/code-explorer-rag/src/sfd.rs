@@ -196,7 +196,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let written = write_draft(tmp.path(), "dossiers.md", "# Dossiers\n").unwrap();
         assert_eq!(written.bytes, 11);
-        assert!(written.path.ends_with(".codeexplorer/docs/_drafts/dossiers.md"));
+        assert!(written
+            .path
+            .ends_with(".codeexplorer/docs/_drafts/dossiers.md"));
         let body = std::fs::read_to_string(&written.path).unwrap();
         assert_eq!(body, "# Dossiers\n");
         let leftover = written.path.with_extension("md.tmp");

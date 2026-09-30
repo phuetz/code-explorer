@@ -186,9 +186,10 @@ pub async fn run(path: Option<&str>) -> Result<()> {
                                 // claim files are current while the graph still
                                 // reflects the pre-update state.
                                 if snapshot_saved {
-                                    let manifest_file = code_explorer_ingest::manifest::manifest_path(
-                                        &storage.storage_path,
-                                    );
+                                    let manifest_file =
+                                        code_explorer_ingest::manifest::manifest_path(
+                                            &storage.storage_path,
+                                        );
                                     if let Err(e) = code_explorer_ingest::manifest::save_manifest(
                                         &result.new_manifest,
                                         &manifest_file,
