@@ -239,6 +239,26 @@ pub fn generate_all_csvs(
         cause: e.to_string(),
     })?;
 
+    // This is a complete export. A table absent from the new graph must not
+    // survive as an old CSV and reappear on the next database import.
+    for table in crate::schema::NODE_LABELS
+        .iter()
+        .copied()
+        .chain(["CodeRelation"])
+    {
+        let path = output_dir.join(format!("{table}.csv"));
+        match std::fs::remove_file(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                return Err(DbError::CsvError {
+                    table: table.into(),
+                    cause: e.to_string(),
+                })
+            }
+        }
+    }
+
     let mut generated = Vec::new();
 
     // Group nodes by label

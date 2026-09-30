@@ -81,7 +81,7 @@ impl DbAdapter {
         self.inner.open(db_path)
     }
 
-    /// Create the full schema (node tables, rel table, FTS indexes).
+    /// Create the graph schema. Kuzu FTS indexes are built after CSV loading.
     pub fn create_schema(&self) -> Result<()> {
         self.inner.create_schema()
     }
@@ -233,6 +233,7 @@ impl DatabaseBackend for StubDbBackend {
 #[cfg(feature = "kuzu-backend")]
 mod kuzu_backend {
     use super::*;
+    use std::collections::{BTreeMap, HashMap};
 
     /// Real KuzuDB backend using the `kuzu` crate.
     ///
@@ -387,25 +388,19 @@ mod kuzu_backend {
         fn create_schema(&self) -> Result<()> {
             let conn = self.connect()?;
             let schema_qs = schema::schema_queries();
-            let fts_qs = schema::fts_queries();
+            // The Rust kuzu crate bundles FTS; loading it needs no download.
+            conn.query("LOAD EXTENSION fts").map_err(|e| {
+                DbError::SchemaError(format!("Failed to load bundled FTS extension: {e}"))
+            })?;
 
             info!(
-                "KuzuDbBackend: creating {} node/rel tables and {} FTS indexes",
-                schema_qs.len(),
-                fts_qs.len()
+                "KuzuDbBackend: creating {} node/rel tables",
+                schema_qs.len()
             );
 
             for query in &schema_qs {
                 conn.query(query).map_err(|e| {
                     DbError::SchemaError(format!("Failed to execute: {query}\n  Error: {e}"))
-                })?;
-            }
-
-            for query in &fts_qs {
-                conn.query(query).map_err(|e| {
-                    DbError::SchemaError(format!(
-                        "Failed to create FTS index: {query}\n  Error: {e}"
-                    ))
                 })?;
             }
 
@@ -415,71 +410,169 @@ mod kuzu_backend {
 
         fn bulk_load_csv(&self, csv_dir: &Path) -> Result<()> {
             let conn = self.connect()?;
-
-            info!(
-                "KuzuDbBackend: bulk-loading CSVs from {}",
-                csv_dir.display()
-            );
-
-            // Collect CSV files, partitioned into node tables vs. the relation table.
-            // The relation table (CodeRelation) must be loaded after all node tables
-            // so that the referenced node IDs exist.
-            let entries = std::fs::read_dir(csv_dir).map_err(|e| DbError::CsvError {
-                table: "csv_dir".into(),
-                cause: format!("Cannot read directory {}: {e}", csv_dir.display()),
-            })?;
-
+            let csv_error = |table: &str, cause: String| DbError::CsvError {
+                table: table.to_string(),
+                cause,
+            };
+            let literal = |path: &Path| -> String {
+                format!(
+                    "'{}'",
+                    path.to_string_lossy()
+                        .replace('\\', "/")
+                        .replace('\'', "\\'")
+                )
+            };
+            let mut nodes = HashMap::new();
             let mut node_csv_files = Vec::new();
-            let mut rel_csv_file = None;
+            let entries = std::fs::read_dir(csv_dir)?;
+            for entry in entries {
+                let path = entry?.path();
+                if path.extension().is_none_or(|e| e != "csv") {
+                    continue;
+                }
+                let label = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                if label == "CodeRelation" {
+                    continue;
+                }
+                if !schema::NODE_LABELS.contains(&label) {
+                    return Err(csv_error(label, "Unknown node table in CSV export".into()));
+                }
+                let mut reader =
+                    csv::Reader::from_path(&path).map_err(|e| csv_error(label, e.to_string()))?;
+                for record in reader.records() {
+                    let record = record.map_err(|e| csv_error(label, e.to_string()))?;
+                    if nodes
+                        .insert(record[0].to_string(), label.to_string())
+                        .is_some()
+                    {
+                        return Err(csv_error(
+                            label,
+                            format!("Duplicate node ID: {}", &record[0]),
+                        ));
+                    }
+                }
+                node_csv_files.push((label.to_string(), path));
+            }
+            node_csv_files.sort();
 
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map_or(false, |e| e == "csv") {
-                    let table_name = path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string();
-                    if table_name == "CodeRelation" {
-                        rel_csv_file = Some((table_name, path));
-                    } else {
-                        node_csv_files.push((table_name, path));
+            // COPY into a multi-pair relation table requires one file per FROM/TO
+            // pair. Resolve labels from the node CSVs, not from the ID spelling.
+            let partition_dir = csv_dir.join(".kuzu-relations");
+            std::fs::create_dir_all(&partition_dir)?;
+            let mut partitions = BTreeMap::new();
+            let rel_path = csv_dir.join("CodeRelation.csv");
+            if rel_path.exists() {
+                let mut reader = csv::Reader::from_path(&rel_path)
+                    .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                let headers = reader
+                    .headers()
+                    .map_err(|e| csv_error("CodeRelation", e.to_string()))?
+                    .clone();
+                for record in reader.records() {
+                    let record = record.map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                    if record.len() != 6 {
+                        return Err(csv_error(
+                            "CodeRelation",
+                            "Expected six relation columns".into(),
+                        ));
+                    }
+                    let from = nodes.get(&record[0]).ok_or_else(|| {
+                        csv_error(
+                            "CodeRelation",
+                            format!("Unknown source node: {}", &record[0]),
+                        )
+                    })?;
+                    let to = nodes.get(&record[1]).ok_or_else(|| {
+                        csv_error(
+                            "CodeRelation",
+                            format!("Unknown target node: {}", &record[1]),
+                        )
+                    })?;
+                    let key = (from.clone(), to.clone());
+                    if !partitions.contains_key(&key) {
+                        let path = partition_dir.join(format!("{from}--{to}.csv"));
+                        let mut writer = csv::Writer::from_path(&path)
+                            .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                        writer
+                            .write_record(&headers)
+                            .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                        partitions.insert(key.clone(), (path, writer));
+                    }
+                    partitions
+                        .get_mut(&key)
+                        .unwrap()
+                        .1
+                        .write_record(&record)
+                        .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                }
+            }
+            for (_, writer) in partitions.values_mut() {
+                writer
+                    .flush()
+                    .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+            }
+
+            // FTS indexes represent the imported snapshot. Rebuild them after
+            // replacement, so a force/incremental index cannot keep stale hits.
+            let indexes = conn
+                .query("CALL SHOW_INDEXES() RETURN *")
+                .map_err(|e| csv_error("FTS", e.to_string()))?;
+            for row in indexes {
+                if let [kuzu::Value::String(table), kuzu::Value::String(index), ..] = &row[..] {
+                    if schema::NODE_LABELS.contains(&table.as_str())
+                        && index == &format!("fts_{table}")
+                    {
+                        conn.query(&format!("CALL DROP_FTS_INDEX('{table}', '{index}')"))
+                            .map_err(|e| csv_error("FTS", e.to_string()))?;
                     }
                 }
             }
-
-            // Load node tables first
-            for (table_name, path) in &node_csv_files {
-                let csv_path_str = path.to_str().unwrap_or("").replace('\\', "/");
-                let query = format!(
-                    "COPY {table_name} FROM '{csv_path_str}' (HEADER=true, ESCAPE='\\\"', DELIM=',')"
-                );
-                info!("KuzuDbBackend: loading {table_name} from CSV");
-                conn.query(&query).map_err(|e| DbError::CsvError {
-                    table: table_name.clone(),
-                    cause: e.to_string(),
-                })?;
+            conn.query("BEGIN TRANSACTION")
+                .map_err(|e| csv_error("import", e.to_string()))?;
+            let import = (|| {
+                // Import is a replacement, including labels absent from the new export.
+                for table in schema::NODE_LABELS {
+                    conn.query(&format!(
+                        "MATCH (n:{}) DETACH DELETE n",
+                        schema::quote_identifier(table)
+                    ))
+                    .map_err(|e| csv_error(table, e.to_string()))?;
+                }
+                for (table, path) in &node_csv_files {
+                    let query = format!(
+                        "COPY {} ({}) FROM {} (HEADER=true, PARALLEL=false, ESCAPE='\\\"', DELIM=',')",
+                        schema::quote_identifier(table),
+                        schema::CSV_NODE_COLUMNS,
+                        literal(path)
+                    );
+                    conn.query(&query)
+                        .map_err(|e| csv_error(table, e.to_string()))?;
+                }
+                for ((from, to), (path, _)) in &partitions {
+                    let query = format!(
+                        "COPY CodeRelation FROM {} (FROM='{from}', TO='{to}', HEADER=true, PARALLEL=false, ESCAPE='\\\"', DELIM=',')",
+                        literal(path)
+                    );
+                    conn.query(&query)
+                        .map_err(|e| csv_error("CodeRelation", e.to_string()))?;
+                }
+                conn.query("COMMIT")
+                    .map_err(|e| csv_error("import", e.to_string()))?;
+                Ok(())
+            })();
+            if import.is_err() {
+                let _ = conn.query("ROLLBACK");
+                return import;
             }
-
-            // Load relationship table
-            if let Some((table_name, path)) = &rel_csv_file {
-                let csv_path_str = path.to_str().unwrap_or("").replace('\\', "/");
-                let query = format!(
-                    "COPY {table_name} FROM '{csv_path_str}' (HEADER=true, ESCAPE='\\\"', DELIM=',')"
-                );
-                info!("KuzuDbBackend: loading {table_name} from CSV");
-                conn.query(&query).map_err(|e| DbError::CsvError {
-                    table: table_name.clone(),
-                    cause: e.to_string(),
-                })?;
+            for query in schema::fts_queries() {
+                conn.query(&query)
+                    .map_err(|e| csv_error("FTS", e.to_string()))?;
             }
-
             info!(
-                "KuzuDbBackend: loaded {} node CSVs and {} relation CSVs",
+                "KuzuDbBackend: loaded {} node CSVs and {} relation pairs",
                 node_csv_files.len(),
-                if rel_csv_file.is_some() { 1 } else { 0 }
+                partitions.len()
             );
-
             Ok(())
         }
 

@@ -66,7 +66,19 @@ pub const NODE_LABELS: &[&str] = &[
     // GraphRAG (Documentation)
     "Document",
     "DocChunk",
+    "TodoMarker",
+    "DbColumn",
+    "EnvVar",
 ];
+
+/// Quote identifiers, including labels such as Macro that are Cypher keywords.
+pub fn quote_identifier(value: &str) -> String {
+    format!("`{}`", value.replace('`', "``"))
+}
+
+/// Columns written by the node CSV exporter; other schema properties default to NULL.
+pub const CSV_NODE_COLUMNS: &str =
+    "id, name, filePath, content, startLine, endLine, language, isExported";
 
 /// Base columns shared by all node tables.
 const BASE_COLUMNS: &str = "\
@@ -85,21 +97,33 @@ pub fn schema_queries() -> Vec<String> {
 
     for label in NODE_LABELS {
         let extra = extra_columns_for(label);
+        let table = quote_identifier(label);
         let ddl = if extra.is_empty() {
-            format!("CREATE NODE TABLE IF NOT EXISTS {label} ({BASE_COLUMNS})")
+            format!("CREATE NODE TABLE IF NOT EXISTS {table} ({BASE_COLUMNS})")
         } else {
-            format!("CREATE NODE TABLE IF NOT EXISTS {label} ({BASE_COLUMNS}, {extra})")
+            format!("CREATE NODE TABLE IF NOT EXISTS {table} ({BASE_COLUMNS}, {extra})")
         };
         queries.push(ddl);
     }
 
     // CodeRelation: edges between any node tables
-    // FROM/TO use a union of all node tables
-    let from_tables: String = NODE_LABELS.join(", ");
-    let to_tables: String = NODE_LABELS.join(", ");
+    // Kuzu requires explicit FROM/TO pairs, not lists of labels.
+    let pairs = NODE_LABELS
+        .iter()
+        .flat_map(|from| {
+            NODE_LABELS.iter().map(move |to| {
+                format!(
+                    "FROM {} TO {}",
+                    quote_identifier(from),
+                    quote_identifier(to)
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     queries.push(format!(
         "CREATE REL TABLE IF NOT EXISTS CodeRelation (\
-            FROM [{from_tables}] TO [{to_tables}], \
+            {pairs}, \
             type STRING, \
             confidence DOUBLE, \
             reason STRING, \
@@ -109,7 +133,7 @@ pub fn schema_queries() -> Vec<String> {
     queries
 }
 
-/// Generate FTS index creation queries for the 5 searchable tables.
+/// Generate FTS index creation queries for the 20 searchable tables.
 pub fn fts_queries() -> Vec<String> {
     let fts_tables = [
         "File",
@@ -260,7 +284,7 @@ mod tests {
     #[test]
     fn test_schema_queries_count() {
         let queries = schema_queries();
-        // 36 node tables + 1 rel table = 37
+        // One node table per label plus the shared relationship table.
         assert_eq!(queries.len(), NODE_LABELS.len() + 1);
     }
 

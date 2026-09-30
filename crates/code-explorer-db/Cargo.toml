@@ -30,3 +30,4 @@ kuzu = { workspace = true, optional = true }
 cxx-build = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3"
