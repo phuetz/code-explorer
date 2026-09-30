@@ -51,8 +51,8 @@ Two files are read, and merged with the defaults.
 ```
 # vendored PHP libraries, never ours
 vendor
-# ... but this generated client IS ours
-!vendor/our-client
+# Keep tracked source in a directory otherwise excluded by the defaults
+!build
 ```
 
 `code-explorer.toml` — the pre-existing knob, finally honoured:
@@ -61,6 +61,10 @@ vendor
 [ingestion]
 ignored_dirs = ["legacy", "third_party"]
 ```
+
+Patterns match a single path segment, not a slash-separated path. Re-including
+a child cannot reopen an excluded parent: include that parent first, or keep
+the wanted source outside it. These overrides do not bypass `.gitignore`.
 
 ## The budget: counted before, not discovered after
 
