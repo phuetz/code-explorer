@@ -28,7 +28,7 @@ code-explorer demo [path]            # Measure the context an LLM agent saves vs
 code-explorer analyze [path]              # Index a repository
 code-explorer analyze [path] --force      # Force re-index
 code-explorer analyze [path] --incremental # Only re-parse changed files
-code-explorer analyze [path] --embeddings  # Generate ONNX semantic embeddings (feature gated)
+code-explorer analyze [path] --embeddings  # Requires MiniLM model.onnx + tokenizer.json under ~/.codeexplorer/models/all-MiniLM-L6-v2/
 code-explorer analyze [path] --skip-git    # Skip git history phases (required for non-git folders)
 code-explorer status                       # Check if index exists (+ last index duration / phase timings)
 ```
@@ -124,8 +124,8 @@ code-explorer mcp-install                          # Auto-configure the MCP serv
 ### 12. HTTP server (REST API)
 
 ```bash
-code-explorer serve --port 3000                    # JSON-RPC /mcp + REST + SSE
-code-explorer serve --port 3000 --host 0.0.0.0     # Expose on all interfaces
+code-explorer serve --port 3010                    # JSON-RPC /mcp + REST + SSE
+CODE_EXPLORER_HTTP_TOKEN="set-a-long-random-token" code-explorer serve --port 3010 --host 0.0.0.0     # Expose on all interfaces
 ```
 
 ### 13. Validate LLM config
@@ -158,12 +158,12 @@ Flags on every `generate` subcommand: `--output-dir <dir>`, `--enrich` (LLM, nee
 
 ```bash
 code-explorer trace-files ClassName            # All source files involved in a feature
-code-explorer diagram ClassName --type flowchart|sequence|class
+code-explorer diagram ClassName --type flowchart # or: --type sequence / --type class
 code-explorer rag-import <docs-folder> --path [path]   # Import .md/.docx specs, link to code
 code-explorer watch [path]                     # Re-index on file changes (debounced)
 code-explorer dashboard [path]                 # Interactive terminal UI over the graph
-code-explorer clean [--force|--all]            # Delete an index
-code-explorer setup                            # Configure editor MCP integration
+code-explorer clean --help                    # Review --force / --all before deleting an index
+code-explorer setup                            # Print editor MCP integration instructions
 ```
 
 ## How to use this skill
