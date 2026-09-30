@@ -103,7 +103,7 @@ test.describe("New panels — smoke", () => {
 
   test("analyze mode exposes the Snapshots sub-view", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("No repository selected", { exact: true })).not.toBeVisible();
+    await expect(page.getByRole("contentinfo").getByText("code-explorer", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /Analyze \(Ctrl\+2\)/i }).click();
     // AnalyzeNav is a vertical list of buttons; Snapshots is a new entry.
     await expect(

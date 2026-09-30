@@ -5,7 +5,7 @@ test.describe("Code Explorer DeepWiki & Business Features", () => {
   test.beforeEach(async ({ page }) => {
     await mockTauri(page);
     await page.goto("/");
-    await expect(page.getByText("No repository selected", { exact: true })).not.toBeVisible();
+    await expect(page.getByRole("contentinfo").getByText("code-explorer", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /Explorer \(Ctrl\+1\)/i }).click();
   });
 
