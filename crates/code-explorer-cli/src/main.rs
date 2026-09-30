@@ -670,20 +670,24 @@ async fn async_main() -> anyhow::Result<()> {
             retry_queue,
             retry_at,
             traces_dir,
-        } => commands::generate::run(
-            &what,
-            path.as_deref(),
-            output_dir.as_deref(),
-            enrich,
-            &enrich_profile,
-            &enrich_lang,
-            enrich_citations,
-            enrich_only,
-            retry_queue,
-            retry_at.as_deref(),
-            traces_dir.as_deref(),
-            input.as_deref(),
-        ),
+        } => tokio::task::spawn_blocking(move || {
+            commands::generate::run(
+                &what,
+                path.as_deref(),
+                output_dir.as_deref(),
+                enrich,
+                &enrich_profile,
+                &enrich_lang,
+                enrich_citations,
+                enrich_only,
+                retry_queue,
+                retry_at.as_deref(),
+                traces_dir.as_deref(),
+                input.as_deref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("Documentation generation failed: {e}"))?,
         Commands::Watch { path } => commands::watch::run(path.as_deref()).await,
         Commands::Dashboard { path } => commands::dashboard::run(path.as_deref()),
         Commands::Hotspots { since, path, json } => {

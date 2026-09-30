@@ -145,12 +145,11 @@ fn patch_file(path: &Path, fragments: &[&Fragment]) -> Result<usize> {
 
                 // Skip existing injected content up to the :END sentinel (idempotent)
                 i += 1;
-                while i < lines.len() {
-                    if lines[i].trim() == end_sentinel {
-                        i += 1; // skip the old :END line too
-                        break;
-                    }
-                    i += 1;
+                if let Some(end) = lines[i..]
+                    .iter()
+                    .position(|line| line.trim() == end_sentinel)
+                {
+                    i += end + 1;
                 }
 
                 // Write new injection + :END sentinel
@@ -235,4 +234,35 @@ fn html_escape_attr(s: &str) -> String {
         .replace('"', "&quot;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_injection_preserves_following_sections_and_other_anchors() {
+        let dir = std::env::temp_dir().join(format!(
+            "inject-regression-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let page = dir.join("page.md");
+        fs::write(&page, "# Page\n<!-- GNX:FRAGMENT:first -->\n\n## Keep this section\nExisting prose.\n<!-- GNX:FRAGMENT:second -->\nFinal paragraph.\n").unwrap();
+        let manifest = dir.join("inject.json");
+        fs::write(&manifest, r#"{"fragments":[{"page":"page","anchor":"GNX:FRAGMENT:first","type":"markdown","content":"First addition."},{"page":"page","anchor":"GNX:FRAGMENT:second","type":"markdown","content":"Second addition."}]}"#).unwrap();
+        assert_eq!(apply_inject(&dir, &manifest).unwrap(), 2);
+        let once = fs::read_to_string(&page).unwrap();
+        assert!(once.contains("## Keep this section\nExisting prose."));
+        assert!(once.contains("Final paragraph."));
+        assert!(once.contains("First addition."));
+        assert!(once.contains("Second addition."));
+        assert_eq!(apply_inject(&dir, &manifest).unwrap(), 2);
+        assert_eq!(fs::read_to_string(&page).unwrap(), once);
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

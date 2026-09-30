@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mockTauri } from "./mock-tauri";
 
 /**
  * Smoke coverage for the panels shipped recently:
@@ -16,6 +17,7 @@ import { expect, test } from "@playwright/test";
  */
 
 test.describe("New panels — smoke", () => {
+  test.beforeEach(async ({ page }) => { await mockTauri(page); });
   test("opens the rename refactor modal via command palette", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: /command palette/i }).click();
@@ -85,7 +87,6 @@ test.describe("New panels — smoke", () => {
 
   test("chat mode exposes the 5-way mode switcher", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /code-explorer/i }).click();
     await page.keyboard.press("Control+3");
     // The ModeSwitcher renders each mode as a button with the mode label.
     await expect(page.getByRole("button", { name: /Q&A/i }).first()).toBeVisible();
@@ -102,8 +103,8 @@ test.describe("New panels — smoke", () => {
 
   test("analyze mode exposes the Snapshots sub-view", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /code-explorer/i }).click();
-    await page.getByRole("button", { name: /analyze/i }).click();
+    await expect(page.getByText("No repository selected", { exact: true })).not.toBeVisible();
+    await page.getByRole("button", { name: /Analyze \(Ctrl\+2\)/i }).click();
     // AnalyzeNav is a vertical list of buttons; Snapshots is a new entry.
     await expect(
       page.getByRole("button", { name: /snapshots/i }).first(),

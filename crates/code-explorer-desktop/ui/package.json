@@ -9,6 +9,7 @@
     "bundle:report": "node scripts/report-bundle.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:config": "node --test tests/tauri-hooks.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },

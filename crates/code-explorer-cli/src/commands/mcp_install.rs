@@ -62,7 +62,9 @@ fn install_claude_global(exe_path: &str) -> anyhow::Result<()> {
         .or_else(|_| std::env::var("HOME"))
         .map_err(|_| anyhow::anyhow!("Cannot determine home directory"))?;
 
-    let mcp_json_path = PathBuf::from(&home).join(".mcp.json");
+    // Claude Code reads user-scoped MCP servers from .claude.json. A
+    // .mcp.json is only discovered at a project's root.
+    let mcp_json_path = PathBuf::from(&home).join(".claude.json");
 
     let config = build_claude_mcp_config(exe_path, &mcp_json_path)?;
     std::fs::write(&mcp_json_path, config)?;

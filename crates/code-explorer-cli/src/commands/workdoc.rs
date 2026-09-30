@@ -261,6 +261,14 @@ pub async fn run(command: WorkdocCommand) -> Result<()> {
             println!("{} DOCX: {}", "OK".green(), output_path.display());
             println!("{} State: {}", "OK".green(), state_path.display());
             println!("{} Ledger: {}", "OK".green(), ledger_path.display());
+            let failed = document
+                .questions
+                .iter()
+                .filter(|question| question.status == WorkQuestionStatus::Error)
+                .count();
+            if failed > 0 {
+                anyhow::bail!("{failed} question(s) en échec. Le document partiel et l’état sont conservés ; relancez avec le même --state après correction.");
+            }
             Ok(())
         }
         WorkdocCommand::Export {
@@ -1217,7 +1225,10 @@ fn work_document_export_title(document: &WorkDocumentState) -> String {
     if readiness == "Prêt pour relecture finale" {
         format!("Livrable Code Explorer - {}", document.filename)
     } else {
-        format!("Livrable Code Explorer ({readiness}) - {}", document.filename)
+        format!(
+            "Livrable Code Explorer ({readiness}) - {}",
+            document.filename
+        )
     }
 }
 

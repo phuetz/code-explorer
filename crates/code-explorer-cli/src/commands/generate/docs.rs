@@ -51,10 +51,9 @@ pub(super) fn generate_docs(
 
     if communities.is_empty() {
         println!(
-            "{} No communities found. Run `code-explorer analyze` first.",
+            "{} No communities detected; generating repository pages without module grouping.",
             "!".yellow()
         );
-        return Ok(());
     }
 
     // 1. Generate overview.md
@@ -4873,8 +4872,10 @@ mod tests {
 
     #[test]
     fn architecture_diagram_uses_merged_modules_without_duplicate_nodes() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-architecture-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-architecture-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&root).expect("docs dir");
 
         let mut graph = KnowledgeGraph::new();
@@ -4912,7 +4913,8 @@ mod tests {
 
     #[test]
     fn code_map_page_hides_internal_markers_and_uses_french_navigation() {
-        let root = std::env::temp_dir().join(format!("code-explorer-code-map-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("code-explorer-code-map-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("docs dir");
 
         let mut graph = KnowledgeGraph::new();
@@ -4958,8 +4960,10 @@ mod tests {
 
     #[test]
     fn getting_started_page_hides_internal_markers_and_uses_french_copy() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-getting-started-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-getting-started-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&root).expect("docs dir");
 
         let mut graph = KnowledgeGraph::new();
@@ -5208,8 +5212,10 @@ mod tests {
 
     #[test]
     fn generate_wiki_steering_pages_writes_plan_and_guided_pages() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-wiki-steering-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-wiki-steering-{}",
+            uuid::Uuid::new_v4()
+        ));
         let repo = root.join("repo");
         let docs = root.join("docs");
         std::fs::create_dir_all(repo.join(".devin")).expect("repo config dir");

@@ -1,6 +1,6 @@
 //! The `trace-doc` command: generate documentation from an execution trace using LLM.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use colored::Colorize;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -36,7 +36,7 @@ pub async fn run(trace_file: &str, output_file: Option<&str>, path: Option<&str>
             println!("    \"max_tokens\": 8192,");
             println!("    \"reasoning_effort\": \"high\"");
             println!("  }}");
-            return Ok(());
+            bail!("LLM configuration is missing or invalid");
         }
     };
 
@@ -46,13 +46,13 @@ pub async fn run(trace_file: &str, output_file: Option<&str>, path: Option<&str>
             "{} No index found. Run 'code-explorer analyze' first.",
             "ERROR".red()
         );
-        return Ok(());
+        bail!("Repository is not indexed");
     }
 
     let log_path = std::path::Path::new(trace_file);
     if !log_path.exists() {
         println!("{} Trace file not found: {}", "ERROR".red(), trace_file);
-        return Ok(());
+        bail!("Trace file does not exist: {trace_file}");
     }
 
     println!("{} Loading graph...", "->".cyan());
@@ -66,7 +66,7 @@ pub async fn run(trace_file: &str, output_file: Option<&str>, path: Option<&str>
 
     if steps.is_empty() {
         println!("{} No valid steps found in trace file.", "WARN".yellow());
-        return Ok(());
+        bail!("Trace file contains no valid steps");
     }
 
     let name_to_ids = trace::build_name_index(&graph);

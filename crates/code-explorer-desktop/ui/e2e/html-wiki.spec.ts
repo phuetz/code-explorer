@@ -49,12 +49,13 @@ test.describe("DeepWiki HTML Output", () => {
   test("can switch to dark/light theme", async ({ page }) => {
     await page.goto(htmlUrl);
 
-    const themeBtn = page.getByRole("button", { name: /Theme/i });
+    const initialTheme = await page.locator("html").getAttribute("data-theme");
+    const themeBtn = page.getByRole("button", { name: /Theme|thème/i });
     await themeBtn.click();
 
     // Check if data-theme changed (accept any value — the page may
     // default to either theme depending on the OS preference).
-    await expect(page.locator("html")).toHaveAttribute("data-theme", /.+/);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", initialTheme === "dark" ? "light" : "dark");
   });
 
   test("mermaid diagrams render on a diagram-bearing page", async ({ page }) => {

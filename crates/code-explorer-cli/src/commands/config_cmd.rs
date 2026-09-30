@@ -1,8 +1,8 @@
 //! The `config` command: validate LLM configuration.
 
-use anyhow::Result;
-use colored::Colorize;
+use anyhow::{bail, Result};
 use code_explorer_core::llm::{sanitize_llm_error_body, PROMPT_CONTEXT_SAFETY};
+use colored::Colorize;
 
 /// Format an API key as `prefix...suffix` for display, hiding the middle.
 ///
@@ -48,7 +48,7 @@ pub fn run_test() -> Result<()> {
             println!("    \"max_tokens\": 8192,");
             println!("    \"reasoning_effort\": \"high\"");
             println!("  }}");
-            return Ok(());
+            bail!("LLM configuration is missing or invalid");
         }
     };
 
@@ -78,9 +78,11 @@ pub fn run_test() -> Result<()> {
             Ok(None) => {
                 println!("{}", "ERROR No ChatGPT login found.".red());
                 println!("  Run `code-explorer login`, then retry `code-explorer config test`.");
+                bail!("No ChatGPT login found");
             }
             Err(e) => {
                 println!("{} ChatGPT auth check failed: {}", "ERROR".red(), e);
+                return Err(e.into());
             }
         }
         return Ok(());
@@ -136,10 +138,12 @@ pub fn run_test() -> Result<()> {
                 if let Ok(body) = resp.text() {
                     println!("  {}", sanitize_error_preview(&body, &config.api_key));
                 }
+                bail!("LLM connection test failed (HTTP {status})");
             }
         }
         Err(e) => {
             println!("{} Connection failed: {}", "ERROR".red(), e);
+            bail!("LLM connection test failed");
         }
     }
 

@@ -1,18 +1,20 @@
 import { expect, test } from "@playwright/test";
+import { mockTauri } from "./mock-tauri";
 
 test.describe("Code Explorer DeepWiki & Business Features", () => {
   test.beforeEach(async ({ page }) => {
+    await mockTauri(page);
     await page.goto("/");
-    // Open the mock repo
-    await page.getByRole("button", { name: /code-explorer/i }).click();
+    await expect(page.getByText("No repository selected", { exact: true })).not.toBeVisible();
+    await page.getByRole("button", { name: /Explorer \(Ctrl\+1\)/i }).click();
   });
 
   test("can navigate to Analyze > Process Flows", async ({ page }) => {
     // Switch to Analyze mode
-    await page.getByRole("button", { name: "Analyze", exact: true }).click();
+    await page.getByRole("button", { name: /Analyze \(Ctrl\+2\)/i }).click();
     
     // Check if Process Flows nav item is visible
-    const flowsNav = page.getByRole("button", { name: /Process Flows/i });
+    const flowsNav = page.getByRole("navigation", { name: "Analytics" }).getByRole("button", { name: /Process Flows/i });
     await expect(flowsNav).toBeVisible();
     
     // Click it
@@ -23,8 +25,8 @@ test.describe("Code Explorer DeepWiki & Business Features", () => {
   });
 
   test("can interact with a business process flow", async ({ page }) => {
-    await page.getByRole("button", { name: "Analyze", exact: true }).click();
-    await page.getByRole("button", { name: /Process Flows/i }).click();
+    await page.getByRole("button", { name: /Analyze \(Ctrl\+2\)/i }).click();
+    await page.getByRole("navigation", { name: "Analytics" }).getByRole("button", { name: /Process Flows/i }).click();
 
     // The mock data should provide some flows (e.g., "Système de Lettres")
     // Wait for the list to render
@@ -45,7 +47,7 @@ test.describe("Code Explorer DeepWiki & Business Features", () => {
 
   test("can see the Obsidian Vault export option in Manage mode", async ({ page }) => {
     // Switch to Manage mode
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: /Manage \(Ctrl\+4\)/i }).click();
     
     // The Export section is inside the Repositories tab
     await expect(page.getByRole("heading", { name: "Export", exact: true })).toBeVisible();

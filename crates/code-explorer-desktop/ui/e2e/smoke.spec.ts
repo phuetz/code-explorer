@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { mockTauri } from "./mock-tauri";
 
 test.describe("Code Explorer desktop UI smoke", () => {
+  test.beforeEach(async ({ page }) => { await mockTauri(page); });
   test("loads the welcome screen in browser mode", async ({ page }) => {
     await page.goto("/");
+    await page.getByRole("button", { name: /Explorer \(Ctrl\+1\)/i }).click();
 
     await expect(page.getByRole("heading", { name: "Code Explorer", exact: true })).toBeVisible();
     await expect(
@@ -15,6 +18,7 @@ test.describe("Code Explorer desktop UI smoke", () => {
 
   test("can open a mocked repository and render the explorer", async ({ page }) => {
     await page.goto("/");
+    await page.getByRole("button", { name: /Explorer \(Ctrl\+1\)/i }).click();
 
     await page.getByRole("button", { name: /code-explorer/i }).click();
 
@@ -34,17 +38,16 @@ test.describe("Code Explorer desktop UI smoke", () => {
     ).toBeVisible();
   });
 
-  test("chat mode shows the assistant setup guard when no API key is configured", async ({
+  test("chat mode exposes setup when no LLM is configured", async ({
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /code-explorer/i }).click();
-
     await page.keyboard.press("Control+3");
-
     await expect(
-      page.getByRole("heading", { name: /Configure AI Assistant/i }),
+      page.getByRole("button", { name: /LLM actif: LLM non configure/i }),
     ).toBeVisible();
+    await page.getByRole("button", { name: /Open chat AI settings/i }).click();
+    await expect(page.getByRole("dialog", { name: "Chat AI Settings" })).toBeVisible();
   });
 
   test("manage mode docs tab shows the generate-docs empty state", async ({ page }) => {

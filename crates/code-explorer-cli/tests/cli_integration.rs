@@ -44,11 +44,8 @@ impl TestRepo {
         // The index lives inside the working tree; without this, a `git add -A`
         // in a test would commit the index and a later `git checkout` would
         // refuse to overwrite it.
-        fs::write(
-            fixture.root.join(".git/info/exclude"),
-            ".codeexplorer/\n",
-        )
-        .expect("failed to write git exclude");
+        fs::write(fixture.root.join(".git/info/exclude"), ".codeexplorer/\n")
+            .expect("failed to write git exclude");
         fixture
     }
 
@@ -251,12 +248,120 @@ fn cli_report_help() {
 
 #[test]
 fn cli_config_test_without_config() {
-    // Should succeed even without config (graceful error message)
+    let repo = TestRepo::new("missing-config");
     let output = code_explorer()
         .args(["config", "test"])
+        .env("HOME", &repo.explorer_home)
+        .env("USERPROFILE", &repo.explorer_home)
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .env_remove("HOMEDRIVE")
+        .env_remove("HOMEPATH")
         .output()
         .expect("failed to run code-explorer config test");
-    assert!(output.status.success());
+    assert!(
+        !output.status.success(),
+        "missing config must fail validation"
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("No LLM config"));
+}
+
+#[test]
+fn cli_claude_global_install_uses_user_config_and_preserves_settings() {
+    let repo = TestRepo::new("claude-global-config");
+    let config_path = repo.explorer_home.join(".claude.json");
+    fs::write(
+        &config_path,
+        r#"{"theme":"dark","mcpServers":{"other":{"command":"other"}}}"#,
+    )
+    .unwrap();
+    for _ in 0..2 {
+        let output = code_explorer()
+            .args(["mcp-install", "--client", "claude", "--scope", "global"])
+            .env("HOME", &repo.explorer_home)
+            .env("USERPROFILE", &repo.explorer_home)
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .output()
+            .unwrap();
+        assert_success(&output, "Claude global install");
+    }
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(config_path).unwrap()).unwrap();
+    assert_eq!(config["theme"], "dark");
+    assert_eq!(config["mcpServers"]["other"]["command"], "other");
+    assert_eq!(config["mcpServers"]["code-explorer"]["args"][0], "mcp");
+    assert!(!repo.explorer_home.join(".mcp.json").exists());
+}
+
+#[test]
+fn cli_config_test_reads_portable_home_and_fails_on_connection_error() {
+    let repo = TestRepo::new("portable-config");
+    fs::create_dir_all(repo.explorer_home.join(".codeexplorer")).unwrap();
+    fs::write(repo.explorer_home.join(".codeexplorer/chat-config.json"),
+        r#"{"provider":"openai","api_key":"","base_url":"http://127.0.0.1:1","model":"qa-portable","max_tokens":10}"#).unwrap();
+    let output = code_explorer()
+        .args(["config", "test"])
+        .env("HOME", repo.path())
+        .env("USERPROFILE", repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("CODE_EXPLORER_API_KEY")
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("qa-portable"),
+        "configuration must come from the portable home"
+    );
+    assert!(
+        !output.status.success(),
+        "connection failure must fail validation"
+    );
+}
+
+#[test]
+fn cli_validate_docs_json_keeps_red_exit_code() {
+    let repo = TestRepo::new("validate-docs-json");
+    let docs = repo.path().join("documentation");
+    fs::create_dir_all(&docs).unwrap();
+    fs::write(
+        docs.join("unfinished.md"),
+        "# Unfinished\n\nTODO: write the section.\n",
+    )
+    .unwrap();
+    let output = repo.explorer(&[
+        "validate-docs",
+        "--docs-dir",
+        docs.to_str().unwrap(),
+        "--json",
+    ]);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(report["red_count"].as_u64().unwrap() > 0);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "JSON formatting must not bypass the delivery gate"
+    );
+    assert!(docs.join("_meta/validation.json").exists());
+}
+
+#[test]
+fn cli_analyze_embeddings_requires_the_model_instead_of_silent_success() {
+    let repo = TestRepo::new("analyze-embeddings");
+    fs::write(
+        repo.path().join("src/lib.rs"),
+        "pub fn sample_symbol() {}\n",
+    )
+    .unwrap();
+    let output = repo.explorer(&[
+        "analyze",
+        repo.path().to_str().unwrap(),
+        "--skip-git",
+        "--embeddings",
+    ]);
+    assert!(
+        !output.status.success(),
+        "--embeddings must not silently skip embedding generation"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("model.onnx"));
 }
 
 #[test]
@@ -368,8 +473,18 @@ fn cli_doctor_reports_a_healthy_index_and_exits_zero() {
     let output = repo.explorer(&["doctor", &repo_arg]);
     assert_success(&output, "doctor");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for id in ["path", "index", "schema", "registry", "coverage", "freshness"] {
-        assert!(stdout.contains(id), "doctor should report '{id}':\n{stdout}");
+    for id in [
+        "path",
+        "index",
+        "schema",
+        "registry",
+        "coverage",
+        "freshness",
+    ] {
+        assert!(
+            stdout.contains(id),
+            "doctor should report '{id}':\n{stdout}"
+        );
     }
     assert!(
         stdout.contains("[OK   ] index"),
@@ -470,7 +585,14 @@ fn cli_prose_repository_indexes_every_markdown_file_with_its_headings() {
     );
 
     // Full-text search reaches prose.
-    let query = repo.explorer(&["query", "Section 7 beta", "--repo", &repo_arg, "--limit", "5"]);
+    let query = repo.explorer(&[
+        "query",
+        "Section 7 beta",
+        "--repo",
+        &repo_arg,
+        "--limit",
+        "5",
+    ]);
     assert_success(&query, "query prose");
     let query_out = String::from_utf8_lossy(&query.stdout);
     assert!(
@@ -587,8 +709,7 @@ fn relationship_ids(graph: &code_explorer_core::graph::KnowledgeGraph) -> Vec<St
 }
 
 fn assert_no_dangling_edges(graph: &code_explorer_core::graph::KnowledgeGraph) {
-    let ids: std::collections::HashSet<String> =
-        graph.iter_nodes().map(|n| n.id.clone()).collect();
+    let ids: std::collections::HashSet<String> = graph.iter_nodes().map(|n| n.id.clone()).collect();
     for rel in graph.iter_relationships() {
         assert!(
             ids.contains(&rel.source_id),
@@ -614,7 +735,14 @@ fn parsed_files_in_last_run(repo: &Path) -> u64 {
 
 fn commit_all(repo: &TestRepo, message: &str) {
     repo.git(&["add", "-A"]);
-    repo.git(&["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", message]);
+    repo.git(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--quiet",
+        "-m",
+        message,
+    ]);
 }
 
 fn seed_modules(repo: &TestRepo, count: usize) {
@@ -729,7 +857,10 @@ fn cli_incremental_after_a_branch_switch_matches_a_full_reindex() {
     commit_all(&repo, "base");
 
     let repo_arg = repo.path().to_string_lossy().into_owned();
-    assert_success(&repo.explorer(&["analyze", &repo_arg]), "analyze on the base branch");
+    assert_success(
+        &repo.explorer(&["analyze", &repo_arg]),
+        "analyze on the base branch",
+    );
 
     // The default branch name depends on the host git configuration.
     let base_branch = String::from_utf8(
@@ -802,7 +933,10 @@ fn cli_doctor_reports_a_branch_switch_as_an_out_of_date_index() {
     commit_all(&repo, "base");
 
     let repo_arg = repo.path().to_string_lossy().into_owned();
-    assert_success(&repo.explorer(&["analyze", &repo_arg]), "analyze on the base branch");
+    assert_success(
+        &repo.explorer(&["analyze", &repo_arg]),
+        "analyze on the base branch",
+    );
 
     repo.git(&["checkout", "--quiet", "-b", "feature"]);
     fs::write(repo.path().join("src/mod0.rs"), "pub fn changed() {}\n").expect("failed to write");
@@ -856,7 +990,10 @@ fn cli_incremental_is_faster_than_a_full_reindex() {
     let incremental = start.elapsed();
 
     let start = Instant::now();
-    assert_success(&repo.explorer(&["analyze", &repo_arg, "--force"]), "full analyze");
+    assert_success(
+        &repo.explorer(&["analyze", &repo_arg, "--force"]),
+        "full analyze",
+    );
     let full = start.elapsed();
 
     assert!(
@@ -971,12 +1108,7 @@ fn max_files_zero_removes_the_guard() {
     let repo = TestRepo::new("budget-off");
     seed_budget_modules(&repo, "src", 12);
 
-    let output = repo.explorer(&[
-        "analyze",
-        repo.path().to_str().unwrap(),
-        "--max-files",
-        "0",
-    ]);
+    let output = repo.explorer(&["analyze", repo.path().to_str().unwrap(), "--max-files", "0"]);
     assert_success(&output, "analyze --max-files 0");
 }
 
@@ -1007,4 +1139,162 @@ fn default_exclusions_keep_vendored_code_out_of_the_index() {
         stdout.contains("70 parseable"),
         "--no-default-excludes must bring all 70 files back:\n{stdout}"
     );
+}
+
+#[test]
+fn cli_trace_doc_missing_config_fails() {
+    let repo = TestRepo::new("trace-doc-missing-config");
+    let output = repo.explorer(&[
+        "trace-doc",
+        "missing.json",
+        "--path",
+        repo.path().to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "missing LLM configuration must fail trace generation"
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("No LLM configured"));
+}
+
+#[test]
+fn cli_workdoc_failed_answers_keep_state_but_fail_the_command() {
+    use std::io::Write;
+    let repo = TestRepo::new("workdoc-failed-answers");
+    let docx = repo.path().join("questions.docx");
+    let mut archive = zip::ZipWriter::new(fs::File::create(&docx).unwrap());
+    archive
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    archive.write_all(br#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Question 1: Explain the public command entry point?</w:t></w:r></w:p></w:body></w:document>"#).unwrap();
+    archive.finish().unwrap();
+    let state = repo.path().join("state.json");
+    let exported = repo.path().join("answers.docx");
+    let output = repo.explorer(&[
+        "workdoc",
+        "run",
+        docx.to_str().unwrap(),
+        "--path",
+        repo.path().to_str().unwrap(),
+        "--state",
+        state.to_str().unwrap(),
+        "--output",
+        exported.to_str().unwrap(),
+        "--extract-mode",
+        "headings",
+    ]);
+    assert!(
+        !output.status.success(),
+        "failed answers must fail workdoc run"
+    );
+    let saved: serde_json::Value = serde_json::from_slice(&fs::read(state).unwrap()).unwrap();
+    assert_eq!(saved["questions"][0]["status"], "error");
+    assert!(
+        exported.exists(),
+        "partial export remains available for inspection and resume"
+    );
+}
+
+#[test]
+fn cli_analyze_existing_index_registers_it_in_a_fresh_home() {
+    let repo = TestRepo::new("existing-index-new-home");
+    fs::write(
+        repo.path().join("src/lib.rs"),
+        "pub fn public_symbol() {}\n",
+    )
+    .unwrap();
+    assert_success(
+        &repo.explorer(&["analyze", repo.path().to_str().unwrap(), "--skip-git"]),
+        "first indexing",
+    );
+    let snapshot = fs::read(repo.path().join(".codeexplorer/graph.bin")).unwrap();
+    let fresh_home = repo.path().join("fresh-home");
+    fs::create_dir_all(&fresh_home).unwrap();
+    for _ in 0..2 {
+        let output = code_explorer()
+            .args(["analyze", repo.path().to_str().unwrap(), "--skip-git"])
+            .env("CODE_EXPLORER_HOME", &fresh_home)
+            .output()
+            .unwrap();
+        assert_success(&output, "register an existing index");
+    }
+    let registry: serde_json::Value = serde_json::from_slice(
+        &fs::read(fresh_home.join(".codeexplorer/registry.json"))
+            .expect("existing index must be discoverable from a new home"),
+    )
+    .unwrap();
+    assert_eq!(registry.as_array().unwrap().len(), 1);
+    assert_eq!(registry[0]["path"], repo.path().to_str().unwrap());
+    assert_eq!(
+        fs::read(repo.path().join(".codeexplorer/graph.bin")).unwrap(),
+        snapshot
+    );
+}
+
+#[test]
+fn cli_generate_docx_mermaid_fallback_does_not_panic_in_async_runtime() {
+    let repo = TestRepo::new("docx-mermaid-runtime");
+    fs::write(
+        repo.path().join("src/lib.rs"),
+        "pub fn diagram_symbol() {}\n",
+    )
+    .unwrap();
+    assert_success(
+        &repo.explorer(&["analyze", repo.path().to_str().unwrap(), "--skip-git"]),
+        "index DOCX fixture",
+    );
+    let docs = repo.path().join("generated-docs");
+    let output = code_explorer()
+        .args([
+            "generate",
+            "docx",
+            "--path",
+            repo.path().to_str().unwrap(),
+            "--output-dir",
+            docs.to_str().unwrap(),
+        ])
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .env("CODE_EXPLORER_KROKI_URL", "http://127.0.0.1:1")
+        .env_remove("CODE_EXPLORER_MERMAID_PLACEHOLDER")
+        .output()
+        .unwrap();
+    assert_success(
+        &output,
+        "DOCX export must survive unavailable diagram rendering",
+    );
+    let docx = fs::File::open(docs.join("documentation.docx")).unwrap();
+    let mut archive = zip::ZipArchive::new(docx).unwrap();
+    assert!(archive.by_name("word/document.xml").is_ok());
+}
+
+#[test]
+fn cli_generate_docs_for_a_single_function_still_creates_pages() {
+    let repo = TestRepo::new("docs-without-communities");
+    fs::write(repo.path().join("src/lib.rs"), "pub fn lone_symbol() {}\n").unwrap();
+    assert_success(
+        &repo.explorer(&["analyze", repo.path().to_str().unwrap(), "--skip-git"]),
+        "index tiny repository",
+    );
+    let docs = repo.path().join("generated-docs");
+    assert_success(
+        &repo.explorer(&[
+            "generate",
+            "docs",
+            "--path",
+            repo.path().to_str().unwrap(),
+            "--output-dir",
+            docs.to_str().unwrap(),
+        ]),
+        "generate tiny repository documentation",
+    );
+    assert!(
+        docs.join("overview.md").is_file(),
+        "absence of communities must not suppress all pages"
+    );
+    let index: serde_json::Value =
+        serde_json::from_slice(&fs::read(docs.join("_index.json")).unwrap()).unwrap();
+    assert!(index.is_object());
 }

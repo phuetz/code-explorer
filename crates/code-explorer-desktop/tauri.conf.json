@@ -7,7 +7,7 @@
     "frontendDist": "ui/dist",
     "devUrl": "http://localhost:1421",
     "beforeDevCommand": "npm run dev -- --port 1421 --strictPort",
-    "beforeBuildCommand": "npm run --prefix ui build"
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
@@ -29,6 +29,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }

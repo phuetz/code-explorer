@@ -34,6 +34,7 @@ pub fn build_walker(repo_path: &Path, rules: &ExclusionRules) -> ignore::Walk {
     WalkBuilder::new(repo_path)
         .hidden(true) // Respect .gitignore
         .git_ignore(true)
+        .parents(false) // The requested root must not inherit ignores from unrelated parents.
         .git_global(false)
         .git_exclude(true)
         .filter_entry(move |entry| {
@@ -132,8 +133,8 @@ pub fn scan_candidates(
             .metadata()
             .map(|m| m.len())
             .unwrap_or_else(|_| std::fs::metadata(abs_path).map(|m| m.len()).unwrap_or(0));
-        let is_candidate = size <= 2 * 1024 * 1024
-            && detect_language_for_path(abs_path, &rel_path).is_some();
+        let is_candidate =
+            size <= 2 * 1024 * 1024 && detect_language_for_path(abs_path, &rel_path).is_some();
 
         let top = match rel_path.split_once('/') {
             Some((head, _)) => head.to_string(),

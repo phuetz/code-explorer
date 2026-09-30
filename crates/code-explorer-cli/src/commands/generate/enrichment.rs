@@ -424,12 +424,11 @@ fn append_responses_text(event: &serde_json::Value, output: &mut String) {
                 output.push_str(delta);
             }
         }
-        "response.output_text.done"
-            if output.is_empty() => {
-                if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
-                    output.push_str(text);
-                }
+        "response.output_text.done" if output.is_empty() => {
+            if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
+                output.push_str(text);
             }
+        }
         "response.completed" if output.is_empty() => {
             if let Some(items) = event
                 .get("response")
@@ -867,32 +866,12 @@ fn atomic_write_page(page_path: &Path, content: &str) -> std::io::Result<()> {
 
 /// Load LLM config from ~/.codeexplorer/chat-config.json
 pub(crate) fn load_llm_config() -> Option<LlmConfig> {
-    // Try multiple home directory sources for cross-platform compatibility
-    let candidates = [
-        std::env::var("USERPROFILE").ok(),
-        std::env::var("HOME").ok(),
-        std::env::var("HOMEDRIVE").ok().and_then(|d| {
-            std::env::var("HOMEPATH")
-                .ok()
-                .map(|p| format!("{}{}", d, p))
-        }),
-    ];
-
-    for candidate in candidates.iter().flatten() {
-        let config_path = std::path::Path::new(candidate)
-            .join(".codeexplorer")
-            .join("chat-config.json");
-        if config_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_path) {
-                let content = content.trim_start_matches('\u{feff}');
-                return serde_json::from_str(content)
-                    .ok()
-                    .map(hydrate_api_key_from_env);
-            }
-        }
-    }
-
-    None
+    let config_path =
+        code_explorer_core::storage::repo_manager::get_global_dir().join("chat-config.json");
+    let content = std::fs::read_to_string(config_path).ok()?;
+    serde_json::from_str(content.trim_start_matches('\u{feff}'))
+        .ok()
+        .map(hydrate_api_key_from_env)
 }
 
 fn env_api_key_candidates(provider: &str) -> &'static [&'static str] {
@@ -4084,8 +4063,10 @@ mod tests {
             step: None,
         });
 
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-rag-screenshot-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-rag-screenshot-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(root.join("src")).expect("repo dir");
         std::fs::write(root.join("src/commission.rs"), "fn commission() {}\n").expect("source");
 
@@ -4164,8 +4145,10 @@ mod tests {
 
     #[test]
     fn inject_enrichment_renders_used_sources_by_evidence_type() {
-        let root =
-            std::env::temp_dir().join(format!("code-explorer-used-sources-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "code-explorer-used-sources-{}",
+            uuid::Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&root).expect("repo dir");
         let page = root.join("commission.md");
         std::fs::write(
@@ -4357,7 +4340,8 @@ mod tests {
     fn test_llm_cache_roundtrip_in_docs_tree() {
         // Build a minimal docs/ tree so meta_dir_for can resolve _meta/
         // relative to it, then store and retrieve a fake LLM response.
-        let root = std::env::temp_dir().join(format!("code-explorer-enr-test-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("code-explorer-enr-test-{}", std::process::id()));
         let docs_dir = root.join("docs");
         let page_dir = docs_dir.join("modules");
         std::fs::create_dir_all(&page_dir).unwrap();
@@ -4402,7 +4386,8 @@ mod tests {
 
     #[test]
     fn test_dump_debug_raw_writes_to_meta_debug() {
-        let root = std::env::temp_dir().join(format!("code-explorer-debug-test-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("code-explorer-debug-test-{}", std::process::id()));
         let docs_dir = root.join("docs");
         std::fs::create_dir_all(&docs_dir).unwrap();
         let page = docs_dir.join("broken.md");

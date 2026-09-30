@@ -47,6 +47,15 @@ pub async fn run(
     include_docs: Option<bool>,
     walk: WalkOptions,
 ) -> anyhow::Result<()> {
+    let embedding_model = repo_manager::get_global_dir().join("models/all-MiniLM-L6-v2/model.onnx");
+    if embeddings && !embedding_model.is_file() {
+        anyhow::bail!(
+            "--embeddings requires the MiniLM model at {} and its tokenizer.json. \
+             See the semantic search setup, or index without --embeddings and use \
+             `code-explorer embed --model <model.onnx>` for another model.",
+            embedding_model.display()
+        );
+    }
     let repo_path = Path::new(path)
         .canonicalize()
         .unwrap_or_else(|_| Path::new(path).to_path_buf());
@@ -82,7 +91,14 @@ pub async fn run(
 
     // Check if already indexed
     if !force && !incremental && repo_manager::has_index(&repo_path) {
+        let storage = repo_manager::get_storage_paths(&repo_path);
+        if let Some(meta) = repo_manager::load_meta(&storage.storage_path)? {
+            repo_manager::register_repo(&repo_path, &meta)?;
+        }
         println!("Repository already indexed. Use --force to re-index.");
+        if embeddings {
+            return generate_repo_embeddings(&repo_path, &embedding_model).await;
+        }
         return Ok(());
     }
 
@@ -119,14 +135,15 @@ pub async fn run(
     let llm_config = if llm_enrich {
         match super::generate::load_llm_config() {
             Some(cfg) => {
-                let mut enrich_cfg = code_explorer_ingest::phases::llm_enrichment::LlmEnrichmentConfig {
-                    base_url: cfg.base_url,
-                    api_key: cfg.api_key,
-                    model: cfg.model,
-                    max_tokens: cfg.max_tokens,
-                    reasoning_effort: cfg.reasoning_effort,
-                    ..Default::default()
-                };
+                let mut enrich_cfg =
+                    code_explorer_ingest::phases::llm_enrichment::LlmEnrichmentConfig {
+                        base_url: cfg.base_url,
+                        api_key: cfg.api_key,
+                        model: cfg.model,
+                        max_tokens: cfg.max_tokens,
+                        reasoning_effort: cfg.reasoning_effort,
+                        ..Default::default()
+                    };
                 if let Some(budget) = llm_token_budget {
                     enrich_cfg.token_budget = budget;
                 }
@@ -213,7 +230,8 @@ pub async fn run(
 
             let storage_paths = repo_manager::get_storage_paths(&repo_path);
             repo_manager::save_meta(&storage_paths.storage_path, &meta)?;
-            std::fs::write(storage_paths.storage_path.join("analyze.json"),
+            std::fs::write(
+                storage_paths.storage_path.join("analyze.json"),
                 serde_json::to_vec_pretty(&serde_json::json!({
                     "parsed_files": result.parsed_files,
                     "total_files": result.total_file_count,
@@ -221,7 +239,8 @@ pub async fn run(
                     "fallback_reason": result.incremental_fallback,
                     "resolution_scope": "repository",
                     "local_enrichments": result.local_enrichments
-                }))?)?;
+                }))?,
+            )?;
             repo_manager::register_repo(&repo_path, &meta)?;
 
             // Persist the detailed performance metrics (per-phase breakdown + throughput).
@@ -279,7 +298,11 @@ pub async fn run(
             let csv_start = std::time::Instant::now();
             let csv_dir = storage_paths.storage_path.join("csv");
             std::fs::create_dir_all(&csv_dir)?;
-            code_explorer_db::csv_generator::generate_all_csvs(&result.graph, &repo_path, &csv_dir)?;
+            code_explorer_db::csv_generator::generate_all_csvs(
+                &result.graph,
+                &repo_path,
+                &csv_dir,
+            )?;
             println!("  CSVs saved ({} ms)", csv_start.elapsed().as_millis());
 
             // Load CSVs into KuzuDB (when the kuzu-backend feature is enabled)
@@ -295,6 +318,9 @@ pub async fn run(
             }
 
             println!("  Done! Run 'code-explorer mcp' to start the MCP server.");
+            if embeddings {
+                generate_repo_embeddings(&repo_path, &embedding_model).await?;
+            }
             Ok(())
         }
         Err(e) => {
@@ -302,6 +328,19 @@ pub async fn run(
             Err(e.into())
         }
     }
+}
+
+async fn generate_repo_embeddings(repo_path: &Path, model: &Path) -> anyhow::Result<()> {
+    super::embed::run(
+        &model.to_string_lossy(),
+        None,
+        Some(&repo_path.to_string_lossy()),
+        384,
+        32,
+        512,
+        false,
+    )
+    .await
 }
 
 fn chrono_now() -> String {
@@ -357,9 +396,7 @@ fn over_budget_message(
     let suggestion: Vec<String> = largest
         .iter()
         .filter(|d| {
-            d.path != "."
-                && d.candidates > 0
-                && dominant.map_or(true, |dom| dom.path != d.path)
+            d.path != "." && d.candidates > 0 && dominant.map_or(true, |dom| dom.path != d.path)
         })
         .take(3)
         .map(|d| format!("--exclude {}", d.path))
@@ -463,10 +500,30 @@ mod tests {
             candidates: 61_234,
             walked: 70_000,
             dirs: vec![
-                DirTally { path: "node_modules".into(), candidates: 41_200, walked: 48_000, bytes: 2_200_000_000 },
-                DirTally { path: "_archive".into(), candidates: 15_000, walked: 15_500, bytes: 14_000_000 },
-                DirTally { path: "src".into(), candidates: 5_000, walked: 6_000, bytes: 30_000_000 },
-                DirTally { path: ".".into(), candidates: 34, walked: 500, bytes: 900_000 },
+                DirTally {
+                    path: "node_modules".into(),
+                    candidates: 41_200,
+                    walked: 48_000,
+                    bytes: 2_200_000_000,
+                },
+                DirTally {
+                    path: "_archive".into(),
+                    candidates: 15_000,
+                    walked: 15_500,
+                    bytes: 14_000_000,
+                },
+                DirTally {
+                    path: "src".into(),
+                    candidates: 5_000,
+                    walked: 6_000,
+                    bytes: 30_000_000,
+                },
+                DirTally {
+                    path: ".".into(),
+                    candidates: 34,
+                    walked: 500,
+                    bytes: 900_000,
+                },
             ],
         };
         let msg = over_budget_message(Path::new("/repo"), &scan, 50_000);
@@ -492,9 +549,24 @@ mod tests {
             candidates: 5_525,
             walked: 7_003,
             dirs: vec![
-                DirTally { path: "src".into(), candidates: 5_342, walked: 5_394, bytes: 64_000_000 },
-                DirTally { path: "e2e".into(), candidates: 82, walked: 106, bytes: 664_000 },
-                DirTally { path: "scripts".into(), candidates: 38, walked: 103, bytes: 621_000 },
+                DirTally {
+                    path: "src".into(),
+                    candidates: 5_342,
+                    walked: 5_394,
+                    bytes: 64_000_000,
+                },
+                DirTally {
+                    path: "e2e".into(),
+                    candidates: 82,
+                    walked: 106,
+                    bytes: 664_000,
+                },
+                DirTally {
+                    path: "scripts".into(),
+                    candidates: 38,
+                    walked: 103,
+                    bytes: 621_000,
+                },
             ],
         };
         let msg = over_budget_message(Path::new("/repo"), &scan, 1);
@@ -503,7 +575,10 @@ mod tests {
             msg.contains("'src' alone holds 5342 of the 5525 candidates"),
             "the message must name the dominant directory:\n{msg}"
         );
-        assert!(!msg.contains("--exclude src"), "never suggest excluding it:\n{msg}");
+        assert!(
+            !msg.contains("--exclude src"),
+            "never suggest excluding it:\n{msg}"
+        );
         assert!(msg.contains("--exclude e2e --exclude scripts"));
         assert!(
             msg.contains("Raise the ceiling — this repository really is that big"),
@@ -515,7 +590,11 @@ mod tests {
     #[test]
     fn over_budget_message_survives_a_repository_with_no_subdirectory() {
         use code_explorer_ingest::phases::structure::CandidateScan;
-        let scan = CandidateScan { candidates: 10, walked: 10, dirs: Vec::new() };
+        let scan = CandidateScan {
+            candidates: 10,
+            walked: 10,
+            dirs: Vec::new(),
+        };
         let msg = over_budget_message(Path::new("/repo"), &scan, 5);
         assert!(msg.contains("--exclude <directory>"));
         assert!(!msg.contains("Largest directories"));
