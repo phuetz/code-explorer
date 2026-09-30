@@ -53,7 +53,7 @@ sudo apt install -y \
 Notes:
 
 - `build-essential` compile les grammaires tree-sitter.
-- `cmake` sert à compiler le backend KuzuDB expérimental, actuellement non opérationnel à l’indexation.
+- `cmake` sert à compiler la fonctionnalité optionnelle `kuzu-backend` des sources actuelles. Elle ajoute l’import CSV dans KuzuDB ; les requêtes CLI/MCP gardent le snapshot par défaut. La release v0.2.1 ne contient pas les corrections de cet import.
 - Les paquets `libwebkit2gtk-4.1-dev`, `libxdo-dev`,
   `libayatana-appindicator3-dev` et `librsvg2-dev` sont requis pour Tauri v2.
 

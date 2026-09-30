@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Rust-1.88+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
   <img src="https://img.shields.io/badge/languages-14-22c55e?style=flat-square" alt="14 languages"/>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-30_tools-a855f7?style=flat-square" alt="MCP server"/></a>
-  <img src="https://img.shields.io/badge/tests-1007-16a34a?style=flat-square" alt="1007 tests"/>
+  <img src="https://img.shields.io/badge/tests-cargo_test-16a34a?style=flat-square" alt="Run cargo test --workspace"/>
   <img src="https://img.shields.io/badge/runs-100%25_local-0ea5e9?style=flat-square" alt="100% local"/>
 </p>
 
@@ -346,7 +346,7 @@ The skill checks `code-explorer status`, indexes if needed, then answers with `c
 | **HTML Docs Generator** | DeepWiki-style site: full-text search, Mermaid diagrams, cross-links, embedded chat, DOCX/PDF export |
 | **Desktop App** | Tauri v2 + React 19 — interactive graph, treemap, analytics cockpit, command palette |
 | **Enterprise / legacy .NET** | Deep ASP.NET MVC 5 / EF6 support: controllers, Razor views, EDMX entities, Telerik/Kendo grids, jQuery→action mapping, DI graphs |
-| **Pluggable Storage** | In-memory backend (default); KuzuDB backend is experimental and currently fails indexing |
+| **Storage** | In-memory snapshot (default); optional KuzuDB import of the CSV projection in current sources |
 
 ---
 
@@ -370,14 +370,14 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture and design notes.
 ## Why these technical choices
 
 **Rust.** Indexing a large repo means parsing thousands of files and walking millions of graph edges — the work is CPU- and memory-bound, exactly where Rust pays off. It gives:
-- a **single ~64 MB static binary** with no runtime or interpreter — drop it on `PATH` and it just runs (CI, a teammate's laptop, a server);
+- a **single native CLI binary** with no language interpreter — add it to `PATH`; Linux builds require the system C/C++ libraries. Its size depends on the target and enabled features;
 - **fearless parallelism** — file parsing fans out across cores with [rayon](https://github.com/rayon-rs/rayon) under a fixed memory budget (20 MB chunks + an LRU AST cache), so a 3,000-file repo indexes in seconds;
 - **predictable speed & memory** (no GC pauses), `opt-level 3` + thin LTO in release;
 - memory safety, so the parser never segfaults on weird input — it degrades gracefully.
 
 **tree-sitter for parsing.** One battle-tested incremental-parsing engine with grammars for all 14 languages, instead of 14 bespoke parsers. Each language adds a thin post-pass (call resolution, member nesting) on top of the shared AST walk.
 
-**In-memory knowledge graph, no database required.** The graph lives in a `HashMap`-backed store with O(1) node/edge lookup and deterministic IDs (`"Label:qualifiedName"`), persisted as a JSON snapshot (`graph.bin`). Zero setup, works offline. The optional KuzuDB backend currently fails schema creation during indexing. Use the default in-memory backend; KuzuDB is not a supported installation path.
+**In-memory knowledge graph, no database required.** The graph lives in a `HashMap`-backed store with O(1) node/edge lookup and deterministic IDs (`"Label:qualifiedName"`), persisted as a JSON snapshot (`graph.bin`). Zero setup, works offline. Current sources also support the optional `kuzu-backend` feature, which imports the CSV projection into an additional KuzuDB database during indexing. CLI and MCP queries still use the snapshot. The prebuilt v0.2.1 release predates the Kuzu import fixes; build from source to use them. The default build needs neither KuzuDB nor CMake.
 
 **MCP as the integration surface.** Rather than a bespoke plugin per editor, Code Explorer speaks the [Model Context Protocol](https://modelcontextprotocol.io/) — so the same server works with Claude Code, Codex, Cursor, VS Code and anything else that speaks MCP, over stdio or HTTP.
 

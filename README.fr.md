@@ -107,7 +107,7 @@ Le site HTML inclut :
 | **Compilateur C/C++** | - | Grammaires tree-sitter | Windows: Visual Studio Build Tools. Linux: `apt install build-essential`. macOS: `xcode-select --install` |
 | **Node.js** | 22.12+ | Frontend de l'app desktop | [nodejs.org](https://nodejs.org/) |
 | **git** | 2.0+ | Analytics git (hotspots, couplage, ownership) | Déjà installé sur la plupart des systèmes |
-| **CMake** | 3.15+ | Backend KuzuDB expérimental (non opérationnel) | Windows: `winget install cmake`. Linux: `apt install cmake` |
+| **CMake** | 3.15+ | Backend KuzuDB optionnel, compilation C++ | Windows: `winget install cmake`. Linux: `apt install cmake` |
 
 ### Installation & Compilation
 
@@ -116,7 +116,7 @@ Le site HTML inclut :
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 
-# 2. Compiler la CLI (mode release, ~35 Mo)
+# 2. Compiler la CLI (mode release, taille selon la cible et les fonctionnalités)
 cargo build --release -p code-explorer-cli
 
 # Le binaire se trouve à :
@@ -182,11 +182,16 @@ binaire utilisé ; compiler les sources actuelles pour ces options.
 
 ### Compilation avec fonctionnalités optionnelles
 
-Le backend `kuzu-backend` compile, mais sa création de schéma échoue dès
-l’indexation. Il reste expérimental et ne doit pas être activé pour une
-installation utilisateur. Le backend en mémoire est le parcours pris en charge.
+Les sources actuelles réparent l’indexation avec `kuzu-backend`, vérifiée sur
+Linux. Cette fonctionnalité importe la projection CSV dans une base KuzuDB
+supplémentaire ; les requêtes CLI/MCP continuent à utiliser le snapshot.
+Les binaires précompilés v0.2.1 ne contiennent pas ces corrections. Le backend
+en mémoire reste le parcours par défaut, sans dépendance KuzuDB ni CMake.
 
 ```bash
+# Avec la base KuzuDB supplémentaire (CMake et compilateur C++ requis)
+cargo build --release -p code-explorer-cli --features kuzu-backend
+
 # Avec la recherche sémantique ONNX (BM25 + embeddings hybrides)
 cargo build --release -p code-explorer-cli --features code-explorer-search/embeddings
 

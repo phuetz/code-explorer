@@ -16,7 +16,7 @@ cargo build
 cargo build --release
 
 # Build with KuzuDB backend
-cargo build --features code-explorer-cli/kuzu-backend
+cargo build --release -p code-explorer-cli --features kuzu-backend
 
 # Build with semantic search (ONNX embeddings)
 cargo build --features code-explorer-search/embeddings
@@ -40,7 +40,7 @@ cd crates/code-explorer-desktop/ui && npm run build  # tsc + vite build
 cd chat-ui && npm install && npm run build
 # Run web chat in dev (port 5174 — proxies /api /health /mcp to code-explorer serve)
 cd chat-ui && npm run dev
-# Backend it talks to: code-explorer serve --http 8080 (separate process)
+# Backend it talks to: code-explorer serve --port 3010 (separate process)
 
 # Build NexusBrain (separate Tauri app)
 cd nexus-brain && npm install && npm run build && cd ..
@@ -96,7 +96,7 @@ nexus-brain (separate Tauri v2 app — "Knowledge IDE", Obsidian-like vault edit
   └── standalone — reads Markdown Vaults exported by Code Explorer, not a workspace member
 
 chat-ui/ (standalone web chat — Vite 7 + React 19 + Tailwind v4)
-  └── browser frontend that talks to `code-explorer serve --http 8080` via JSON-RPC + SSE.
+  └── browser frontend that talks to `code-explorer serve --port 3010` via JSON-RPC + SSE.
       Imported in May 2026 from a separate repository. Not a Cargo crate —
       `cd chat-ui && npm run dev` on port 5174. Per-folder doc: `chat-ui/CLAUDE.md`.
       Roadmap: `chat-ui/README.md`.
@@ -117,7 +117,7 @@ chat-ui/ (standalone web chat — Vite 7 + React 19 + Tailwind v4)
 
 Uses rayon for parallel file processing with a 20MB chunk budget and LRU AST cache (cap 50).
 
-**DB** (`code-explorer-db`): `DatabaseBackend` trait with `InMemoryBackend` (default, includes simple Cypher executor and BM25 FTS) and `KuzuDbBackend` (feature-gated via `kuzu-backend`). Schema defines 56 node tables with a unified `CodeRelation` relationship table. Persistence via bincode snapshots (`graph.bin`). Query results returned as `Vec<serde_json::Value>`.
+**DB** (`code-explorer-db`): `DatabaseBackend` trait with `InMemoryBackend` (default, includes simple Cypher executor and BM25 FTS) and `KuzuDbBackend` (feature-gated via `kuzu-backend`). Schema defines 59 node tables with a unified `CodeRelation` relationship table. Persistence via JSON snapshots (`graph.bin`). The optional feature imports the CSV projection into KuzuDB; CLI/MCP queries still read the snapshot. Query results returned as `Vec<serde_json::Value>`.
 
 **Search** (`code-explorer-search`): Reciprocal Rank Fusion (K=60) merging BM25 lexical results with optional ONNX-based semantic embeddings. Optional LLM reranker (`reranker-llm` feature) post-processes top-K candidates by sending them to an OpenAI-compatible endpoint (reuses `~/.codeexplorer/chat-config.json`). Gracefully degrades without any optional feature.
 
@@ -187,6 +187,6 @@ Stdio and HTTP transports. `LocalBackend` coordinates registry loading and tool 
 
 ## Rust Version and Toolchain
 
-- MSRV: 1.75
+- MSRV: 1.88 (also declared in the workspace Cargo.toml)
 - Edition: 2021
 - Release profile: thin LTO, single codegen unit, stripped binaries, opt-level 3

@@ -46,7 +46,7 @@ npm run lint
 - `useChatStore` = Zustand persist, source de vérité pour `sessions[]` +
   `currentSessionId` + `isStreaming`. Exposé via `useChatStore((s) => ...)`.
 - `mcp-client.ts` = wrapper. **V0 : retourne du mock**. V1 : passera au JSON-RPC 2.0
-  vers `code-explorer serve --http 8080`.
+  vers `code-explorer serve --port 3010`.
 
 ## Roadmap (extraite du README)
 

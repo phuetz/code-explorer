@@ -15,7 +15,7 @@ Pour une installation sur une machine Ubuntu neuve, voir aussi [INSTALLATION_UBU
 | Visual Studio Build Tools C++ | Recent | Compiler les grammaires tree-sitter sous Windows |
 | Node.js | 22.12+ | Lancer les interfaces React |
 | npm | Version fournie avec Node | Installer les dependances frontend |
-| CMake | 3.15+ optionnel | Backend KuzuDB expérimental (indexation non opérationnelle) |
+| CMake | 3.15+ optionnel | Import KuzuDB supplémentaire dans les sources actuelles ; absent des correctifs de la release v0.2.1 |
 
 Sous Windows, installez le workload "Desktop development with C++" via Visual Studio Build Tools. Apres installation, ouvrez un nouveau terminal pour que `cargo`, `node` et `npm` soient bien dans le `PATH`.
 

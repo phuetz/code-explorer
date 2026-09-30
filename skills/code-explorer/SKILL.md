@@ -161,7 +161,7 @@ code-explorer diagram ClassName --type flowchart # or: --type sequence / --type 
 code-explorer rag-import <docs-folder> --path [path]   # Import .md/.docx specs, link to code
 code-explorer watch [path]                     # Re-index on file changes (debounced)
 code-explorer dashboard [path]                 # Interactive terminal UI over the graph
-code-explorer clean [--force|--all]            # Delete an index
+code-explorer clean --help                    # Review --force / --all before deleting an index
 code-explorer setup                            # Print editor MCP integration instructions
 ```
 
