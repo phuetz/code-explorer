@@ -51,11 +51,6 @@ pub async fn run(
     }
     let bm25 = fts.search_with_file_type(&graph, query, None, file_type, pool);
 
-    if bm25.is_empty() && !hybrid_mode {
-        println!("No results for '{query}'.");
-        return Ok(());
-    }
-
     // Hybrid: fuse BM25 with semantic via RRF BEFORE any LLM rerank.
     let fused: Vec<FtsResult> = if hybrid_mode {
         match run_hybrid(query, &bm25, &graph, Path::new(&storage.storage_path), pool) {
@@ -69,12 +64,7 @@ pub async fn run(
         bm25.clone()
     };
 
-    if fused.is_empty() {
-        println!("No results for '{query}'.");
-        return Ok(());
-    }
-
-    let mut candidates = if rerank {
+    let mut candidates = if rerank && !fused.is_empty() {
         match run_reranker(query, &fused).await {
             Ok(r) => r,
             Err(e) => {
@@ -106,6 +96,11 @@ pub async fn run(
     }
     if asks_for_files(query) {
         distinct_files(&mut candidates);
+    }
+
+    if candidates.is_empty() {
+        println!("No results for '{query}'.");
+        return Ok(());
     }
 
     let start = offset.min(candidates.len());
@@ -237,7 +232,9 @@ fn source_code_hits(
         .take(4)
         .map(|word| word.to_ascii_lowercase())
         .collect();
-    if markers.len() < 2 {
+    let specific_single_marker =
+        markers.len() == 1 && markers[0].contains('_') && markers[0].len() >= 8;
+    if markers.len() < 2 && !specific_single_marker {
         return Vec::new();
     }
     let mut paths = HashSet::new();
@@ -391,6 +388,43 @@ mod pagination_tests {
         );
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].file_path, "src/Pragma.cs");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn specific_single_marker_is_detected() {
+        let dir =
+            std::env::temp_dir().join(format!("ce-query-single-marker-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("tests")).unwrap();
+
+        std::fs::write(
+            dir.join("src/main.rs"),
+            "std::env::var(\"LM_RESIZER_STORE\")",
+        )
+        .unwrap();
+        std::fs::write(dir.join("tests/x.rs"), "LM_RESIZER_STORE").unwrap();
+
+        let mut graph = KnowledgeGraph::new();
+        for path in ["src/main.rs", "tests/x.rs"] {
+            graph.add_node(GraphNode {
+                id: format!("File:{path}"),
+                label: NodeLabel::File,
+                properties: NodeProperties {
+                    name: path.to_string(),
+                    file_path: path.to_string(),
+                    ..Default::default()
+                },
+            });
+        }
+
+        let hits = source_code_hits(&graph, &dir, "Où LM_RESIZER_STORE est-il lu ?", None);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].file_path, "src/main.rs");
+
+        let hits_short = source_code_hits(&graph, &dir, "WAL", None);
+        assert_eq!(hits_short.len(), 0);
+
         std::fs::remove_dir_all(dir).unwrap();
     }
 

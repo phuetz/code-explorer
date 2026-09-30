@@ -126,6 +126,34 @@ fn cli_analyze_help() {
 }
 
 #[test]
+fn cli_query_finds_single_marker_when_bm25_has_no_match() {
+    let repo = TestRepo::new("single-marker-query");
+    fs::write(
+        repo.path().join("src/main.rs"),
+        "fn main() { let _ = std::env::var(\"LM_RESIZER_STORE\"); }\n",
+    )
+    .expect("failed to write source file");
+    let repo_arg = repo.path().to_string_lossy().into_owned();
+    assert_success(
+        &repo.explorer(&["analyze", &repo_arg, "--skip-git"]),
+        "analyze single-marker fixture",
+    );
+
+    let output = repo.explorer(&[
+        "query",
+        "Où LM_RESIZER_STORE est-il lu ?",
+        "--repo",
+        &repo_arg,
+    ]);
+    assert_success(&output, "query single marker");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("src/main.rs") && !stdout.contains("No results"),
+        "query should find the source file even without a BM25 hit\nstdout:\n{stdout}"
+    );
+}
+
+#[test]
 fn cli_incremental_analyze_updates_an_existing_index() {
     let repo = TestRepo::new("incremental-analyze");
     fs::write(
