@@ -325,6 +325,10 @@ cp -r .claude/skills/code-explorer /path/to/your/repo/.claude/skills/
 ./scripts/install-grok-skill.sh --target codex
 ```
 
+The repo-local `.codex/skills/code-explorer` variant still has outdated command
+examples. Use the tested Grok variant above for a global Codex installation
+until the repo-local copy is synchronised.
+
 The skill checks `code-explorer status`, indexes if needed, then answers with `context`, `impact` and `query` before reading files. Pair it with the [lm-resizer](https://github.com/phuetz/lm-resizer) skill so the commands run afterwards stay quiet.
 
 ---
