@@ -2367,6 +2367,29 @@ impl LocalBackend {
         }
     }
 
+    fn merge_reranked(fts_results: Vec<FtsResult>, reranked_ids: &[String]) -> Vec<FtsResult> {
+        let mut out = Vec::with_capacity(fts_results.len());
+        let mut by_id: std::collections::HashMap<String, FtsResult> = fts_results
+            .iter()
+            .map(|r| (r.node_id.clone(), r.clone()))
+            .collect();
+
+        for id in reranked_ids {
+            if let Some(r) = by_id.remove(id) {
+                out.push(r);
+            }
+        }
+
+        // append omitted results in their original order
+        for r in fts_results {
+            if by_id.contains_key(&r.node_id) {
+                out.push(r);
+            }
+        }
+
+        out
+    }
+
     /// Reorder FTS results via an LLM reranker when opt-in. Silently falls
     /// back to the original BM25 order on any failure (missing config, HTTP
     /// error, parse error, join panic). Never drops results.
@@ -2419,20 +2442,8 @@ impl LocalBackend {
                 }
             };
 
-        // Rebuild the FtsResult list in reranker order; any result the LLM
-        // omitted gets appended to the tail so nothing is silently lost.
-        let mut by_id: HashMap<String, FtsResult> = fts_results
-            .into_iter()
-            .map(|r| (r.node_id.clone(), r))
-            .collect();
-        let mut out = Vec::with_capacity(by_id.len());
-        for c in reranked {
-            if let Some(r) = by_id.remove(&c.node_id) {
-                out.push(r);
-            }
-        }
-        out.extend(by_id.into_values());
-        out
+        let reranked_ids: Vec<String> = reranked.into_iter().map(|c| c.node_id).collect();
+        Self::merge_reranked(fts_results, &reranked_ids)
     }
 
     async fn tool_read_file(&mut self, args: &Value) -> Result<Value> {
@@ -3731,6 +3742,74 @@ mod tests {
             confidence: 1.0,
             reason: "test".to_string(),
             step: None,
+        }
+    }
+
+    #[test]
+    fn test_merge_reranked() {
+        let results = vec![
+            FtsResult {
+                node_id: "a".to_string(),
+                score: 1.0,
+                name: "a".to_string(),
+                file_path: "a".to_string(),
+                label: "A".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+            FtsResult {
+                node_id: "b".to_string(),
+                score: 0.9,
+                name: "b".to_string(),
+                file_path: "b".to_string(),
+                label: "B".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+            FtsResult {
+                node_id: "c".to_string(),
+                score: 0.8,
+                name: "c".to_string(),
+                file_path: "c".to_string(),
+                label: "C".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+            FtsResult {
+                node_id: "d".to_string(),
+                score: 0.7,
+                name: "d".to_string(),
+                file_path: "d".to_string(),
+                label: "D".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+            FtsResult {
+                node_id: "e".to_string(),
+                score: 0.6,
+                name: "e".to_string(),
+                file_path: "e".to_string(),
+                label: "E".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+            FtsResult {
+                node_id: "f".to_string(),
+                score: 0.5,
+                name: "f".to_string(),
+                file_path: "f".to_string(),
+                label: "F".to_string(),
+                start_line: None,
+                end_line: None,
+            },
+        ];
+
+        let reranked_ids = vec!["d".to_string(), "b".to_string(), "unknown".to_string()];
+
+        for _ in 0..50 {
+            let merged = LocalBackend::merge_reranked(results.clone(), &reranked_ids);
+            let merged_ids: Vec<String> = merged.into_iter().map(|r| r.node_id).collect();
+            assert_eq!(merged_ids, vec!["d", "b", "a", "c", "e", "f"]);
         }
     }
 
