@@ -146,19 +146,23 @@ fn relativize(root: &Path, p: &Path) -> String {
 /// RED — TODO / TBD / FIXME / XXX in the body. Symptom of an LLM that
 /// echoed the prompt or a hand-written stub that was never finished.
 fn check_residual_todos(content: &str, issues: &mut Vec<Issue>) {
+    let mut in_code = false;
     for (idx, line) in content.lines().enumerate() {
         if line.trim_start().starts_with("```") {
+            in_code = !in_code;
             continue;
         }
-        for marker in ["TODO", "TBD", "FIXME", "XXX"] {
-            if line.contains(marker) {
-                issues.push(Issue {
-                    severity: Severity::Red,
-                    kind: "residual_todo".to_string(),
-                    line: Some(idx + 1),
-                    detail: format!("contains marker `{}`", marker),
-                });
-                break;
+        if !in_code {
+            for marker in ["TODO", "TBD", "FIXME", "XXX"] {
+                if line.contains(marker) {
+                    issues.push(Issue {
+                        severity: Severity::Red,
+                        kind: "residual_todo".to_string(),
+                        line: Some(idx + 1),
+                        detail: format!("contains marker `{}`", marker),
+                    });
+                    break;
+                }
             }
         }
     }
@@ -322,5 +326,22 @@ fn check_methodo_sample_section_4(page_path: &Path, content: &str, issues: &mut 
             detail: "Sample v1.1 méthodo requires §4 Algorithmes on service / controller pages"
                 .to_string(),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_residual_todos() {
+        let mut issues = Vec::new();
+        check_residual_todos("# T\n```rust\n// TODO later\n```\n", &mut issues);
+        assert_eq!(issues.len(), 0);
+
+        let mut issues2 = Vec::new();
+        check_residual_todos("# T\n```rust\nlet x = 1;\n```\nTODO in prose", &mut issues2);
+        assert_eq!(issues2.len(), 1);
+        assert_eq!(issues2[0].line, Some(5));
     }
 }
