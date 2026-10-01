@@ -131,6 +131,9 @@ pub fn analyze_coupling(
         b.coupling_strength
             .partial_cmp(&a.coupling_strength)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.shared_commits.cmp(&a.shared_commits))
+            .then_with(|| a.file_a.cmp(&b.file_a))
+            .then_with(|| a.file_b.cmp(&b.file_b))
     });
 
     Ok(couplings)
@@ -139,6 +142,62 @@ pub fn analyze_coupling(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::fs;
+
+    #[test]
+    fn test_analyze_coupling_deterministic_order() {
+        let dir = env::temp_dir().join(format!("test_coupling_order_{}", std::process::id()));
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap();
+        }
+        fs::create_dir_all(&dir).unwrap();
+        let repo_path = dir.as_path();
+
+        let git = |args: &[&str]| {
+            let output = Command::new("git").args(args).current_dir(repo_path).output().unwrap();
+            assert!(output.status.success(), "git {:?}: {}", args, String::from_utf8_lossy(&output.stderr));
+        };
+        git(&["init"]);
+
+        // Config locale pour isoler le test (GIT_CONFIG_GLOBAL au pire n'est pas vu)
+        git(&["config", "user.name", "Test User"]);
+        git(&["config", "user.email", "test@example.com"]);
+
+        // 4 fichiers modifiés ensemble dans 2 commits (plus un commit initial)
+        let files = ["f1.txt", "f2.txt", "f3.txt", "f4.txt"];
+        for file in &files {
+            fs::write(repo_path.join(file), "initial").unwrap();
+        }
+        git(&["add", "--", "f1.txt", "f2.txt", "f3.txt", "f4.txt"]);
+        git(&["commit", "-m", "init"]);
+
+        for file in &files {
+            fs::write(repo_path.join(file), "mod1").unwrap();
+        }
+        git(&["commit", "-am", "mod1"]);
+
+        for file in &files {
+            fs::write(repo_path.join(file), "mod2").unwrap();
+        }
+        git(&["commit", "-am", "mod2"]);
+
+        let expected = [
+            ("f1.txt", "f2.txt"), ("f1.txt", "f3.txt"), ("f1.txt", "f4.txt"),
+            ("f2.txt", "f3.txt"), ("f2.txt", "f4.txt"), ("f3.txt", "f4.txt"),
+        ];
+        for _ in 0..30 {
+            let result = analyze_coupling(repo_path, 1, None).unwrap();
+            assert_eq!(result.len(), expected.len());
+            for (pair, (file_a, file_b)) in result.iter().zip(expected) {
+                assert_eq!((&*pair.file_a, &*pair.file_b), (file_a, file_b));
+                assert_eq!(pair.shared_commits, 3);
+                assert_eq!(pair.coupling_strength, 1.0);
+            }
+        }
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn test_analyze_coupling_on_self() {
