@@ -22,8 +22,7 @@ pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
     let matches = find_symbols(&graph, name);
 
     if matches.is_empty() {
-        println!("Symbol '{}' not found.", name);
-        return Ok(());
+        anyhow::bail!("Symbol '{}' not found in the index", name);
     }
 
     let node = matches[0];

@@ -19,8 +19,7 @@ pub async fn run(target: &str, repo: Option<&str>, direction: &str) -> anyhow::R
     let graph = code_explorer_db::snapshot::load_snapshot(&snap)?;
     let max_depth = 5;
     let Some(impact) = analyze_impact(&graph, target, max_depth) else {
-        println!("Symbol '{}' not found.", target);
-        return Ok(());
+        anyhow::bail!("Symbol '{}' not found in the index", target);
     };
 
     let use_downstream = direction == "downstream" || direction == "both";
