@@ -42,15 +42,23 @@ fn resolve_relative_import(cleaned: &str, file_path: &str, ctx: &ResolveCtx<'_>)
 
     // Start from the importing file's directory
     let mut dir = utils::file_dir(file_path).to_string();
+    if dir.is_empty() {
+        return ImportResult::Unresolved;
+    }
 
     // Each dot (after the first) goes up one directory
     for _ in 1..dot_count {
+        if dir.is_empty() {
+            return ImportResult::Unresolved;
+        }
         if let Some(pos) = dir.rfind('/') {
             dir = dir[..pos].to_string();
         } else {
             dir = String::new();
-            break;
         }
+    }
+    if dir.is_empty() {
+        return ImportResult::Unresolved;
     }
 
     // Convert remaining dots-separated module path to slash-separated
@@ -65,7 +73,7 @@ fn resolve_relative_import(cleaned: &str, file_path: &str, ctx: &ResolveCtx<'_>)
         }
     };
 
-    utils::resolve_by_suffix(&module_path, ctx)
+    utils::resolve_exact(&module_path, ctx)
 }
 
 /// Resolve an absolute Python import (dot-separated to slash-separated).
@@ -155,5 +163,16 @@ mod tests {
             ImportResult::Files(f) => assert_eq!(f, vec!["myapp/models/__init__.py"]),
             other => panic!("Expected Files, got {:?}", other),
         }
+    }
+    #[test]
+    fn test_relative_import_false_positive_root() {
+        let files = vec!["pkg/utils.py".to_string(), "main.py".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        assert!(matches!(
+            resolve(".utils", "main.py", &ctx),
+            ImportResult::Unresolved
+        ));
     }
 }

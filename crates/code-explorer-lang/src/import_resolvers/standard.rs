@@ -22,8 +22,10 @@ pub fn resolve(raw_path: &str, file_path: &str, ctx: &ResolveCtx<'_>) -> ImportR
 
     // ── 1. Relative imports ──────────────────────────────────────────────
     if utils::is_relative_path(&cleaned) {
-        let resolved = utils::resolve_relative(&cleaned, file_path);
-        return resolve_standard_path(&resolved, ctx);
+        if let Some(resolved) = utils::resolve_relative_opt(&cleaned, file_path) {
+            return resolve_standard_path_exact(&resolved, ctx);
+        }
+        return ImportResult::Unresolved;
     }
 
     // ── 2. Path aliases (tsconfig.json) ──────────────────────────────────
@@ -65,6 +67,19 @@ fn resolve_standard_path(path: &str, ctx: &ResolveCtx<'_>) -> ImportResult {
 
     if let Some(stripped) = strip_runtime_js_extension(path) {
         return utils::resolve_by_suffix(stripped, ctx);
+    }
+
+    ImportResult::Unresolved
+}
+
+fn resolve_standard_path_exact(path: &str, ctx: &ResolveCtx<'_>) -> ImportResult {
+    let exact = utils::resolve_exact(path, ctx);
+    if !matches!(exact, ImportResult::Unresolved) {
+        return exact;
+    }
+
+    if let Some(stripped) = strip_runtime_js_extension(path) {
+        return utils::resolve_exact(stripped, ctx);
     }
 
     ImportResult::Unresolved
@@ -242,5 +257,40 @@ mod tests {
             resolve("node:fs/promises", "src/main.ts", &ctx),
             ImportResult::Unresolved
         ));
+    }
+    #[test]
+    fn test_relative_import_false_positive_root() {
+        let files = vec!["pkg/config.ts".to_string(), "main.ts".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        assert!(matches!(
+            resolve("./config", "main.ts", &ctx),
+            ImportResult::Unresolved
+        ));
+    }
+
+    #[test]
+    fn test_relative_import_false_positive_above_root() {
+        let files = vec!["pkg/config.ts".to_string(), "a/b.ts".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        assert!(matches!(
+            resolve("../../config", "a/b.ts", &ctx),
+            ImportResult::Unresolved
+        ));
+    }
+
+    #[test]
+    fn test_relative_import_positive() {
+        let files = vec!["pkg/config.ts".to_string(), "pkg/main.ts".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        match resolve("./config", "pkg/main.ts", &ctx) {
+            ImportResult::Files(f) => assert_eq!(f, vec!["pkg/config.ts"]),
+            other => panic!("Expected Files, got {:?}", other),
+        }
     }
 }

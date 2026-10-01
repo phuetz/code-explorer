@@ -23,6 +23,31 @@ pub fn resolve_by_suffix<'a>(cleaned_path: &str, ctx: &ResolveCtx<'a>) -> Import
     ImportResult::Unresolved
 }
 
+/// Resolve a path exactly (case-sensitive then case-insensitive) without using suffix matching.
+pub fn resolve_exact<'a>(cleaned_path: &str, ctx: &ResolveCtx<'a>) -> ImportResult {
+    // Try case-sensitive exact match
+    for ext in RESOLVE_EXTENSIONS {
+        let candidate = format!("{cleaned_path}{ext}");
+        if ctx.all_file_paths.contains(&candidate) {
+            return ImportResult::Files(vec![candidate]);
+        }
+    }
+
+    // Try case-insensitive exact match
+    for ext in RESOLVE_EXTENSIONS {
+        let candidate = format!("{cleaned_path}{ext}");
+        if let Some(full) = ctx
+            .all_file_list
+            .iter()
+            .find(|path| path.eq_ignore_ascii_case(&candidate))
+        {
+            return ImportResult::Files(vec![full.to_string()]);
+        }
+    }
+
+    ImportResult::Unresolved
+}
+
 /// Resolve by suffix with case-insensitive matching as a fallback.
 pub fn resolve_by_suffix_insensitive<'a>(cleaned_path: &str, ctx: &ResolveCtx<'a>) -> ImportResult {
     // Try case-sensitive first
@@ -62,6 +87,11 @@ pub fn normalize_import_path(raw: &str) -> String {
 /// Given `file_path = "src/models/user.ts"` and `relative = "./types"`,
 /// returns `"src/models/types"`.
 pub fn resolve_relative(relative: &str, file_path: &str) -> String {
+    resolve_relative_opt(relative, file_path).unwrap_or_else(|| "".to_string())
+}
+
+/// Resolve a relative import path against the importing file's directory, returning `None` if it goes above root.
+pub fn resolve_relative_opt(relative: &str, file_path: &str) -> Option<String> {
     let dir = file_dir(file_path);
     let mut parts: Vec<&str> = if dir.is_empty() {
         Vec::new()
@@ -73,6 +103,9 @@ pub fn resolve_relative(relative: &str, file_path: &str) -> String {
     for segment in clean.split('/') {
         match segment {
             ".." => {
+                if parts.is_empty() {
+                    return None;
+                }
                 parts.pop();
             }
             "." | "" => {}
@@ -80,7 +113,7 @@ pub fn resolve_relative(relative: &str, file_path: &str) -> String {
         }
     }
 
-    parts.join("/")
+    Some(parts.join("/"))
 }
 
 /// Get the directory portion of a file path.
@@ -179,6 +212,22 @@ mod tests {
         assert_eq!(
             resolve_relative("./sub/deep", "src/index.ts"),
             "src/sub/deep"
+        );
+        assert_eq!(
+            resolve_relative("../../config", "src/index.ts"),
+            ""
+        );
+    }
+
+    #[test]
+    fn test_resolve_relative_opt() {
+        assert_eq!(
+            resolve_relative_opt("../../config", "src/index.ts"),
+            None
+        );
+        assert_eq!(
+            resolve_relative_opt("./types", "src/models/user.ts"),
+            Some("src/models/types".to_string())
         );
     }
 

@@ -21,8 +21,10 @@ pub fn resolve(raw_path: &str, file_path: &str, ctx: &ResolveCtx<'_>) -> ImportR
 
     // require_relative paths are always relative to the current file
     if utils::is_relative_path(&cleaned) {
-        let resolved = utils::resolve_relative(&cleaned, file_path);
-        return resolve_rb(&resolved, ctx);
+        if let Some(resolved) = utils::resolve_relative_opt(&cleaned, file_path) {
+            return resolve_rb_exact(&resolved, ctx);
+        }
+        return ImportResult::Unresolved;
     }
 
     // Plain require: try as a suffix
@@ -44,6 +46,33 @@ fn resolve_rb(path: &str, ctx: &ResolveCtx<'_>) -> ImportResult {
 
     // Fallback to general suffix resolution
     utils::resolve_by_suffix(path, ctx)
+}
+
+/// Resolve exactly with Ruby extension preference (.rb).
+fn resolve_rb_exact(path: &str, ctx: &ResolveCtx<'_>) -> ImportResult {
+    // Try with .rb extension first (case sensitive)
+    let with_ext = format!("{path}.rb");
+    if ctx.all_file_paths.contains(&with_ext) {
+        return ImportResult::Files(vec![with_ext]);
+    }
+
+    // Try exact match (case sensitive)
+    if ctx.all_file_paths.contains(path) {
+        return ImportResult::Files(vec![path.to_string()]);
+    }
+
+    // Try with .rb extension first (case insensitive)
+    if let Some(full) = ctx.all_file_list.iter().find(|p| p.eq_ignore_ascii_case(&with_ext)) {
+        return ImportResult::Files(vec![full.to_string()]);
+    }
+
+    // Try exact match (case insensitive)
+    if let Some(full) = ctx.all_file_list.iter().find(|p| p.eq_ignore_ascii_case(path)) {
+        return ImportResult::Files(vec![full.to_string()]);
+    }
+
+    // Fallback to general exact resolution
+    utils::resolve_exact(path, ctx)
 }
 
 #[cfg(test)]
@@ -95,5 +124,16 @@ mod tests {
             ImportResult::Files(f) => assert_eq!(f, vec!["lib/helpers.rb"]),
             other => panic!("Expected Files, got {:?}", other),
         }
+    }
+    #[test]
+    fn test_relative_import_false_positive_root() {
+        let files = vec!["pkg/helper.rb".to_string(), "main.rb".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        assert!(matches!(
+            resolve("./helper", "main.rb", &ctx),
+            ImportResult::Unresolved
+        ));
     }
 }

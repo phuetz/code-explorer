@@ -30,8 +30,9 @@ pub fn resolve(raw_path: &str, file_path: &str, ctx: &ResolveCtx<'_>) -> ImportR
         let cleaned = raw_trimmed.replace('\\', "/");
         // File path -- resolve relative or absolute
         if utils::is_relative_path(&cleaned) {
-            let resolved = utils::resolve_relative(&cleaned, file_path);
-            return utils::resolve_by_suffix(&resolved, ctx);
+            return utils::resolve_relative_opt(&cleaned, file_path)
+                .map(|resolved| utils::resolve_exact(&resolved, ctx))
+                .unwrap_or(ImportResult::Unresolved);
         }
         return utils::resolve_by_suffix(&cleaned, ctx);
     }
@@ -121,5 +122,17 @@ mod tests {
             ImportResult::Files(f) => assert_eq!(f, vec!["src/Models/User.php"]),
             other => panic!("Expected Files, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_relative_include_stays_in_directory() {
+        let files = vec!["src/main.php".to_string(), "other/src/helper.php".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs::default();
+        let ctx = make_ctx(&files, &index, &configs);
+        assert!(matches!(
+            resolve("./helper.php", "src/main.php", &ctx),
+            ImportResult::Unresolved
+        ));
     }
 }
