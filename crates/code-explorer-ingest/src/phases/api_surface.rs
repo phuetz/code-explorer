@@ -107,7 +107,7 @@ static RE_SPRING_MAPPING: Lazy<Regex> = Lazy::new(|| {
         r#"(?x)
         @\s*(GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)
         \s*\(
-        (?:[^)]*?\bvalue\s*=\s*)?
+        (?:[^)]*?\b(?:value|path)\s*=\s*)?
         \s*['"]([^'"]+)['"]
         "#,
     )
@@ -741,6 +741,47 @@ mod tests {
         let eps = scan_file(&file);
         assert_eq!(eps.len(), 1);
         assert_eq!(eps[0].http_method, "POST");
+    }
+
+    #[test]
+    fn test_spring_mapping_path_and_other_attributes() {
+        let file = fe(
+            "Controller.java",
+            r#"
+            @RestController
+            public class C {
+              @GetMapping(path = "/users")
+              public X a(){}
+
+              @PostMapping("/items")
+              public X b(){}
+
+              @RequestMapping(path = "/a", method = RequestMethod.POST)
+              public X c(){}
+
+              @GetMapping(consumes = "application/json")
+              public X d(){}
+            }
+            "#,
+            SupportedLanguage::Java,
+        );
+        let eps = scan_file(&file);
+
+        // Nous attendons 3 endpoints : GET /users, POST /items, POST /a
+        // Le @GetMapping(consumes = "application/json") ne doit pas produire d'endpoint.
+        assert_eq!(eps.len(), 3);
+
+        let users = eps.iter().find(|e| e.route == "/users").unwrap();
+        assert_eq!(users.framework, "spring");
+        assert_eq!(users.http_method, "GET");
+
+        let items = eps.iter().find(|e| e.route == "/items").unwrap();
+        assert_eq!(items.framework, "spring");
+        assert_eq!(items.http_method, "POST");
+
+        let a = eps.iter().find(|e| e.route == "/a").unwrap();
+        assert_eq!(a.framework, "spring");
+        assert_eq!(a.http_method, "POST");
     }
 
     #[test]
