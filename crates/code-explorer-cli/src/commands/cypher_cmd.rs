@@ -16,11 +16,10 @@ pub async fn run(query: &str, repo: Option<&str>) -> Result<()> {
 
     let snap_path = repo_path.join(".codeexplorer").join("graph.bin");
     if !snap_path.exists() {
-        println!(
+        anyhow::bail!(
             "{} No index found. Run 'code-explorer analyze' first.",
             "ERROR".red()
         );
-        return Ok(());
     }
 
     let graph = snapshot::load_snapshot(&snap_path)
@@ -33,8 +32,7 @@ pub async fn run(query: &str, repo: Option<&str>) -> Result<()> {
     // place avoids drift between the CLI and the in-memory backend's own
     // safety net in `InMemoryBackend::execute_query`.
     if code_explorer_db::query::is_write_query(query) {
-        println!("{} Only read-only queries are allowed.", "ERROR".red());
-        return Ok(());
+        anyhow::bail!("{} Only read-only queries are allowed.", "ERROR".red());
     }
 
     // Build indexes and FTS

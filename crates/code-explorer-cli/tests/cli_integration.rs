@@ -340,8 +340,45 @@ fn cli_cypher_no_index() {
         .args(["cypher", "MATCH (n) RETURN n LIMIT 1"])
         .output()
         .expect("failed to run code-explorer cypher");
-    // Should succeed (prints error message but exits 0)
-    assert!(output.status.success());
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("No index found"));
+}
+
+#[test]
+fn cli_cypher_write_query_refused() {
+    let repo = TestRepo::new("cypher-write");
+    std::fs::write(
+        repo.path().join("src/lib.rs"),
+        "pub fn write_symbol() -> usize { 1 }\n",
+    )
+    .expect("failed to write source");
+    repo.git(&["add", "src/lib.rs"]);
+    repo.git(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--quiet",
+        "-m",
+        "cypher write fixture",
+    ]);
+
+    let repo_arg = repo.path().to_string_lossy().into_owned();
+    assert_success(&repo.explorer(&["analyze", &repo_arg]), "analyze");
+
+    let output = code_explorer()
+        .args(["cypher", "CREATE (n:Function {name:'x'})", "--repo", &repo_arg])
+        .output()
+        .expect("failed to run code-explorer cypher");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Only read-only queries are allowed"));
+
+    let output_success = code_explorer()
+        .args(["cypher", "MATCH (n) RETURN n LIMIT 1", "--repo", &repo_arg])
+        .output()
+        .expect("failed to run code-explorer cypher");
+    assert!(output_success.status.success());
 }
 
 #[test]
