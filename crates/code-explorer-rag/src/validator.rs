@@ -210,11 +210,18 @@ fn check_short_sections(content: &str, issues: &mut Vec<Issue>) {
                 }
                 end += 1;
             }
-            let words = lines[start..end]
-                .iter()
-                .filter(|l| !l.trim_start().starts_with("```") && !l.trim_start().starts_with('|'))
-                .flat_map(|l| l.split_whitespace())
-                .count();
+            let mut words = 0;
+            let mut in_code_words = false;
+            for l in &lines[start..end] {
+                let trimmed = l.trim_start();
+                if trimmed.starts_with("```") {
+                    in_code_words = !in_code_words;
+                    continue;
+                }
+                if !in_code_words && !trimmed.starts_with('|') {
+                    words += l.split_whitespace().count();
+                }
+            }
             if words < 50 && !title.is_empty() {
                 issues.push(Issue {
                     severity: Severity::Yellow,
@@ -322,5 +329,29 @@ fn check_methodo_sample_section_4(page_path: &Path, content: &str, issues: &mut 
             detail: "Sample v1.1 méthodo requires §4 Algorithmes on service / controller pages"
                 .to_string(),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_short_sections_with_code() {
+        let mut issues = Vec::new();
+        let content = format!("# Title\nshort.\n```\n{}\n```\n", "x = 1 ".repeat(60));
+        check_short_sections(&content, &mut issues);
+        assert_eq!(issues.len(), 1, "expected 1 issue, got {}", issues.len());
+        assert_eq!(issues[0].severity, Severity::Yellow);
+        assert_eq!(issues[0].kind, "short_section");
+        assert!(issues[0].detail.contains("only 1 words"), "unexpected detail: {}", issues[0].detail);
+    }
+
+    #[test]
+    fn test_check_short_sections_enough_prose() {
+        let mut issues = Vec::new();
+        let content = format!("# Title\n{}\n", "prose ".repeat(60));
+        check_short_sections(&content, &mut issues);
+        assert!(issues.is_empty(), "expected 0 issues, got {}", issues.len());
     }
 }
