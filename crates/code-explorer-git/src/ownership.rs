@@ -97,9 +97,10 @@ pub fn analyze_ownership(repo_path: &Path) -> Result<Vec<FileOwnership>, Ownersh
             .collect();
 
         authors.sort_by(|a, b| {
-            b.pct
-                .partial_cmp(&a.pct)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.commits
+                .cmp(&a.commits)
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.email.cmp(&b.email))
         });
 
         let primary_author = authors.first().map(|a| a.name.clone()).unwrap_or_default();
@@ -114,8 +115,13 @@ pub fn analyze_ownership(repo_path: &Path) -> Result<Vec<FileOwnership>, Ownersh
         });
     }
 
-    // Sort by author_count descending (files with most distributed ownership first)
-    ownerships.sort_by(|a, b| b.author_count.cmp(&a.author_count));
+    // Sort by author_count descending (files with most distributed ownership first),
+    // then by path ascending for determinism
+    ownerships.sort_by(|a, b| {
+        b.author_count
+            .cmp(&a.author_count)
+            .then_with(|| a.path.cmp(&b.path))
+    });
 
     Ok(ownerships)
 }
@@ -123,6 +129,92 @@ pub fn analyze_ownership(repo_path: &Path) -> Result<Vec<FileOwnership>, Ownersh
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs;
+
+    #[test]
+    fn test_analyze_ownership_determinism() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Create 4 files
+        for i in 1..=4 {
+            fs::write(repo_path.join(format!("f{}", i)), "init").unwrap();
+        }
+
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        Command::new("git")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "Init")
+            .env("GIT_AUTHOR_EMAIL", "init@example.com")
+            .env("GIT_COMMITTER_NAME", "Init")
+            .env("GIT_COMMITTER_EMAIL", "init@example.com")
+            .args(["commit", "-m", "init"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Bob commits
+        for i in 1..=4 {
+            fs::write(repo_path.join(format!("f{}", i)), "bob").unwrap();
+        }
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .args(["-c", "user.name=Bob", "-c", "user.email=bob@example.com", "commit", "-m", "bob"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Alice commits
+        for i in 1..=4 {
+            fs::write(repo_path.join(format!("f{}", i)), "alice").unwrap();
+        }
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .args(["-c", "user.name=Alice", "-c", "user.email=alice@example.com", "commit", "-m", "alice"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Run analyze_ownership 30 times
+        for _ in 0..30 {
+            let result = analyze_ownership(repo_path).unwrap();
+            assert_eq!(result.len(), 4);
+
+            // Check that primary author is Alice (lexicographical order, since commits are equal)
+            for ownership in &result {
+                assert_eq!(ownership.primary_author, "Alice", "Primary author should be Alice due to determinism");
+            }
+
+            // Check that the order of files is sorted by path (since author_count is equal)
+            let paths: Vec<_> = result.iter().map(|o| o.path.as_str()).collect();
+            let mut sorted_paths = paths.clone();
+            sorted_paths.sort();
+            assert_eq!(paths, sorted_paths, "Files should be sorted by path");
+        }
+    }
 
     #[test]
     fn test_analyze_ownership_on_self() {
