@@ -19,11 +19,7 @@ pub fn run(target: Option<&str>, path: Option<&str>, json: bool, trace: bool) ->
     let snap_path =
         code_explorer_db::snapshot::snapshot_path(std::path::Path::new(&storage.storage_path));
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("No index found. Run 'code-explorer analyze' first.");
     }
 
     let graph = snapshot::load_snapshot(&snap_path)
@@ -93,8 +89,7 @@ fn run_single_class(
     let class_node = match candidates.first() {
         Some(n) => *n,
         None => {
-            println!("{} Class '{}' not found.", "ERROR".red(), target_name);
-            return Ok(());
+            anyhow::bail!("Class '{}' not found.", target_name);
         }
     };
 
@@ -440,8 +435,7 @@ fn run_flow_trace(
     let start_node = match candidates.first() {
         Some(n) => *n,
         None => {
-            println!("{} Class '{}' not found.", "ERROR".red(), target_name);
-            return Ok(());
+            anyhow::bail!("Class '{}' not found.", target_name);
         }
     };
 

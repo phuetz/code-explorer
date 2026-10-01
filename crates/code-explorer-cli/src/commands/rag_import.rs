@@ -21,25 +21,16 @@ pub fn run(docs_dir: &str, repo_path_str: Option<&str>) -> Result<()> {
     let snap_path = snapshot::snapshot_path(&storage.storage_path);
 
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("No index found. Run 'code-explorer analyze' first.");
+    }
+
+    let docs_path = Path::new(docs_dir);
+    if !docs_path.exists() {
+        anyhow::bail!("Documentation directory not found: {}", docs_dir);
     }
 
     println!("{} Loading graph...", "->".cyan());
     let mut graph = snapshot::load_snapshot(&snap_path)?;
-
-    let docs_path = Path::new(docs_dir);
-    if !docs_path.exists() {
-        println!(
-            "{} Documentation directory not found: {}",
-            "ERROR".red(),
-            docs_dir
-        );
-        return Ok(());
-    }
 
     // Purge existing RAG nodes to avoid duplicates on re-import
     let removed = graph.remove_nodes_by_label(NodeLabel::Document)

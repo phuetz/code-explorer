@@ -16,11 +16,7 @@ pub fn run(path: Option<&str>, json: bool) -> Result<()> {
     let storage_path = repo_path.join(".codeexplorer");
     let snap_path = storage_path.join("graph.bin");
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("No index found. Run 'code-explorer analyze' first.");
     }
 
     let graph = snapshot::load_snapshot(&snap_path)
