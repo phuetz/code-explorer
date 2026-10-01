@@ -23,8 +23,10 @@ pub fn resolve(raw_path: &str, _file_path: &str, ctx: &ResolveCtx<'_>) -> Import
 
     // ── Strip module prefix ──────────────────────────────────────────────
     let local_path = if let Some(module_path) = &ctx.configs.go_module {
-        if let Some(stripped) = cleaned.strip_prefix(module_path.as_str()) {
-            stripped.trim_start_matches('/').to_string()
+        if cleaned == *module_path {
+            "".to_string()
+        } else if let Some(stripped) = cleaned.strip_prefix(&format!("{}/", module_path)) {
+            stripped.to_string()
         } else {
             // External package or stdlib — not in our file list
             return ImportResult::Unresolved;
@@ -50,15 +52,18 @@ pub fn resolve(raw_path: &str, _file_path: &str, ctx: &ResolveCtx<'_>) -> Import
         return ImportResult::Unresolved;
     };
 
-    if local_path.is_empty() {
-        return ImportResult::Unresolved;
-    }
-
     // ── Directory-based resolution ───────────────────────────────────────
     // Go imports are package-level: find all .go files in the directory.
-    let go_files = ctx
-        .suffix_index
-        .get_files_in_dir_with_ext(&local_path, ".go");
+    let go_files: Vec<&str> = if local_path.is_empty() {
+        ctx.all_file_list
+            .iter()
+            .filter(|f| !f.contains('/') && f.ends_with(".go"))
+            .map(|f| f.as_str())
+            .collect()
+    } else {
+        ctx.suffix_index
+            .get_files_in_dir_with_ext(&local_path, ".go")
+    };
 
     if !go_files.is_empty() {
         // Filter out test files
@@ -160,5 +165,44 @@ mod tests {
             resolve("fmt", "main.go", &ctx),
             ImportResult::Unresolved
         ));
+    }
+
+    #[test]
+    fn test_module_prefix_requires_segment_boundary() {
+        let files = vec![
+            "ar/x/a.go".to_string(),
+            "util/u.go".to_string(),
+            "pkg/util/v.go".to_string(),
+        ];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs {
+            go_module: Some("github.com/a/b".to_string()),
+            ..Default::default()
+        };
+        let ctx = make_ctx(&files, &index, &configs);
+
+        assert!(matches!(
+            resolve("github.com/a/bar/x", "main.go", &ctx),
+            ImportResult::Unresolved
+        ));
+    }
+
+    #[test]
+    fn test_module_root_import_resolves_root_files() {
+        let files = vec!["main.go".to_string(), "root.go".to_string(), "foo/bar.go".to_string()];
+        let index = SuffixIndex::build(&files, &files);
+        let configs = ImportConfigs {
+            go_module: Some("github.com/a/b".to_string()),
+            ..Default::default()
+        };
+        let ctx = make_ctx(&files, &index, &configs);
+
+        match resolve("github.com/a/b", "main.go", &ctx) {
+            ImportResult::Package { files, dir_suffix } => {
+                assert_eq!(dir_suffix, "");
+                assert_eq!(files.len(), 2);
+            }
+            other => panic!("Expected Package, got {:?}", other),
+        }
     }
 }
