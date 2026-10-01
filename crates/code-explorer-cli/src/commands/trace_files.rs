@@ -19,11 +19,7 @@ pub fn run(target: &str, path: Option<&str>, depth: usize, json: bool) -> Result
     let snap_path =
         code_explorer_db::snapshot::snapshot_path(std::path::Path::new(&storage.storage_path));
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("{} No index found. Run \'code-explorer analyze\' first.", "ERROR".red());
     }
 
     let graph = snapshot::load_snapshot(&snap_path)
@@ -34,12 +30,7 @@ pub fn run(target: &str, path: Option<&str>, depth: usize, json: bool) -> Result
     let start_node = match start_node {
         Some(n) => n,
         None => {
-            println!(
-                "{} Symbol '{}' not found in the graph.",
-                "ERROR".red(),
-                target
-            );
-            return Ok(());
+            anyhow::bail!("{} Symbol \'{}\' not found in the graph.", "ERROR".red(), target);
         }
     };
 

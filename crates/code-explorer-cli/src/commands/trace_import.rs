@@ -16,17 +16,12 @@ pub fn run(log_file: &str, path: Option<&str>) -> Result<()> {
 
     let snap_path = repo_path.join(".codeexplorer").join("graph.bin");
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("{} No index found. Run \'code-explorer analyze\' first.", "ERROR".red());
     }
 
     let log_path = std::path::Path::new(log_file);
     if !log_path.exists() {
-        println!("{} Log file not found: {}", "ERROR".red(), log_file);
-        return Ok(());
+        anyhow::bail!("{} Log file not found: {}", "ERROR".red(), log_file);
     }
 
     println!("{} Loading graph...", "->".cyan());

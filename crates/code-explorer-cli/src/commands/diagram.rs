@@ -24,11 +24,7 @@ pub fn run(
 
     let snap_path = repo_path.join(".codeexplorer").join("graph.bin");
     if !snap_path.exists() {
-        println!(
-            "{} No index found. Run 'code-explorer analyze' first.",
-            "ERROR".red()
-        );
-        return Ok(());
+        anyhow::bail!("{} No index found. Run \'code-explorer analyze\' first.", "ERROR".red());
     }
 
     let graph = snapshot::load_snapshot(&snap_path)
@@ -39,8 +35,7 @@ pub fn run(
     let start_node = match start_node {
         Some(n) => n,
         None => {
-            println!("{} Symbol '{}' not found.", "ERROR".red(), target);
-            return Ok(());
+            anyhow::bail!("{} Symbol \'{}\' not found.", "ERROR".red(), target);
         }
     };
 
