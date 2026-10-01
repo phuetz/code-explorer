@@ -129,7 +129,7 @@ fn find_marker(line: &str) -> Option<(&'static str, &str)> {
         return None;
     };
 
-    let head = after_comment.trim_start();
+    let head = after_comment.trim_start_matches(|c: char| c == '/' || c == '!' || c == '*' || c.is_whitespace());
 
     for kind in ["TODO", "FIXME", "HACK", "XXX"] {
         if let Some(after) = head.strip_prefix(kind) {
@@ -231,5 +231,41 @@ mod tests {
             .filter(|n| n.label == NodeLabel::TodoMarker)
             .collect();
         assert_eq!(todos.len(), 1);
+    }
+
+    #[test]
+    fn test_find_marker_doc_comment_rust() {
+        assert_eq!(find_marker("/// TODO: document"), Some(("TODO", "document")));
+    }
+
+    #[test]
+    fn test_find_marker_doc_comment_crate() {
+        assert_eq!(find_marker("//! FIXME: crate doc"), Some(("FIXME", "crate doc")));
+    }
+
+    #[test]
+    fn test_find_marker_doc_comment_jsdoc() {
+        assert_eq!(find_marker("/** TODO: jsdoc */"), Some(("TODO", "jsdoc */")));
+    }
+
+    #[test]
+    fn test_find_marker_slashes() {
+        assert_eq!(find_marker("//// TODO: x"), Some(("TODO", "x")));
+    }
+
+    #[test]
+    fn test_scan_single_file_doc_comment() {
+        let file = fe(
+            "src/doc.rs",
+            "/// TODO: add docs\nfn foo() {}",
+        );
+        let (nodes, rels) = scan_single_file(&file);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(rels.len(), 1);
+        let kinds: Vec<_> = nodes
+            .iter()
+            .filter_map(|n| n.properties.todo_kind.clone())
+            .collect();
+        assert!(kinds.contains(&"TODO".to_string()));
     }
 }
