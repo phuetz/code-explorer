@@ -42,7 +42,7 @@ pub struct ConfigInventoryStats {
 
 static RE_DOTENV_LINE: Lazy<Regex> = Lazy::new(|| {
     // KEY=value, KEY="value", KEY='value'. Ignore comments and blank lines.
-    Regex::new(r#"(?m)^\s*([A-Z][A-Z0-9_]*)\s*="#).expect("dotenv regex")
+    Regex::new(r#"(?m)^\s*(?:export[ \t]+)?([A-Z][A-Z0-9_]*)\s*="#).expect("dotenv regex")
 });
 
 static RE_PROPS_LINE: Lazy<Regex> = Lazy::new(|| {
@@ -386,6 +386,46 @@ mod tests {
             language: SupportedLanguage::from_filename(path),
             size: content.len(),
         }
+    }
+
+    #[test]
+    fn test_dotenv_export_syntax() {
+        // (1) Le cas classique avec export, avec espace, tabulations ou indentation
+        let file = fe(".env", "export API_KEY=abc\nexport DB_URL=\"x\"\nPLAIN=1\n \texport\tTAB_KEY=ok\n");
+        let (decls, refs) = scan_file(&file);
+        assert_eq!(decls.len(), 4);
+        assert!(refs.is_empty());
+        let names: Vec<_> = decls.iter().map(|(n, _)| n.clone()).collect();
+        assert!(names.contains(&"API_KEY".to_string()));
+        assert!(names.contains(&"DB_URL".to_string()));
+        assert!(names.contains(&"PLAIN".to_string()));
+        assert!(names.contains(&"TAB_KEY".to_string()));
+        // On vérifie les numéros de ligne
+        assert_eq!(decls.iter().find(|(n, _)| n == "API_KEY").unwrap().1.line, 1);
+        assert_eq!(decls.iter().find(|(n, _)| n == "DB_URL").unwrap().1.line, 2);
+        assert_eq!(decls.iter().find(|(n, _)| n == "PLAIN").unwrap().1.line, 3);
+        assert_eq!(decls.iter().find(|(n, _)| n == "TAB_KEY").unwrap().1.line, 4);
+
+        // (2) Une ligne commentée `# export OLD=1` ne déclare rien
+        let file2 = fe(".env", "# export OLD=1\n");
+        let (decls2, _) = scan_file(&file2);
+        assert!(decls2.is_empty());
+
+        // (3) Un config.toml avec PORT = 80 déclare toujours PORT
+        let file3 = fe("config.toml", "PORT = 80\n");
+        let (decls3, _) = scan_file(&file3);
+        assert_eq!(decls3.len(), 1);
+        assert_eq!(decls3[0].0, "PORT");
+
+        // "exported=1" (ou un nom commençant par export)
+        let file4 = fe(".env", "EXPORTED=1\n");
+        let (decls4, _) = scan_file(&file4);
+        assert_eq!(decls4.len(), 1);
+        assert_eq!(decls4[0].0, "EXPORTED");
+
+        let invalid = fe(".env", "export 1BAD=1\nexport BAD-NAME=1\n");
+        let (invalid_decls, _) = scan_file(&invalid);
+        assert!(invalid_decls.is_empty());
     }
 
     #[test]
