@@ -76,9 +76,14 @@ pub fn chunk_markdown(source_path: &str, content: &str) -> Result<Vec<DocChunk>>
                 }
             }
             Event::Code(text) => {
-                current_content.push('`');
-                current_content.push_str(&text);
-                current_content.push_str("` ");
+                if in_heading {
+                    // Les accents graves sont exclus dans le titre (comme pour Event::Text).
+                    current_title.push_str(&text);
+                } else {
+                    current_content.push('`');
+                    current_content.push_str(&text);
+                    current_content.push_str("` ");
+                }
             }
             Event::SoftBreak | Event::HardBreak => {
                 current_content.push('\n');
@@ -307,5 +312,14 @@ Here are the details.
         let content = &chunks[0].content;
         assert!(content.contains("alpha\nbeta\ngamma"), "got: {}", content);
         assert!(!content.contains("alphabeta"));
+    }
+
+    #[test]
+    fn heading_with_inline_code_keeps_code_in_title() {
+        let md = "# Use `foo` helper\nBody text.\n";
+        let chunks = chunk_markdown("t.md", md).unwrap();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].title, "Use foo helper");
+        assert_eq!(chunks[0].content, "Body text.");
     }
 }
