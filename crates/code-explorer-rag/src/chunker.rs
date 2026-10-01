@@ -91,6 +91,11 @@ pub fn chunk_markdown(source_path: &str, content: &str) -> Result<Vec<DocChunk>>
                 if !current_content.is_empty() && !current_content.ends_with("\n\n") => {
                     current_content.push_str("\n\n");
                 }
+            Event::End(Tag::Item) => {
+                if !current_content.ends_with('\n') {
+                    current_content.push('\n');
+                }
+            }
             _ => {}
         }
     }
@@ -292,5 +297,15 @@ Here are the details.
         let chunks = chunk_markdown("test.md", &md).unwrap();
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.len() > MAX_CHUNK_BYTES);
+    }
+
+    #[test]
+    fn tight_list_items_are_separated() {
+        let md = "# L\n- alpha\n- beta\n- gamma\n";
+        let chunks = chunk_markdown("test.md", md).unwrap();
+        assert_eq!(chunks.len(), 1);
+        let content = &chunks[0].content;
+        assert!(content.contains("alpha\nbeta\ngamma"), "got: {}", content);
+        assert!(!content.contains("alphabeta"));
     }
 }
