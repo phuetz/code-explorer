@@ -97,6 +97,9 @@ static RE_PY_DECORATOR: Lazy<Regex> = Lazy::new(|| {
     .expect("fastapi/flask regex compiles")
 });
 
+static RE_FLASK_METHODS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\bmethods\s*=").expect("flask methods regex compiles"));
+
 static RE_SPRING_MAPPING: Lazy<Regex> = Lazy::new(|| {
     // @GetMapping("/x")  @RequestMapping(value="/x", method=RequestMethod.POST)
     // We capture the mapping name and first string-literal arg.
@@ -344,22 +347,23 @@ fn scan_file(file: &FileEntry) -> Vec<RawEndpoint> {
                 let verb = cap.get(1).unwrap().as_str();
                 let route = cap.get(2).unwrap().as_str().to_string();
                 let framework = if verb == "route" { "flask" } else { "fastapi" };
-                let method = if verb == "route" {
-                    // Flask's @app.route defaults to GET; inspecting the rest
-                    // of the line for `methods=["POST"]` would be a nice
-                    // refinement — TODO(theme-d).
-                    "GET".to_string()
+
+                let methods = if verb == "route" {
+                    flask_methods(line)
                 } else {
-                    verb.to_ascii_uppercase()
+                    vec![verb.to_ascii_uppercase()]
                 };
-                out.push(RawEndpoint {
-                    framework,
-                    http_method: method,
-                    route,
-                    file_path: file.path.clone(),
-                    start_line: line_num,
-                    handler_hint: None,
-                });
+
+                for method in methods {
+                    out.push(RawEndpoint {
+                        framework,
+                        http_method: method,
+                        route: route.clone(),
+                        file_path: file.path.clone(),
+                        start_line: line_num,
+                        handler_hint: None,
+                    });
+                }
             }
         }
 
@@ -502,6 +506,47 @@ fn route_from_next_path(path: &str) -> String {
     }
 }
 
+/// Extracts HTTP methods from a Flask `@app.route` line, e.g., `methods=["GET", "POST"]`.
+fn flask_methods(line: &str) -> Vec<String> {
+    let mut methods = Vec::new();
+    if let Some(methods_match) = RE_FLASK_METHODS.find(line) {
+        let substr = &line[methods_match.end()..];
+        let bracket_idx = substr.find('[');
+        let paren_idx = substr.find('(');
+        let start_char = match (bracket_idx, paren_idx) {
+            (Some(b), Some(p)) => b.min(p),
+            (Some(b), None) => b,
+            (None, Some(p)) => p,
+            (None, None) => return vec!["GET".to_string()],
+        };
+
+        let substr = &substr[start_char..];
+        let close_bracket_idx = substr.find(']');
+        let close_paren_idx = substr.find(')');
+        let end_char = match (close_bracket_idx, close_paren_idx) {
+            (Some(b), Some(p)) => b.min(p),
+            (Some(b), None) => b,
+            (None, Some(p)) => p,
+            (None, None) => return vec!["GET".to_string()],
+        };
+
+        let list_str = &substr[1..end_char];
+        let parts: Vec<&str> = list_str.split(',').collect();
+        for part in parts {
+            let trimmed = part.trim().trim_matches(|c| c == '\'' || c == '"');
+            if !trimmed.is_empty() {
+                methods.push(trimmed.to_ascii_uppercase());
+            }
+        }
+    }
+
+    if methods.is_empty() {
+        vec!["GET".to_string()]
+    } else {
+        methods
+    }
+}
+
 /// Normalize a route so that two syntactic variants (`:id` vs `{id}`) produce
 /// the same node ID. Keep it stable but reversible by downstream tooling.
 fn normalize_route(route: &str) -> String {
@@ -621,6 +666,55 @@ mod tests {
         assert_eq!(eps.len(), 1);
         assert_eq!(eps[0].framework, "flask");
         assert_eq!(eps[0].http_method, "GET");
+    }
+
+    #[test]
+    fn test_flask_route_explicit_methods() {
+        let file1 = fe(
+            "app.py",
+            "@app.route(\"/login\", methods=[\"POST\"])\ndef login(): pass\n",
+            SupportedLanguage::Python,
+        );
+        let eps1 = scan_file(&file1);
+        assert_eq!(eps1.len(), 1);
+        assert_eq!(eps1[0].framework, "flask");
+        assert_eq!(eps1[0].http_method, "POST");
+        assert_eq!(eps1[0].route, "/login");
+
+        let file2 = fe(
+            "app.py",
+            "@app.route(\"/login\", methods=['get','post'])\ndef login(): pass\n",
+            SupportedLanguage::Python,
+        );
+        let eps2 = scan_file(&file2);
+        assert_eq!(eps2.len(), 2);
+        assert_eq!(eps2[0].framework, "flask");
+        assert_eq!(eps2[0].http_method, "GET");
+        assert_eq!(eps2[1].framework, "flask");
+        assert_eq!(eps2[1].http_method, "POST");
+
+        let spaced = fe(
+            "app.py",
+            "@app.route(\"/spaced\", methods = ['POST'])\ndef spaced(): pass\n",
+            SupportedLanguage::Python,
+        );
+        let eps3 = scan_file(&spaced);
+        assert_eq!(eps3.len(), 1);
+        assert_eq!(eps3[0].http_method, "POST");
+    }
+
+    #[test]
+    fn test_fastapi_post_decorator() {
+        let file = fe(
+            "app.py",
+            "@router.post(\"/x\")\ndef x(): pass\n",
+            SupportedLanguage::Python,
+        );
+        let eps = scan_file(&file);
+        assert_eq!(eps.len(), 1);
+        assert_eq!(eps[0].framework, "fastapi");
+        assert_eq!(eps[0].http_method, "POST");
+        assert_eq!(eps[0].route, "/x");
     }
 
     #[test]
