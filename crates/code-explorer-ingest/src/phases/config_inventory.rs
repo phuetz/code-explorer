@@ -69,6 +69,9 @@ static RE_OS_GETENV: Lazy<Regex> =
 static RE_OS_ENVIRON: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"os\.environ\[\s*['"]([^'"]+)['"]\s*\]"#).expect("os.environ regex"));
 
+static RE_OS_ENVIRON_GET: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"os\.environ\.get\(\s*['"]([^'"]+)['"]"#).expect("os.environ.get regex"));
+
 static RE_DOTNET_ENV: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r#"(?:Environment\.GetEnvironmentVariable|Configuration)\s*(?:\(\s*|\[\s*)['"]([^'"]+)['"]"#,
@@ -327,6 +330,7 @@ fn scan_file(file: &FileEntry) -> ScanResult {
         scan(&RE_PROCESS_ENV_BRACKET, line, &mut refs);
         scan(&RE_OS_GETENV, line, &mut refs);
         scan(&RE_OS_ENVIRON, line, &mut refs);
+        scan(&RE_OS_ENVIRON_GET, line, &mut refs);
         scan(&RE_DOTNET_ENV, line, &mut refs);
         scan(&RE_JAVA_GETENV, line, &mut refs);
     }
@@ -461,6 +465,18 @@ mod tests {
         );
         let (_, refs) = scan_file(&file);
         assert_eq!(refs.len(), 2);
+    }
+
+    #[test]
+    fn test_python_environ_get() {
+        let file = fe(
+            "app.py",
+            "k = os.environ.get('API_KEY')\nz = os.environ.get(\"B\", \"d\")\nq = os.getenv('C')\n"
+        );
+        let (_, refs) = scan_file(&file);
+        let mut names: Vec<String> = refs.into_iter().map(|(n, _)| n).collect();
+        names.sort();
+        assert_eq!(names, vec!["API_KEY", "B", "C"]);
     }
 
     #[test]
