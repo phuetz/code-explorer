@@ -1,6 +1,8 @@
 # Third-party notices
 
 These pinned browser assets are bundled locally. No download takes place during export.
+Upstream bundle bytes are preserved, including whitespace inside generated strings;
+Git whitespace checks are disabled only for these vendored JavaScript files.
 
 ## mermaid 11.14.0 — MIT
 
@@ -133,7 +135,7 @@ cytoscape/dist/cytoscape.esm.mjs:
   *)
   (*!
   Event object based on jQuery events, MIT license
-  
+
   https://jquery.org/license/
   https://tldrlegal.com/license/mit-license
   https://github.com/jquery/jquery/blob/master/src/event.js
