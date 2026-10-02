@@ -8,6 +8,43 @@ const path = require('node:path');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { chromium } = require('playwright');
+const { pathToFileURL } = require('node:url');
+
+async function auditHtmlWithoutCSP(browser, file) {
+  // A CSP may hide a regression before requests reach Playwright routes.
+  // Audit the generated pages with CSP bypassed, while still refusing traffic.
+  const context = await browser.newContext({ bypassCSP: true, serviceWorkers: 'block' });
+  const attempted = [];
+  await context.route(/^https?:\/\//i, route => { attempted.push(route.request().url()); return route.abort(); });
+  try {
+    const page = await context.newPage();
+    await page.goto(pathToFileURL(file).href, { waitUntil: 'load' });
+    assert.deepEqual(attempted, [], 'HTML external requests detected with CSP bypassed');
+    const pages = await page.evaluate(() => Object.keys(PAGES));
+    for (const id of pages) {
+      await page.evaluate(id => { currentPage = ''; document.getElementById('content').replaceChildren(); showPage(id); }, id);
+      await page.waitForFunction(() => document.getElementById('content').childElementCount > 0);
+      const expected = await page.evaluate(id => (PAGES[id].html.match(/language-mermaid/g) || []).length, id);
+      if (expected) {
+        await page.waitForFunction(count => document.querySelectorAll('.mermaid svg').length === count, expected);
+      }
+      // Inspect DOM references as well as traffic; anchors remain permitted.
+      const references = await page.evaluate(() => Array.from(document.querySelectorAll(
+        'img,script[src],link,source,video,audio,iframe,object,embed,image,use'
+      )).flatMap(element => ['src', 'href', 'xlink:href', 'data', 'poster'].flatMap(attribute => {
+        const value = element.getAttribute(attribute);
+        if (!value) return [];
+        const url = new URL(value, document.baseURI);
+        return /^https?:$/.test(url.protocol) ? [url.href] : [];
+      })));
+      assert.deepEqual(references, [], `HTML page ${id} contains external resource references`);
+      assert.deepEqual(attempted, [], 'HTML external requests detected with CSP bypassed');
+    }
+    return { pages: pages.length, attempted };
+  } finally {
+    await context.close();
+  }
+}
 
 async function main() {
   const binary = path.resolve(process.argv[2]);
@@ -52,23 +89,121 @@ async function main() {
     await run(binary, ['analyze', repo, '--skip-git'], 'analyze.log');
     const docs = path.join(repo, '.codeexplorer', 'docs');
     await run(binary, ['generate', 'html', '--path', repo], 'html.log');
+    // A real local image accepted by the Markdown converter must survive CSP.
+    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGMwKNgARAwQCgAizgVBSgKCUQAAAABJRU5ErkJggg==', 'base64');
+    fs.writeFileSync(path.join(docs, 'pixel.png'), pixel);
+    fs.appendFileSync(path.join(docs, 'overview.md'), '\n\n![Image locale de contrôle](pixel.png)\n');
+    fs.writeFileSync(path.join(docs, 'rendering-checks.md'), [
+      '# Vérifications Mermaid strict',
+      '```mermaid', 'flowchart LR',
+      'L["<b>Libellé HTML</b><br/>seconde ligne"] --> R[Sortie]',
+      'click L showDetails "Détails"',
+      'click R href "#local-details" "Documentation"',
+      '```',
+      '```mermaid', 'sequenceDiagram', 'Client->>Service: Appel local', 'Service-->>Client: Résultat', '```',
+      '```mermaid', 'classDiagram', 'class Store {', '+save()', '}', 'Service --> Store', '```',
+    ].join('\n'));
+    await run(binary, ['generate', 'html', '--path', repo, '--enrich-only'], 'html-local-image.log');
     fs.copyFileSync(path.join(docs, 'index.html'), path.join(root, 'index.html'));
+    fs.copyFileSync(path.join(docs, 'pixel.png'), path.join(root, 'pixel.png'));
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'], proxy: { server: proxyUrl } });
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await context.route(/^https?:\/\//i, route => { attempts.push(route.request().url()); return route.abort(); });
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      window.__mermaidCallbackCalls = 0;
+      window.showDetails = () => { window.__mermaidCallbackCalls += 1; };
+    });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`file://${path.join(root, 'index.html')}`, { waitUntil: 'load' });
     assert.deepEqual(attempts, [], 'HTML attempted external resource requests');
+    const image = page.getByRole('img', { name: 'Image locale de contrôle', exact: true });
+    await image.waitFor();
+    const dimensions = await image.evaluate(img => ({ width: img.naturalWidth, height: img.naturalHeight }));
+    assert.deepEqual(dimensions, { width: 2, height: 2 }, 'CSP must preserve local repository images');
+    fs.writeFileSync(path.join(root, 'local-image-proof.json'), JSON.stringify(dimensions, null, 2));
+    // The same exported page must preserve same-origin images when served over HTTP.
+    const site = http.createServer((request, response) => {
+      const filename = request.url === '/pixel.png' ? 'pixel.png' : request.url === '/index.html' ? 'index.html' : null;
+      if (!filename) { response.writeHead(404); response.end(); return; }
+      response.writeHead(200, { 'Content-Type': filename.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8' });
+      response.end(fs.readFileSync(path.join(root, filename)));
+    });
+    await new Promise(resolve => site.listen(0, '127.0.0.1', resolve));
+    let siteContext;
+    let siteBrowser;
+    try {
+      const origin = `http://127.0.0.1:${site.address().port}`;
+      // Keep the refusing proxy for file exports. This browser can access only
+      // the fixture's loopback origin; its routes still refuse every other URL.
+      siteBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+      siteContext = await siteBrowser.newContext({ serviceWorkers: 'block' });
+      const external = [];
+      await siteContext.route(/^https?:\/\//i, route => {
+        if (new URL(route.request().url()).origin === origin) return route.continue();
+        external.push(route.request().url()); return route.abort();
+      });
+      const served = await siteContext.newPage();
+      const response = await served.goto(origin + '/index.html', { waitUntil: 'load' });
+      assert.equal(response.status(), 200, 'The loopback fixture server must serve the HTML');
+      const servedDimensions = await served.getByRole('img', { name: 'Image locale de contrôle', exact: true })
+        .evaluate(img => ({ width: img.naturalWidth, height: img.naturalHeight }));
+      assert.deepEqual(servedDimensions, { width: 2, height: 2 }, 'CSP must preserve same-origin HTTP images');
+      assert.deepEqual(external, [], 'Served HTML attempted an external request');
+      fs.writeFileSync(path.join(root, 'same-origin-image-proof.json'), JSON.stringify(servedDimensions, null, 2));
+    } finally {
+      if (siteContext) await siteContext.close();
+      if (siteBrowser) await siteBrowser.close();
+      await new Promise(resolve => site.close(resolve));
+    }
+    const unprotected = await auditHtmlWithoutCSP(browser, path.join(root, 'index.html'));
+    fs.writeFileSync(path.join(root, 'audit-without-csp.json'), JSON.stringify(unprotected, null, 2));
+    // Prove that this audit rejects a resource even when production CSP hides it.
+    const mutantFile = path.join(root, 'mutant-external-image.html');
+    const mutant = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
+      .replace(/img-src [^;]+;/, 'img-src data:;')
+      .replace('\n<body>', '\n<body>\n<img src="https://example.test/masked.png" alt="Mutant">');
+    fs.writeFileSync(mutantFile, mutant);
+    const maskedContext = await browser.newContext({ serviceWorkers: 'block' });
+    const maskedAttempts = [];
+    try {
+      await maskedContext.route(/^https?:\/\//i, route => { maskedAttempts.push(route.request().url()); return route.abort(); });
+      const maskedPage = await maskedContext.newPage();
+      await maskedPage.goto(pathToFileURL(mutantFile).href, { waitUntil: 'load' });
+      assert.deepEqual(maskedAttempts, [], 'The negative control must be hidden by CSP');
+    } finally {
+      await maskedContext.close();
+    }
+    await assert.rejects(auditHtmlWithoutCSP(browser, mutantFile), /HTML external requests detected with CSP bypassed/);
+    fs.writeFileSync(path.join(root, 'mutation-csp-proof.json'), JSON.stringify({
+      protectedRequests: maskedAttempts, bypassedAuditRejects: true, externalResource: 'https://example.test/masked.png',
+    }, null, 2));
     // The overview contains the dependency diagram; exercise all pages containing Mermaid.
     const diagramPages = await page.evaluate(() => Object.keys(PAGES).filter(id => PAGES[id].html.includes('language-mermaid')));
     assert(diagramPages.length > 0, 'The demo documentation must include diagrams');
     let rendered = 0;
     for (const id of diagramPages) {
       await page.evaluate(id => { currentPage = ''; document.getElementById('content').replaceChildren(); showPage(id); }, id);
-      await page.locator('.mermaid svg').first().waitFor({ timeout: 30000 });
+      const expected = await page.evaluate(id => (PAGES[id].html.match(/language-mermaid/g) || []).length, id);
+      await page.waitForFunction(count => document.querySelectorAll('.mermaid svg').length === count, expected);
       rendered += await page.locator('.mermaid svg').count();
+      if (id === 'rendering-checks') {
+        const strict = await page.locator('.mermaid svg').first().evaluate(svg => ({
+          label: svg.querySelector('[id*="-flowchart-L-"]').textContent,
+          htmlLabel: !!svg.querySelector('b'),
+          lineBreak: !!svg.querySelector('br'),
+          links: Array.from(svg.querySelectorAll('a')).map(a => a.getAttribute('href') || a.getAttribute('xlink:href')),
+        }));
+        assert(strict.label.includes('Libellé HTML') && strict.label.includes('seconde ligne'), 'Strict mode must preserve readable HTML label text');
+        assert.equal(strict.htmlLabel, true, 'Bundled Mermaid strict mode preserves sanitized bold labels');
+        assert.equal(strict.lineBreak, true, 'Bundled Mermaid strict mode preserves label line breaks');
+        assert.deepEqual(strict.links, ['#local-details'], 'Strict mode preserves documentation links');
+        await page.locator('.mermaid svg').first().locator('g.node[id*="-flowchart-L-"]').click();
+        strict.callbackCalls = await page.evaluate(() => window.__mermaidCallbackCalls);
+        assert.equal(strict.callbackCalls, 0, 'Strict mode disables JavaScript click callbacks');
+        fs.writeFileSync(path.join(root, 'mermaid-strict-proof.json'), JSON.stringify(strict, null, 2));
+      }
     }
     await page.screenshot({ path: path.join(root, 'html-diagram.png'), fullPage: true });
     assert.equal(errors.length, 0, `HTML script errors: ${errors.join('; ')}`);

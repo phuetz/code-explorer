@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
+import { offlineMarkdownImageUrl } from '../../../../assets/markdown-image-url';
 import remarkGfm from 'remark-gfm';
 import { MermaidBlock } from './MermaidBlock';
 import {
@@ -43,7 +44,11 @@ export function Markdown({
 
   return (
     <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-transparent prose-pre:border-0 prose-pre:p-0 prose-code:before:content-[''] prose-code:after:content-['']">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={markdownComponents}
+        urlTransform={(url, key) => key === 'src' ? offlineMarkdownImageUrl(url) : defaultUrlTransform(url)}
+      >
         {markdown}
       </ReactMarkdown>
     </div>
@@ -130,8 +135,7 @@ function isMermaidLanguage(language: string | undefined): boolean {
 
 const baseComponents: Components = {
   img({ src, alt }) {
-    const local = src && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src);
-    return local ? <img src={src} alt={alt} /> : <span>{alt || 'Image distante omise'}</span>;
+    return src ? <img src={src} alt={alt} /> : <span>{alt || 'Image distante omise'}</span>;
   },
   code(props) {
     const { className, children, ...rest } = props;

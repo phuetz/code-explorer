@@ -155,6 +155,24 @@ describe('Markdown source references', () => {
 
 // A repository/model-supplied image must not trigger a third-party request.
 describe('offline images', () => {
+  it.each([
+    'pixel.png',
+    '/images/pixel.png',
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGMwKNgARAwQCgAizgVBSgKCUQAAAABJRU5ErkJggg==',
+  ])('preserves local and embedded raster images: %s', (src) => {
+    const { container } = render(<Markdown>{`![Capture](${src})`}</Markdown>);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(src);
+  });
+
+  it.each([
+    '//example.test/pixel.png',
+    'data:image/svg+xml;base64,PHN2Zy8+',
+    'javascript:alert(1)',
+  ])('omits external or active image sources: %s', (src) => {
+    const { container } = render(<Markdown>{`![Capture](${src})`}</Markdown>);
+    expect(container.querySelector('img')).toBeNull();
+  });
+
   it('keeps remote images as text and documentation links clickable', () => {
     const { container } = render(<Markdown>{'![Architecture](https://example.test/diagram.png)\n\n[Documentation](https://example.test/docs)'}</Markdown>);
     expect(container.querySelector('img')).toBeNull();

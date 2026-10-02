@@ -6,6 +6,15 @@ versions, empreintes et licences figurent dans `THIRD-PARTY-NOTICES.md`.
 Les exports n'utilisent aucun CDN ni police distante. Les liens de documentation
 restent cliquables. Les images Markdown distantes sont affichées sous forme de
 texte ; les captures PNG incorporées aux documents de travail restent disponibles.
+Les images locales du dépôt restent autorisées, en fichier ou depuis l'origine
+HTTP du site. Les chats acceptent aussi les captures raster incorporées en URI
+`data:` (PNG, JPEG, GIF, WebP) ; les URI SVG et les images distantes sont omises.
+
+Le site initialise Mermaid avec `securityLevel: 'strict'`. Avec la version
+embarquée, les libellés HTML assainis (gras, saut de ligne) et les liens
+documentaires sont conservés ; les callbacks JavaScript de la directive `click`
+sont désactivés. Le test exerce ce comportement ainsi que les diagrammes de flux,
+de séquence et de classes.
 
 ## Moteur local pour PDF et DOCX
 
@@ -55,11 +64,27 @@ compte les demandes HTTP(S) des pages. Les lanceurs de production bloquent aussi
 ces demandes avant tout envoi.
 
 Le test vérifie le rendu SVG HTML, les PNG incorporés au DOCX, les images du PDF,
-le repli DOCX sans Node.js et l'absence de demandes externes. Il vérifie ensuite,
+les images locales avec la CSP active, le repli DOCX sans Node.js et l'absence de
+demandes externes. L'audit rejoue toutes les pages avec la CSP désactivée, refuse
+leur trafic externe et inspecte les références de ressources dans leur DOM.
+Un contrôle négatif contenant une image distante masquée par la CSP doit être
+refusé par cet audit. Il vérifie ensuite,
 séparément, l'option Kroki avec un serveur factice sur l'interface de boucle locale.
 Les fichiers de diagnostic restent dans un répertoire temporaire. La variable
 `CODE_EXPLORER_OFFLINE_ARTIFACT_DIR` permet de choisir un nouveau répertoire de
 livraison. Les échecs de rendu et les délais d'attente ne sont pas masqués.
+
+Pour vérifier aussi les deux composants Markdown du chat et du bureau, avec
+leurs dépendances npm déjà installées :
+
+```sh
+node scripts/tests/markdown-images.cjs
+```
+
+Ce test rend les composants réels avec Vite en mode SSR sans serveur, puis
+vérifie le décodage des PNG locaux et incorporés dans Chromium, l'omission des
+images distantes sans l'aide d'une CSP et la conservation des liens. Il ferme
+ses contextes Vite et navigateurs avant de terminer.
 
 Les API du chat et de l'enrichissement restent utilisables lorsqu'un utilisateur
 les configure et demande ces fonctions ; elles ne sont pas appelées par le rendu

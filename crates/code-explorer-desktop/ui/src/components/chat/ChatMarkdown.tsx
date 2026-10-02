@@ -1,5 +1,6 @@
 import { Copy, GitBranch, RefreshCw, ChevronDown, ChevronRight, Pin, PinOff, Loader2, CheckCircle2, XCircle, Clock, Lightbulb, AlertTriangle, Info, AlertCircle, Download, Code2, Check } from "lucide-react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
+import { offlineMarkdownImageUrl } from "../../../../../../assets/markdown-image-url";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { useEffect, useRef, useState, useId, useMemo } from "react";
@@ -517,8 +518,7 @@ const createMarkdownComponents = (
   onFilePreview?: (file: { path: string; startLine?: number; endLine?: number }) => void,
 ): Partial<Components> => ({
   img: ({ src, alt }) => {
-    const local = src && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src);
-    return local ? <img src={src} alt={alt} /> : <span>{alt || "Remote image omitted"}</span>;
+    return src ? <img src={src} alt={alt} /> : <span>{alt || "Remote image omitted"}</span>;
   },
   pre: ({ children }: { children?: React.ReactNode }) => {
     const child = children as React.ReactElement<{ className?: string; children?: React.ReactNode }>;
@@ -644,7 +644,11 @@ export function ChatMarkdown({
   const components = useMemo(() => createMarkdownComponents(onNavigateToNode, onFilePreview), [onNavigateToNode, onFilePreview]);
   return (
     <div>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+        urlTransform={(url, key) => key === "src" ? offlineMarkdownImageUrl(url) : defaultUrlTransform(url)}
+      >
         {normalizeBareMermaid(content)}
       </ReactMarkdown>
       {message && (message.toolCalls?.length ?? 0) > 0 && (

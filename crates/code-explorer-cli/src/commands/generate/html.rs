@@ -1004,7 +1004,7 @@ fn build_html_template(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{project_name} — Documentation</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: file:; font-src data:; connect-src 'self'">
   <script>{lucide_js}</script>
   <script>{mermaid_js}</script>
   <style>
@@ -3533,14 +3533,22 @@ mod tests {
         assert!(html.contains("--font: -apple-system"));
         assert!(html.contains("flex-direction: column"));
         assert!(html.contains(".message.assistant { background: var(--bg-sidebar);"));
-        let css = html
-            .split("  <style>")
-            .nth(1)
-            .unwrap()
-            .split("</style>")
-            .next()
-            .unwrap();
-        assert!(!css.contains("flexDirection"));
+        // Third-party bundles legitimately use JS style property names. Keep
+        // the original check over ALL first-party markup, styles and scripts.
+        let mut first_party = html.clone();
+        for bundle in [
+            code_explorer_output::assets::LUCIDE_JS,
+            code_explorer_output::assets::MERMAID_JS,
+        ] {
+            first_party = first_party.replace(
+                &format!(
+                    "<script>{}</script>",
+                    code_explorer_output::assets::inline_script(bundle)
+                ),
+                "",
+            );
+        }
+        assert!(!first_party.contains("flexDirection"));
         assert!(!html.contains("var(--bg-3)"));
     }
 

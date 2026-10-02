@@ -329,7 +329,7 @@ Les `.docx` générés embarquent désormais un en-tête configurable (nom clien
 
 Un `brand.json` absent ou mal formé bascule silencieusement vers les défauts `agile-up.com` — le binaire reste utilisable sans configuration. Surcharger l'emplacement du fichier via `$CODE_EXPLORER_BRAND_FILE`.
 
-Les diagrammes Mermaid présents dans le markdown source sont rendus en PNG via [Kroki](https://kroki.io) et embarqués inline dans le `.docx`. Définir `CODE_EXPLORER_MERMAID_PLACEHOLDER=1` pour conserver le fallback texte historique (sans appel réseau), ou `CODE_EXPLORER_KROKI_URL=<url>` pour pointer sur une instance Kroki self-hostée.
+Les diagrammes Mermaid sont rendus localement en PNG par Playwright/Chromium avec Mermaid 11.14.0 embarqué, puis incorporés au `.docx`, sans appel réseau. Sans moteur local, le source reste visible avec un avertissement. `CODE_EXPLORER_MERMAID_PLACEHOLDER=1` force le repli texte ; seule une valeur explicite et non vide de `CODE_EXPLORER_KROKI_URL=<url>` transmet les diagrammes à l'instance Kroki auto-hébergée choisie. Voir [les exports hors réseau](docs/offline-exports.md).
 
 ### Validation pré-livraison (`validate-docs`)
 
