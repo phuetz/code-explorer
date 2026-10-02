@@ -17,3 +17,22 @@ fn html_pdf_docx_render_diagrams_without_external_requests() {
     );
     println!("{}", String::from_utf8_lossy(&result.stdout));
 }
+
+#[test]
+#[ignore = "requires Node.js, local Playwright/Chromium and Poppler (pdfimages, pdftotext)"]
+fn pdf_preserves_every_diagram_and_survives_render_failures() {
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/tests/pdf-resilience.cjs");
+    let result = std::process::Command::new("node")
+        .arg(script)
+        .arg(env!("CARGO_BIN_EXE_code-explorer"))
+        .output()
+        .expect("Node.js must be installed for the PDF integration test");
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    println!("{}", String::from_utf8_lossy(&result.stdout));
+}

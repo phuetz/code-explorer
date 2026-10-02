@@ -455,7 +455,6 @@ fn build_full_html(metadata: &PdfMetadata, toc_html: &str, body_html: &str) -> S
   <meta charset="UTF-8">
   <title>{title}</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: file:; font-src data:">
-  <script>{mermaid_js}</script>
   <style>
 {css}
   </style>
@@ -493,8 +492,6 @@ fn build_full_html(metadata: &PdfMetadata, toc_html: &str, body_html: &str) -> S
         toc_html = toc_html,
         body_html = body_html,
         mermaid_bootstrap = MERMAID_BOOTSTRAP_JS,
-        mermaid_js =
-            code_explorer_output::assets::inline_script(code_explorer_output::assets::MERMAID_JS),
     )
 }
 
@@ -885,14 +882,6 @@ const MERMAID_BOOTSTRAP_JS: &str = r#"
         return pre;
       }
 
-      function revealSource(figure) {
-        figure.classList.add('mermaid-error');
-        var source = figure.querySelector('.mermaid-source');
-        if (source) {
-          source.open = true;
-        }
-      }
-
       function diagramLabel(source) {
         var text = source.trim();
         if (text.indexOf('sequenceDiagram') === 0) return 'Diagramme de séquence';
@@ -932,13 +921,9 @@ const MERMAID_BOOTSTRAP_JS: &str = r#"
         }
       });
 
-      if (!window.mermaid) {
-        document.querySelectorAll('.mermaid-figure').forEach(revealSource);
-        window.__codeExplorerMermaidReady = true;
-        return;
-      }
-
-      window.mermaid.initialize({
+      // Only prepare the document here. The printer renders each source in a
+      // separate page, so a failed or stalled Mermaid queue cannot stop others.
+      window.__codeExplorerMermaidConfig = {
         theme: 'base',
         startOnLoad: false,
         securityLevel: 'strict',
@@ -951,15 +936,8 @@ const MERMAID_BOOTSTRAP_JS: &str = r#"
           lineColor: '#64748b',
           fontFamily: 'Segoe UI, Arial, sans-serif'
         }
-      });
-
-      Promise.resolve(window.mermaid.run({ querySelector: '.mermaid' }))
-        .catch(function () {
-          document.querySelectorAll('.mermaid-figure').forEach(revealSource);
-        })
-        .finally(function () {
-          window.__codeExplorerMermaidReady = true;
-        });
+      };
+      window.__codeExplorerMermaidReady = true;
     })();
 "#;
 

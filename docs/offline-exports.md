@@ -50,6 +50,29 @@ Cette configuration transmet les diagrammes à l'adresse choisie. Une variable
 absente ou vide sélectionne le moteur local. Aucun service public n'est choisi
 par défaut ; les redirections HTTP du point configuré sont désactivées.
 
+## PDF avec plusieurs diagrammes
+
+Chaque diagramme est rendu et capturé en PNG dans un contexte Chromium séparé.
+Une erreur de syntaxe, de capture ou un délai dépassé conserve le source Mermaid
+visible en bloc de code et émet un avertissement sur stderr ; les diagrammes
+suivants continuent et le PDF est produit. Le délai est de 30 secondes par
+figure, réglable avec `CODE_EXPLORER_MERMAID_TIMEOUT_MS` (1 à 300000 ms).
+Le contexte du diagramme est fermé même en cas de délai dépassé : sa file de
+rendu ne reste pas partagée avec celle des diagrammes suivants.
+
+Le test de régression utilise un dépôt avec plusieurs diagrammes, trois
+figures valides, une figure invalide au milieu, uniquement des figures
+invalides et un rendu volontairement bloqué au milieu. Il compte les images
+avec `pdfimages` et vérifie les sources de repli avec `pdftotext` (Poppler).
+
+```sh
+cargo test -p code-explorer-cli -j 8 --test offline_exports \
+  pdf_preserves_every_diagram_and_survives_render_failures -- --ignored
+```
+
+`CODE_EXPLORER_PDF_ARTIFACT_DIR` choisit le dossier parent des preuves ; chaque
+exécution y crée un sous-dossier neuf.
+
 ## Test d'intégration hors réseau
 
 ```sh
@@ -72,7 +95,9 @@ refusé par cet audit. Il vérifie ensuite,
 séparément, l'option Kroki avec un serveur factice sur l'interface de boucle locale.
 Les fichiers de diagnostic restent dans un répertoire temporaire. La variable
 `CODE_EXPLORER_OFFLINE_ARTIFACT_DIR` permet de choisir un nouveau répertoire de
-livraison. Les échecs de rendu et les délais d'attente ne sont pas masqués.
+livraison. Si ce répertoire contient déjà des fichiers, un nouveau sous-dossier
+est créé pour conserver les preuves précédentes. Les replis sont avertis ; les
+échecs du moteur Chromium lui-même restent des erreurs.
 
 Pour vérifier aussi les deux composants Markdown du chat et du bureau, avec
 leurs dépendances npm déjà installées :

@@ -22,12 +22,10 @@ fn run(input: &Path, output: &Path, mermaid: bool) -> Result<()> {
     let temp = tempfile::tempdir()?;
     let script = temp.path().join("print-pdf.cjs");
     std::fs::write(&script, PRINT_JS)?;
-    if mermaid {
-        std::fs::write(
-            temp.path().join("mermaid.min.js"),
-            code_explorer_output::assets::MERMAID_JS,
-        )?;
-    }
+    std::fs::write(
+        temp.path().join("mermaid.min.js"),
+        code_explorer_output::assets::MERMAID_JS,
+    )?;
     let node = find_node()?;
     let mut command = Command::new(&node);
     command.arg(&script).arg(input).arg(output);
@@ -46,6 +44,8 @@ fn run(input: &Path, output: &Path, mermaid: bool) -> Result<()> {
     if !result.status.success() {
         bail!("Local Mermaid/PDF renderer unavailable or failed: {}. Install Node.js, Playwright and its Chromium browser locally.", String::from_utf8_lossy(&result.stderr).trim());
     }
+    // Successful PDFs may contain a source fallback: keep its warnings visible.
+    eprint!("{}", String::from_utf8_lossy(&result.stderr));
     Ok(())
 }
 

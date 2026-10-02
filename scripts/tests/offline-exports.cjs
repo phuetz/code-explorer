@@ -48,8 +48,11 @@ async function auditHtmlWithoutCSP(browser, file) {
 
 async function main() {
   const binary = path.resolve(process.argv[2]);
-  const root = process.env.CODE_EXPLORER_OFFLINE_ARTIFACT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ce-offline-'));
+  let root = process.env.CODE_EXPLORER_OFFLINE_ARTIFACT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'ce-offline-'));
   fs.mkdirSync(root, { recursive: true });
+  if (fs.readdirSync(root).length) {
+    root = fs.mkdtempSync(path.join(root, 'run-'));
+  }
   const repo = path.join(root, 'demo');
   fs.mkdirSync(repo);
   fs.writeFileSync(path.join(repo, 'service.ts'), 'import { save } from "./store";\nexport function checkout() { return save(); }\n');
