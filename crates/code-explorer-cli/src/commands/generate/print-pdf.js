@@ -1,84 +1,75 @@
 #!/usr/bin/env node
-/**
- * Code Explorer PDF Generator — Playwright/Chromium
- *
- * Converts a self-contained HTML file to a professional A4 PDF.
- * Waits for mermaid.js diagrams to render before capture.
- *
- * Usage: node print-pdf.js <input.html> <output.pdf>
- */
+/** Offline PDF and high resolution Mermaid PNG renderer; requires local Playwright/Chromium. */
+const path = require('path');
+const fs = require('fs');
+const { chromium } = require('playwright');
 
-const path = require("path");
-const fs = require("fs");
-const { chromium } = require("playwright");
-
-async function printPDF(htmlPath, pdfPath) {
+async function render(input, output, mermaidOnly) {
   const browser = await chromium.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-background-networking'],
   });
-
-  const page = await browser.newPage();
-
-  const fileUrl = `file://${path.resolve(htmlPath)}`;
-  // networkidle: waits for mermaid.js CDN to load + render
-  await page.goto(fileUrl, { waitUntil: "networkidle", timeout: 60000 });
-
-  // Extra wait: ensure all mermaid diagrams have been processed
-  await page.waitForFunction(() => {
-    const ready = window.__codeExplorerMermaidReady === true;
-    const pending = document.querySelectorAll(".mermaid[data-processed='false']");
-    const raw = document.querySelectorAll("pre code.language-mermaid");
-    return ready && pending.length === 0 && raw.length === 0;
-  }, { timeout: 30000 }).catch(() => {
-    // If mermaid never loads (offline), proceed anyway — diagrams will show as code blocks
-  });
-
-  await waitForPrintableAssets(page);
-
-  await page.pdf({
-    path: pdfPath,
-    format: "A4",
-    margin: { top: "2.5cm", right: "2cm", bottom: "2.5cm", left: "2.5cm" },
-    printBackground: true,
-    displayHeaderFooter: false,
-    preferCSSPageSize: true,
-  });
-
-  await browser.close();
-
-  const size = Math.round(fs.statSync(pdfPath).size / 1024);
-  console.log(`OK ${path.basename(pdfPath)} (${size} Ko)`);
-}
-
-async function waitForPrintableAssets(page) {
-  await page.evaluate(async () => {
-    if (document.fonts && document.fonts.ready) {
-      await document.fonts.ready.catch(() => undefined);
+  const attempted = [];
+  try {
+    const context = await browser.newContext({ deviceScaleFactor: 3, serviceWorkers: 'block' });
+    // Never let a diagram, stylesheet or image disclose source to an HTTP service.
+    await context.route(/^https?:\/\//i, route => {
+      attempted.push(route.request().url());
+      return route.abort('blockedbyclient');
+    });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    if (mermaidOnly) {
+      await page.setContent('<!doctype html><html><body style="margin:0;background:white"><div id="diagram" style="display:inline-block;padding:16px"></div></body></html>');
+      await page.addScriptTag({ path: path.join(__dirname, 'mermaid.min.js') });
+      const source = JSON.parse(fs.readFileSync(input, 'utf8'));
+      await page.evaluate(async source => {
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+        const { svg } = await mermaid.render('local-diagram', source);
+        document.getElementById('diagram').innerHTML = svg;
+      }, source);
+      await page.evaluate(() => document.fonts.ready);
+      const diagram = page.locator('#diagram');
+      const size = await diagram.boundingBox();
+      await page.setViewportSize({ width: Math.ceil(size.width) + 32, height: Math.ceil(size.height) + 32 });
+      await diagram.screenshot({ path: output, type: 'png', timeout: 30000 });
+    } else {
+      await page.goto(`file://${path.resolve(input)}`, { waitUntil: 'load', timeout: 60000 });
+      await page.waitForFunction(() => window.__codeExplorerMermaidReady === true, null, { timeout: 30000 });
+      await page.evaluate(() => document.fonts.ready);
+      // Rasterize the locally rendered diagrams so PDFs contain embedded images too.
+      for (const diagram of await page.locator('.mermaid:has(svg)').all()) {
+        const png = await diagram.screenshot({ type: 'png' });
+        await diagram.evaluate((element, base64) => {
+          const image = document.createElement('img');
+          image.alt = 'Diagramme Mermaid';
+          image.src = 'data:image/png;base64,' + base64;
+          image.style.cssText = 'max-width:100%;height:auto';
+          element.replaceChildren(image);
+        }, png.toString('base64'));
+      }
+      await page.evaluate(async () => {
+        await Promise.all(Array.from(document.images).map(image => image.decode().catch(() => undefined)));
+      });
+      await page.pdf({ path: output, format: 'A4', printBackground: true, preferCSSPageSize: true });
     }
-
-    const images = Array.from(document.images);
-    await Promise.all(
-      images
-        .filter((img) => !img.complete)
-        .map(
-          (img) =>
-            new Promise((resolve) => {
-              img.addEventListener("load", resolve, { once: true });
-              img.addEventListener("error", resolve, { once: true });
-            })
-        )
-    );
-  });
+    if (errors.length) throw new Error('Browser script failed: ' + errors.join('; '));
+    if (attempted.length) throw new Error('External requests blocked: ' + attempted.join(', '));
+  } finally {
+    if (process.env.CODE_EXPLORER_NETWORK_AUDIT) {
+      fs.appendFileSync(process.env.CODE_EXPLORER_NETWORK_AUDIT, attempted.map(url => url + '\n').join(''));
+    }
+    await browser.close();
+  }
 }
 
-const [,, htmlPath, pdfPath] = process.argv;
-if (!htmlPath || !pdfPath) {
-  console.error("Usage: node print-pdf.js <input.html> <output.pdf>");
+const [,, input, output, mode] = process.argv;
+if (!input || !output) {
+  console.error('Usage: node print-pdf.js <input.html|diagram.json> <output.pdf|png> [--mermaid]');
   process.exit(1);
 }
-
-printPDF(htmlPath, pdfPath).catch(err => {
-  console.error("ERROR", err.message);
-  process.exit(1);
+render(input, output, mode === '--mermaid').catch(error => {
+  console.error('ERROR', error.message);
+  process.exitCode = 1;
 });

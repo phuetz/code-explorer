@@ -60,7 +60,6 @@ export default function CodeExplorerMockup() {
 
   return (
     <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: T.bg0, fontFamily: T.fontBody, color: T.text1, fontSize: 13, overflow: "hidden" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
       {/* ═══ CommandBar ═══ */}
       <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", background: T.bg1, borderBottom: `1px solid ${T.surfaceBorder}`, flexShrink: 0 }}>

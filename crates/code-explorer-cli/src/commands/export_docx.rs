@@ -1063,19 +1063,18 @@ fn mermaid_diagram_label(code: &str) -> &'static str {
 /// Convert a Mermaid code block to either an embedded PNG (best case) or
 /// the legacy text placeholder (fallback when rendering is disabled / fails).
 ///
-/// Rendering is ON by default via Kroki HTTP. Set `CODE_EXPLORER_MERMAID_PLACEHOLDER=1`
+/// Rendering is local by default. Kroki requires an explicitly configured URL. Set `CODE_EXPLORER_MERMAID_PLACEHOLDER=1`
 /// to force the legacy text-only behavior (useful offline or for CI snapshots).
 fn mermaid_to_xml(code: &str, images: &mut Vec<MermaidImage>) -> String {
     let label = mermaid_diagram_label(code);
 
-    // Opt-out: force placeholder. Useful when the host has no network access
-    // or the user wants the deterministic text output for diffing.
+    // Explicit opt-out, also useful for deterministic text snapshots.
     let force_placeholder = std::env::var("CODE_EXPLORER_MERMAID_PLACEHOLDER")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
     if !force_placeholder {
-        match render_mermaid_via_kroki(code) {
+        match render_mermaid(code) {
             Ok(png_bytes) => {
                 let dimensions = png_dimensions(&png_bytes).unwrap_or((1200, 800));
                 let next_index = images.len() + 1;
@@ -1101,14 +1100,14 @@ fn mermaid_to_xml(code: &str, images: &mut Vec<MermaidImage>) -> String {
     mermaid_placeholder_xml(code, label)
 }
 
-/// Legacy text-only rendering — kept as fallback when Kroki is unavailable.
+/// Keep the source visible when the local renderer is unavailable.
 fn mermaid_placeholder_xml(code: &str, label: &str) -> String {
     let mut result = String::new();
     result.push_str(&format!(
         r#"<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="E8F0FE"/><w:spacing w:after="60"/><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="4472C4"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="4472C4"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1B3A6B"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">  {label}</w:t></w:r></w:p>"#,
     ));
     result.push_str(
-        r#"<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="E8F0FE"/><w:spacing w:after="60"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t xml:space="preserve">Copiez le code ci-dessous dans mermaid.live ou un viewer Mermaid pour voir le rendu visuel.</w:t></w:r></w:p>"#,
+        r#"<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="E8F0FE"/><w:spacing w:after="60"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t xml:space="preserve">Rendu Mermaid indisponible ou désactivé : diagramme conservé en bloc de code. Aucun envoi réseau automatique.</w:t></w:r></w:p>"#,
     );
     for line in code.lines() {
         result.push_str(&format!(
@@ -1127,17 +1126,30 @@ fn figure_caption_xml(index: usize, label: &str) -> String {
     )
 }
 
-/// POST a Mermaid source to Kroki and get back the rendered PNG bytes.
-/// 15s timeout per diagram — Kroki is fast (~500ms) but spikes happen.
-fn render_mermaid_via_kroki(code: &str) -> Result<Vec<u8>> {
-    let url = std::env::var("CODE_EXPLORER_KROKI_URL")
-        .unwrap_or_else(|_| "https://kroki.io/mermaid/png".to_string());
+/// Render locally unless the user explicitly selected a Kroki endpoint.
+fn render_mermaid(code: &str) -> Result<Vec<u8>> {
+    if let Ok(url) = std::env::var("CODE_EXPLORER_KROKI_URL") {
+        if !url.trim().is_empty() {
+            let source = code.to_owned();
+            let endpoint = url.trim().to_owned();
+            // reqwest's blocking client owns a Tokio runtime. Build/drop it on
+            // a dedicated thread, including when the CLI is already in Tokio.
+            return std::thread::spawn(move || render_mermaid_via_kroki(&source, &endpoint))
+                .join()
+                .map_err(|_| anyhow::anyhow!("Kroki renderer thread failed"))?;
+        }
+    }
+    super::local_render::render_mermaid_png(code)
+}
+
+fn render_mermaid_via_kroki(code: &str, url: &str) -> Result<Vec<u8>> {
     let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| anyhow::anyhow!("kroki client: {}", e))?;
     let resp = client
-        .post(&url)
+        .post(url)
         .header("Content-Type", "text/plain")
         .body(code.to_string())
         .send()
@@ -1145,7 +1157,12 @@ fn render_mermaid_via_kroki(code: &str) -> Result<Vec<u8>> {
     if !resp.status().is_success() {
         anyhow::bail!("kroki HTTP {}", resp.status());
     }
-    Ok(resp.bytes()?.to_vec())
+    let bytes = resp.bytes()?.to_vec();
+    anyhow::ensure!(
+        png_dimensions(&bytes).is_some(),
+        "Kroki did not return a PNG"
+    );
+    Ok(bytes)
 }
 
 /// Parse PNG width/height from the IHDR chunk. Returns None for non-PNG

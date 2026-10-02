@@ -908,10 +908,11 @@ fn is_safe_image_url(url: &str) -> bool {
         return false;
     }
     let lower = trimmed.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || trimmed.starts_with('/') {
-        return true;
+    // Remote images would contact a third party when the export is opened.
+    if lower.starts_with("//") || lower.starts_with("http://") || lower.starts_with("https://") {
+        return false;
     }
-    !trimmed.contains(':')
+    trimmed.starts_with('/') || !trimmed.contains(':')
 }
 
 /// Extract the first `# Title` from Markdown content.
@@ -1044,6 +1045,13 @@ mod tests {
         let html = markdown_to_html(md);
         assert!(html.contains("&lt;div onclick=&quot;alert(1)&quot;&gt;bad&lt;/div&gt;"));
         assert!(!html.contains("<div onclick"));
+    }
+
+    #[test]
+    fn exports_omit_remote_images_but_keep_documentation_links() {
+        let html = markdown_to_html("![Remote](https://example.test/image.png)\n![Remote](//example.test/image.png)\n<img src=\"https://example.test/image.png\">\n[Docs](https://example.test/docs)");
+        assert!(!html.contains("<img"));
+        assert!(html.contains("href=\"https://example.test/docs\""));
     }
 
     #[test]

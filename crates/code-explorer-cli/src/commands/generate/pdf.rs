@@ -5,16 +5,11 @@
 //! - **Knowledge graph**: reads docs from `.codeexplorer/docs/`, same pipeline as `generate docx`.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
-use tracing::info;
 
 use super::markdown::{html_escape, markdown_to_html};
-
-// ─── Embedded print-pdf.js ────────────────────────────────────────────────
-const PRINT_PDF_JS: &str = include_str!("print-pdf.js");
 
 // ─── Public entry points ──────────────────────────────────────────────────
 
@@ -111,21 +106,11 @@ fn generate_pdf(
     let toc_html = build_toc_html(&toc_entries);
     let html = build_full_html(metadata, &toc_html, &full_body);
 
-    // Step 4: Write HTML to temp file
-    let temp_dir = std::env::temp_dir();
-    let html_path = temp_dir.join("code-explorer-pdf-temp.html");
-    std::fs::write(&html_path, &html)
-        .with_context(|| format!("Cannot write temp HTML to {}", html_path.display()))?;
-
-    info!("Wrote intermediate HTML to {}", html_path.display());
-
-    // Step 5: Run Playwright to convert HTML → PDF
-    let result = run_playwright(&html_path, output_path);
-
-    // Step 6: Cleanup temp file
-    let _ = std::fs::remove_file(&html_path);
-
-    result?;
+    // Unique temporary directory: concurrent exports cannot overwrite one another.
+    let temp = tempfile::tempdir()?;
+    let html_path = temp.path().join("document.html");
+    std::fs::write(&html_path, &html)?;
+    super::super::local_render::render_pdf(&html_path, output_path)?;
 
     let file_size = std::fs::metadata(output_path).map(|m| m.len()).unwrap_or(0);
     let size_str = if file_size > 1_048_576 {
@@ -280,8 +265,7 @@ fn extract_table_value(row: &str) -> String {
 }
 
 fn sanitize_pdf_markdown(content: &str) -> String {
-    content
-        .replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FE0F}'], "")
+    content.replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FE0F}'], "")
 }
 
 fn chrono_date() -> String {
@@ -470,7 +454,8 @@ fn build_full_html(metadata: &PdfMetadata, toc_html: &str, body_html: &str) -> S
 <head>
   <meta charset="UTF-8">
   <title>{title}</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: file:; font-src data:">
+  <script>{mermaid_js}</script>
   <style>
 {css}
   </style>
@@ -508,6 +493,8 @@ fn build_full_html(metadata: &PdfMetadata, toc_html: &str, body_html: &str) -> S
         toc_html = toc_html,
         body_html = body_html,
         mermaid_bootstrap = MERMAID_BOOTSTRAP_JS,
+        mermaid_js =
+            code_explorer_output::assets::inline_script(code_explorer_output::assets::MERMAID_JS),
     )
 }
 
@@ -888,7 +875,7 @@ const CSS_CORPORATE: &str = r#"
 
 const MERMAID_BOOTSTRAP_JS: &str = r#"
     (function () {
-      window.__code-explorerMermaidReady = false;
+      window.__codeExplorerMermaidReady = false;
 
       function createCodeBlock(source) {
         var pre = document.createElement('pre');
@@ -947,7 +934,7 @@ const MERMAID_BOOTSTRAP_JS: &str = r#"
 
       if (!window.mermaid) {
         document.querySelectorAll('.mermaid-figure').forEach(revealSource);
-        window.__code-explorerMermaidReady = true;
+        window.__codeExplorerMermaidReady = true;
         return;
       }
 
@@ -971,121 +958,12 @@ const MERMAID_BOOTSTRAP_JS: &str = r#"
           document.querySelectorAll('.mermaid-figure').forEach(revealSource);
         })
         .finally(function () {
-          window.__code-explorerMermaidReady = true;
+          window.__codeExplorerMermaidReady = true;
         });
     })();
 "#;
 
 // ─── Playwright orchestration ─────────────────────────────────────────────
-
-fn run_playwright(html_path: &Path, output_path: &Path) -> Result<()> {
-    // Write the bundled print-pdf.js to a temp file
-    let temp_dir = std::env::temp_dir();
-    let js_path = temp_dir.join("code-explorer-print-pdf.js");
-    std::fs::write(&js_path, PRINT_PDF_JS)
-        .with_context(|| "Cannot write print-pdf.js to temp directory")?;
-
-    // Find node and global node_modules
-    let node = find_node()?;
-    let node_path = find_global_node_modules();
-
-    println!("{} Running Playwright (Chromium headless)...", ">>".blue());
-
-    let mut cmd = Command::new(&node);
-    cmd.arg(js_path.to_str().unwrap_or(""))
-        .arg(html_path.to_str().unwrap_or(""))
-        .arg(output_path.to_str().unwrap_or(""));
-
-    // Set NODE_PATH so globally installed playwright can be found
-    if let Some(ref np) = node_path {
-        cmd.env("NODE_PATH", np);
-    }
-
-    let output = cmd
-        .output()
-        .with_context(|| format!("Failed to run: {} print-pdf.js", node))?;
-
-    // Cleanup JS temp file
-    let _ = std::fs::remove_file(&js_path);
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if !stdout.is_empty() {
-        info!("Playwright stdout: {}", stdout.trim());
-        println!("   {}", stdout.trim());
-    }
-
-    if !output.status.success() {
-        let err_msg = if stderr.contains("Cannot find module 'playwright'") {
-            format!(
-                "Playwright is not installed. Run:\n  npm install -g playwright\n  npx playwright install chromium\n\nOriginal error: {}",
-                stderr.trim()
-            )
-        } else if stderr.contains("Executable doesn't exist")
-            || stderr.contains("browserType.launch")
-        {
-            format!(
-                "Chromium browser not installed for Playwright. Run:\n  npx playwright install chromium\n\nOriginal error: {}",
-                stderr.trim()
-            )
-        } else {
-            format!(
-                "Playwright failed (exit {}): {}",
-                output.status,
-                stderr.trim()
-            )
-        };
-        bail!("{}", err_msg);
-    }
-
-    Ok(())
-}
-
-fn find_node() -> Result<String> {
-    // Try 'node' in PATH
-    let check = if cfg!(windows) {
-        Command::new("where").arg("node").output()
-    } else {
-        Command::new("which").arg("node").output()
-    };
-
-    match check {
-        Ok(output) if output.status.success() => Ok("node".to_string()),
-        _ => {
-            // On Windows, try common paths
-            if cfg!(windows) {
-                let common_paths = [
-                    r"C:\Program Files\nodejs\node.exe",
-                    r"C:\Program Files (x86)\nodejs\node.exe",
-                ];
-                for path in &common_paths {
-                    if Path::new(path).exists() {
-                        return Ok(path.to_string());
-                    }
-                }
-            }
-            bail!(
-                "Node.js not found. PDF generation requires Node.js.\n\
-                 Install from: https://nodejs.org/\n\
-                 Then install Playwright: npm install -g playwright && npx playwright install chromium"
-            )
-        }
-    }
-}
-
-/// Discover the global node_modules directory for NODE_PATH.
-fn find_global_node_modules() -> Option<String> {
-    let npm_cmd = if cfg!(windows) { "npm.cmd" } else { "npm" };
-    let output = Command::new(npm_cmd).args(["root", "-g"]).output().ok()?;
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !path.is_empty() && Path::new(&path).exists() {
-            return Some(path);
-        }
-    }
-    None
-}
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 
@@ -1207,7 +1085,7 @@ mod tests {
         );
 
         assert!(html.contains("securityLevel: 'strict'"));
-        assert!(html.contains("__code-explorerMermaidReady"));
+        assert!(html.contains("__codeExplorerMermaidReady"));
         assert!(html.contains("mermaid-source"));
         assert!(html.contains("data-document-profile=\"technical-book\""));
         assert!(html.contains("diagramLabel"));

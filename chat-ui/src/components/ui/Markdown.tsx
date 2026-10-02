@@ -129,6 +129,10 @@ function isMermaidLanguage(language: string | undefined): boolean {
 }
 
 const baseComponents: Components = {
+  img({ src, alt }) {
+    const local = src && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src);
+    return local ? <img src={src} alt={alt} /> : <span>{alt || 'Image distante omise'}</span>;
+  },
   code(props) {
     const { className, children, ...rest } = props;
     const match = /language-([^\s]+)/.exec(className ?? '');

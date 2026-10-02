@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod json;
 pub mod markdown;
 pub mod obsidian;

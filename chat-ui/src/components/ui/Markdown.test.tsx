@@ -152,3 +152,13 @@ describe('Markdown source references', () => {
     expect(linked).not.toContain('code-explorer-source:');
   });
 });
+
+// A repository/model-supplied image must not trigger a third-party request.
+describe('offline images', () => {
+  it('keeps remote images as text and documentation links clickable', () => {
+    const { container } = render(<Markdown>{'![Architecture](https://example.test/diagram.png)\n\n[Documentation](https://example.test/docs)'}</Markdown>);
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Architecture')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Documentation' }).getAttribute('href')).toBe('https://example.test/docs');
+  });
+});

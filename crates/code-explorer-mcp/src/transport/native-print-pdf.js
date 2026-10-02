@@ -18,11 +18,19 @@ async function printPdf(htmlPath, pdfPath) {
   });
 
   try {
-    const page = await browser.newPage({ viewport: { width: 1240, height: 1754 } });
+    const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1240, height: 1754 } });
+    const attempted = [];
+    await context.route(/^https?:\/\//i, route => {
+      attempted.push(route.request().url());
+      return route.abort('blockedbyclient');
+    });
+    const page = await context.newPage();
     const fileUrl = `file://${path.resolve(htmlPath)}`;
     await page.goto(fileUrl, { waitUntil: "networkidle", timeout: 60000 });
     await page.emulateMedia({ media: "print" });
     await waitForPrintableAssets(page);
+
+    if (attempted.length) throw new Error("External requests blocked: " + attempted.join(", "));
 
     await page.pdf({
       path: pdfPath,

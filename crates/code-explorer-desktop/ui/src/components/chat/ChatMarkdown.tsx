@@ -516,6 +516,10 @@ const createMarkdownComponents = (
   onNavigateToNode?: (id: string) => void,
   onFilePreview?: (file: { path: string; startLine?: number; endLine?: number }) => void,
 ): Partial<Components> => ({
+  img: ({ src, alt }) => {
+    const local = src && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src);
+    return local ? <img src={src} alt={alt} /> : <span>{alt || "Remote image omitted"}</span>;
+  },
   pre: ({ children }: { children?: React.ReactNode }) => {
     const child = children as React.ReactElement<{ className?: string; children?: React.ReactNode }>;
     const className = child?.props?.className ?? "";

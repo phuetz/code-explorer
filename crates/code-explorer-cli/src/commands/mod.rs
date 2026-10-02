@@ -17,6 +17,7 @@ pub mod generate_aspnet;
 pub mod hotspots;
 pub mod impact_cmd;
 pub mod list;
+mod local_render;
 pub mod mcp;
 pub mod mcp_install;
 pub mod ownership_cmd;

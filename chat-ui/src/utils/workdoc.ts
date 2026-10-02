@@ -1,3 +1,4 @@
+import mermaidExportScript from '../../../assets/vendor/mermaid.min.js?raw';
 import type { WorkDocument, WorkDocumentQuestion } from '../types/chat';
 import { repairMermaidSource } from './mermaid';
 import { reformulateChatPrompt } from './prompt-rewrite';
@@ -519,7 +520,8 @@ export function buildWorkDocumentPrintableHtml(
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:" />
+  <script>${mermaidExportScript.replace(/<\/script/gi, '<\\/script')}</script>
   <style>
     * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     html { color-scheme: light; }

@@ -54,6 +54,7 @@ uuid.workspace = true
 walkdir.workspace = true
 # JSON repair fallback for malformed LLM responses (phase 3 enrichment hardening)
 jsonrepair = "0.1"
+tempfile = "3"
 
 # OAuth Authorization Code + PKCE flow for "code-explorer login" — lets users
 # authenticate with their ChatGPT Pro / Plus subscription and consume the

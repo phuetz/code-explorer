@@ -1,7 +1,7 @@
 //! HTML site generator.
 
 use std::collections::{BTreeMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
@@ -342,8 +342,6 @@ pub(super) fn generate_html_site(
         &backlinks_json,
     );
 
-    ensure_local_mermaid_asset(docs_dir)?;
-
     // 8. Write output
     let out_path = docs_dir.join("index.html");
     std::fs::write(&out_path, &final_html)?;
@@ -411,59 +409,6 @@ fn redact_token_prefix(input: &str, prefix: &str, min_len: usize) -> String {
 
     out.push_str(&input[cursor..]);
     out
-}
-
-fn ensure_local_mermaid_asset(docs_dir: &Path) -> Result<()> {
-    let target = docs_dir.join("mermaid.min.js");
-    if target.exists() {
-        return Ok(());
-    }
-
-    if let Some(source) = find_local_mermaid_asset() {
-        std::fs::copy(source, &target)?;
-        println!("  {} mermaid.min.js (offline diagrams)", "OK".green());
-        return Ok(());
-    }
-
-    println!(
-        "  {} For offline diagrams, download mermaid.min.js to {}",
-        "TIP".cyan(),
-        docs_dir.display()
-    );
-    Ok(())
-}
-
-fn find_local_mermaid_asset() -> Option<PathBuf> {
-    workspace_roots_for_assets()
-        .into_iter()
-        .flat_map(|root| mermaid_asset_candidates(&root))
-        .find(|path| path.is_file())
-}
-
-fn workspace_roots_for_assets() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(current_dir) = std::env::current_dir() {
-        roots.push(current_dir);
-    }
-
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(root) = manifest_dir.parent().and_then(Path::parent) {
-        roots.push(root.to_path_buf());
-    }
-
-    roots.sort();
-    roots.dedup();
-    roots
-}
-
-fn mermaid_asset_candidates(root: &Path) -> Vec<PathBuf> {
-    [
-        "chat-ui/node_modules/mermaid/dist/mermaid.min.js",
-        "crates/code-explorer-desktop/ui/node_modules/mermaid/dist/mermaid.min.js",
-    ]
-    .into_iter()
-    .map(|relative| root.join(relative))
-    .collect()
 }
 
 fn load_json_file(path: &Path, fallback: Value) -> Result<Value> {
@@ -1059,14 +1004,9 @@ fn build_html_template(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{project_name} — Documentation</title>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="mermaid.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';s.onload=function(){{if(typeof mermaid!=='undefined'){{mermaid.initialize({{theme:'dark',startOnLoad:false,securityLevel:'loose'}});renderMermaid();}}}};document.head.appendChild(s);"></script>
-  <link rel="stylesheet" href="hljs-dark.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css'">
-  <script src="hljs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js'"></script>
-  <script src="hljs-csharp.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/csharp.min.js'"></script>
-  <script src="hljs-js.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js'"></script>
-  <script src="hljs-xml.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js'"></script>
-  <script src="hljs-sql.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js'"></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'">
+  <script>{lucide_js}</script>
+  <script>{mermaid_js}</script>
   <style>
     [data-theme="light"] .hljs {{ background: var(--bg-surface); }}
     :root {{
@@ -3085,7 +3025,7 @@ fn build_html_template(
       html.setAttribute('data-theme', next);
       localStorage.setItem('theme', next);
       if (typeof mermaid !== 'undefined') {{
-        mermaid.initialize({{ theme: next === 'dark' ? 'dark' : 'default', startOnLoad: false, securityLevel: 'loose' }});
+        mermaid.initialize({{ theme: next === 'dark' ? 'dark' : 'default', startOnLoad: false, securityLevel: 'strict' }});
         renderMermaid();
       }}
     }}
@@ -3098,7 +3038,7 @@ fn build_html_template(
       updateGeneratedAt();
       if (typeof mermaid !== 'undefined') {{
         const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'default' : 'dark';
-        mermaid.initialize({{ theme, startOnLoad: false, securityLevel: 'loose' }});
+        mermaid.initialize({{ theme, startOnLoad: false, securityLevel: 'strict' }});
       }}
       buildDynamicSidebar();
       buildToc();
@@ -3131,7 +3071,11 @@ fn build_html_template(
   <button id="back-to-top" onclick="document.getElementById('content').scrollTop=0"
           aria-label="Retour en haut de page">&#8593; Haut</button>
 </body>
-</html>"##
+</html>"##,
+        lucide_js =
+            code_explorer_output::assets::inline_script(code_explorer_output::assets::LUCIDE_JS),
+        mermaid_js =
+            code_explorer_output::assets::inline_script(code_explorer_output::assets::MERMAID_JS),
     )
 }
 
@@ -3139,6 +3083,7 @@ fn build_html_template(
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_test_dir(name: &str) -> PathBuf {
@@ -3146,7 +3091,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("code-explorer-{name}-{}-{nanos}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "code-explorer-{name}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 
     #[test]
@@ -3548,17 +3496,6 @@ mod tests {
     }
 
     #[test]
-    fn mermaid_asset_candidates_include_local_ui_dependencies() {
-        let candidates = mermaid_asset_candidates(std::path::Path::new("workspace"));
-
-        assert!(candidates
-            .iter()
-            .any(|path| path.ends_with("chat-ui/node_modules/mermaid/dist/mermaid.min.js")));
-        assert!(candidates.iter().any(|path| path
-            .ends_with("crates/code-explorer-desktop/ui/node_modules/mermaid/dist/mermaid.min.js")));
-    }
-
-    #[test]
     fn html_template_includes_syntax_highlight_fallback() {
         let html = build_html_template(
             "sample",
@@ -3596,7 +3533,14 @@ mod tests {
         assert!(html.contains("--font: -apple-system"));
         assert!(html.contains("flex-direction: column"));
         assert!(html.contains(".message.assistant { background: var(--bg-sidebar);"));
-        assert!(!html.contains("flexDirection"));
+        let css = html
+            .split("  <style>")
+            .nth(1)
+            .unwrap()
+            .split("</style>")
+            .next()
+            .unwrap();
+        assert!(!css.contains("flexDirection"));
         assert!(!html.contains("var(--bg-3)"));
     }
 

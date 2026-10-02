@@ -1,5 +1,5 @@
 //! HTML interactive export — produces a single self-contained HTML file
-//! that renders the active repo's graph using Sigma.js loaded from a CDN.
+//! that renders the active repo's graph using locally embedded Sigma.js.
 //!
 //! No Tauri / no Code Explorer runtime needed to view it — drop the file in any
 //! browser. Useful for sharing a snapshot of the architecture with someone
@@ -101,7 +101,11 @@ pub async fn export_interactive_html(
     let nodes_json = serde_json::to_string(&exported_nodes).map_err(|e| e.to_string())?;
     let edges_json = serde_json::to_string(&exported_edges).map_err(|e| e.to_string())?;
 
-    let html = build_html(&repo_path, &nodes_json, &edges_json);
+    let html = build_html(
+        &repo_path,
+        &nodes_json.replace("</", "<\\/"),
+        &edges_json.replace("</", "<\\/"),
+    );
 
     let out_path = request
         .out_path
@@ -145,8 +149,7 @@ pub async fn export_interactive_html(
 }
 
 fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
-    // Single self-contained HTML; uses graphology + sigma from a CDN.
-    // Layout is computed client-side on first paint with ForceAtlas2.
+    // Single self-contained HTML; all graph and layout libraries are embedded.
     //
     // SECURITY: hover info is rendered with textContent (never innerHTML),
     // so node labels containing arbitrary characters cannot inject markup.
@@ -159,6 +162,7 @@ fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:">
 <title>Code Explorer — {escaped_label}</title>
 <style>
   html, body {{ margin: 0; padding: 0; height: 100%; background: #1a1b26; color: #c0caf5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
@@ -187,9 +191,9 @@ fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
   </div>
   <div class="footer">Self-contained snapshot — no Code Explorer runtime needed.</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/graphology@0.26.0/dist/graphology.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/graphology-layout-forceatlas2@0.10.1/build/graphology-layout-forceatlas2.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sigma@3.0.2/build/sigma.min.js"></script>
+  <script>{graphology_js}</script>
+  <script>{forceatlas2_js}</script>
+  <script>{sigma_js}</script>
   <script>
     const NODES = {nodes_json};
     const EDGES = {edges_json};
@@ -211,8 +215,8 @@ fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
         color: KIND_COLORS[n.kind] || '#a9b1d6',
         kind: n.kind,
         file: n.file,
-        x: Math.cos(idx) * 200,
-        y: Math.sin(idx) * 200,
+        x: Math.cos(idx * 2 * Math.PI / Math.max(NODES.length, 1)) * 200,
+        y: Math.sin(idx * 2 * Math.PI / Math.max(NODES.length, 1)) * 200,
       }});
     }});
     EDGES.forEach((e, i) => {{
@@ -223,7 +227,6 @@ fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
 
     document.getElementById('stats').textContent = g.order + ' nodes · ' + g.size + ' edges';
 
-    // Layout (synchronous, capped iterations).
     graphologyLibrary.ForceAtlas2.assign(g, {{
       iterations: 80,
       settings: {{ gravity: 1, scalingRatio: 8, slowDown: 5, barnesHutOptimize: g.order > 500 }},
@@ -261,7 +264,15 @@ fn build_html(repo_label: &str, nodes_json: &str, edges_json: &str) -> String {
   </script>
 </body>
 </html>
-"#
+"#,
+        graphology_js = code_explorer_output::assets::inline_script(
+            code_explorer_output::assets::GRAPHOLOGY_JS
+        ),
+        forceatlas2_js = code_explorer_output::assets::inline_script(
+            code_explorer_output::assets::FORCEATLAS2_JS
+        ),
+        sigma_js =
+            code_explorer_output::assets::inline_script(code_explorer_output::assets::SIGMA_JS),
     )
 }
 
@@ -271,7 +282,15 @@ mod tests {
 
     #[test]
     fn test_build_html_contains_data() {
-        let html = build_html("foo", "[]", "[]");
+        let html = build_html(
+            "foo",
+            r#"[{"id":"A","label":"Service","kind":"Function","file":"service.ts"},{"id":"B","label":"Store","kind":"Function","file":"store.ts"}]"#,
+            r#"[{"source":"A","target":"B","kind":"Calls"}]"#,
+        );
+        assert!(!html.contains("<script src="));
+        if let Ok(path) = std::env::var("CODE_EXPLORER_HTML_EXPORT_FIXTURE") {
+            std::fs::write(path, &html).unwrap();
+        }
         assert!(html.contains("Code Explorer"));
         assert!(html.contains("Sigma"));
         assert!(html.contains("foo"));

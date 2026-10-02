@@ -1,6 +1,8 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  server: { fs: { allow: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('../assets/vendor', import.meta.url))] } },
   test: {
     environment: 'jsdom',
     globals: true,

@@ -198,6 +198,7 @@ function printableHtml(session: Session, metadata: ExportMetadata, transcriptHtm
   return `<!doctype html>
 <html lang="fr">
 <head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:" />
   <meta charset="utf-8" />
   <title>${escapeHtml(session.title || 'Conversation Code Explorer')}</title>
   <style>
