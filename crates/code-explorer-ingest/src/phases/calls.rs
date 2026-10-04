@@ -283,15 +283,17 @@ fn build_field_type_map(
     map
 }
 
-fn build_ts_type_envs(
-    file_entries: &[crate::phases::structure::FileEntry],
-    ts_external_imported_type_names: &HashMap<String, HashSet<String>>,
-) -> (
+type TsTypeEnvs = (
     HashMap<String, TypeEnvironment>,
     HashMap<String, HashSet<String>>,
     HashMap<String, HashSet<String>>,
     HashMap<String, Vec<TsScopeRange>>,
-) {
+);
+
+fn build_ts_type_envs(
+    file_entries: &[crate::phases::structure::FileEntry],
+    ts_external_imported_type_names: &HashMap<String, HashSet<String>>,
+) -> TsTypeEnvs {
     let mut envs = HashMap::new();
     let mut callable_parameter_names = HashMap::new();
     let mut opaque_local_callable_names = HashMap::new();
@@ -2593,15 +2595,15 @@ fn is_ts_type_only_module_export(
 
     if let Some(bindings) = named_import_map.get(module_file) {
         if let Some(binding) = bindings.get(exported_name) {
-            if binding.is_type_only {
-                saw_type_only = true;
-            } else if is_ts_type_only_module_export(
-                &binding.source_path,
-                &binding.exported_name,
-                named_import_map,
-                re_export_map,
-                visited,
-            ) {
+            if binding.is_type_only
+                || is_ts_type_only_module_export(
+                    &binding.source_path,
+                    &binding.exported_name,
+                    named_import_map,
+                    re_export_map,
+                    visited,
+                )
+            {
                 saw_type_only = true;
             } else {
                 saw_runtime = true;
@@ -3151,6 +3153,7 @@ fn add_type_defs(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_module_export_type_defs(
     symbol_table: &SymbolTable,
     named_import_map: &NamedImportMap,

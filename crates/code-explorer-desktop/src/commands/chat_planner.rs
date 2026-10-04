@@ -667,7 +667,7 @@ pub async fn chat_pick_modules(
         });
     }
 
-    results.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+    results.sort_by_key(|b| std::cmp::Reverse(b.member_count));
     results.truncate(limit);
     Ok(results)
 }

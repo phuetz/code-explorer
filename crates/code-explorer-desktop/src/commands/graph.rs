@@ -320,7 +320,7 @@ pub async fn get_features(
     }
 
     // Sort by member count descending
-    features.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+    features.sort_by_key(|b| std::cmp::Reverse(b.member_count));
 
     // Cap at 50 communities to keep the sidebar panel performant and avoid
     // overwhelming the user with low-member groups.

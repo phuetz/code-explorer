@@ -68,7 +68,7 @@ pub async fn saved_queries_save(
     // Upsert by id.
     file.queries.retain(|q| q.id != query.id);
     file.queries.push(query);
-    file.queries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    file.queries.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     save(&path, &file)?;
     Ok(file.queries)
 }

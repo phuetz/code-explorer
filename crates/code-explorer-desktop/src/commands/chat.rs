@@ -3920,7 +3920,7 @@ fn gather_project_meta(graph: &KnowledgeGraph, repo_path: &Path) -> ProjectMeta 
 
     // Top 3 languages
     let mut langs: Vec<(String, usize)> = by_lang.into_iter().collect();
-    langs.sort_by(|a, b| b.1.cmp(&a.1));
+    langs.sort_by_key(|b| std::cmp::Reverse(b.1));
     langs.truncate(3);
 
     let repo_name = repo_path
@@ -3962,7 +3962,7 @@ fn top_communities(graph: &KnowledgeGraph, limit: usize) -> Vec<CommunitySummary
         })
         .collect();
 
-    communities.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+    communities.sort_by_key(|b| std::cmp::Reverse(b.member_count));
     communities.truncate(limit);
     communities
 }
@@ -3980,7 +3980,7 @@ fn top_processes(graph: &KnowledgeGraph, limit: usize) -> Vec<ProcessSummary> {
         })
         .collect();
 
-    processes.sort_by(|a, b| b.step_count.cmp(&a.step_count));
+    processes.sort_by_key(|b| std::cmp::Reverse(b.step_count));
     processes.truncate(limit);
     processes
 }

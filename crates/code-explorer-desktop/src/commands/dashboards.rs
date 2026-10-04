@@ -95,7 +95,7 @@ pub async fn dashboard_list(state: State<'_, AppState>) -> Result<Vec<DashboardS
             updated_at: d.updated_at,
         });
     }
-    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    out.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     Ok(out)
 }
 

@@ -70,7 +70,7 @@ pub async fn export_interactive_html(
         .iter_nodes()
         .map(|n| (&n.id, *node_degree.get(&n.id).unwrap_or(&0)))
         .collect();
-    all_nodes.sort_by(|a, b| b.1.cmp(&a.1));
+    all_nodes.sort_by_key(|b| std::cmp::Reverse(b.1));
     let kept_ids: std::collections::HashSet<String> = all_nodes
         .iter()
         .take(max_nodes)

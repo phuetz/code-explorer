@@ -622,7 +622,7 @@ fn skip_group(content: &str, open: usize, left: u8, right: u8) -> usize {
     i
 }
 
-fn ident_at<'a>(tokens: &'a [Tok], i: usize) -> Option<&'a str> {
+fn ident_at(tokens: &[Tok], i: usize) -> Option<&str> {
     match tokens.get(i).map(|t| &t.kind) {
         Some(Kind::Ident(name)) => Some(name.as_str()),
         _ => None,

@@ -122,19 +122,12 @@ enum Loc {
 }
 
 #[derive(Clone)]
+#[derive(Default)]
 struct WsInherit {
     root: String,
     deps: Vec<(String, String)>,
 }
 
-impl Default for WsInherit {
-    fn default() -> Self {
-        Self {
-            root: String::new(),
-            deps: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct RustWorkspace {
@@ -375,13 +368,12 @@ impl RustWorkspace {
             }
         }
         // `inner::f()` at file scope: parent of the inline mod is None.
-        if scope.is_none() {
-            if facts.inline_mods.iter().any(|m| {
+        if scope.is_none()
+            && facts.inline_mods.iter().any(|m| {
                 m.parent.is_none() && m.name == base && m.functions.iter().any(|f| f == called_name)
             }) {
                 return link_same_file(symbols, from_file, called_name);
             }
-        }
         None
     }
 
@@ -528,7 +520,7 @@ impl RustWorkspace {
                     for re in &facts.pub_uses {
                         // Explicit `pub use path::Type` only. A glob would pull every
                         // type of the target file and relink `Vec::new`-shaped calls.
-                        let exported = type_names.iter().any(|n| re.exported == *n);
+                        let exported = type_names.contains(&re.exported);
                         if !exported {
                             continue;
                         }
@@ -753,6 +745,7 @@ impl RustWorkspace {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn resolve_locations(
         &self,
         from_file: &str,
@@ -919,7 +912,7 @@ impl RustWorkspace {
                 }
             }
         }
-        out.sort_by(|a, b| loc_key(a).cmp(&loc_key(b)));
+        out.sort_by_key(loc_key);
         out.dedup_by(|a, b| loc_key(a) == loc_key(b));
         (out, ambiguous)
     }
@@ -1155,9 +1148,7 @@ impl RustWorkspace {
             both.extend(uncertain);
             return (self.files_of_decls(module_file, name, &both), true);
         }
-        let chosen: Vec<&ModDecl> = if uncertain.is_empty() {
-            active
-        } else if active.len() == 1 {
+        let chosen: Vec<&ModDecl> = if uncertain.is_empty() || active.len() == 1 {
             active
         } else {
             uncertain
@@ -2110,9 +2101,7 @@ fn normalize_rel(path: &str) -> Option<String> {
             continue;
         }
         if seg == ".." {
-            if stack.pop().is_none() {
-                return None;
-            }
+            stack.pop()?;
             continue;
         }
         stack.push(seg);
@@ -2292,7 +2281,7 @@ fn params_in(list: &str) -> Vec<(String, String)> {
         let name = tokens
             .pop()
             .unwrap_or("")
-            .trim_end_matches(|c| c == '?' || c == '!');
+            .trim_end_matches(['?', '!']);
         let type_token = tokens.pop().unwrap_or("");
         let type_name = type_leaf(type_token);
         if is_ident(name) && is_type_name(type_name) {
@@ -2314,12 +2303,12 @@ fn strip_attributes(mut text: &str) -> &str {
 }
 
 fn type_leaf(token: &str) -> &str {
-    let token = token.trim_end_matches(|c| matches!(c, '?' | '!' | ']' | '['));
+    let token = token.trim_end_matches(['?', '!', ']', '[']);
     token
         .rsplit(['.', ':'])
         .next()
         .unwrap_or(token)
-        .trim_end_matches(|c| matches!(c, '?' | '!' | ']' | '['))
+        .trim_end_matches(['?', '!', ']', '['])
 }
 
 fn is_ident(name: &str) -> bool {
@@ -2345,8 +2334,8 @@ fn is_type_name(name: &str) -> bool {
 /// C# methods of `type_name` (exact class/struct/interface name, else one
 /// leading `I` stripped) named `method_name`. Several distinct nodes stay
 /// ambiguous.
-pub fn csharp_methods_of_type<'a>(
-    symbols: &'a SymbolTable,
+pub fn csharp_methods_of_type(
+    symbols: &SymbolTable,
     type_name: &str,
     method_name: &str,
 ) -> Vec<Arc<SymbolDefinition>> {

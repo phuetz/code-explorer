@@ -303,7 +303,7 @@ fn run_global(
 
         // Show top dead code
         let mut dead_classes: Vec<_> = class_stats.iter().filter(|c| c.dead_count > 0).collect();
-        dead_classes.sort_by(|a, b| b.dead_count.cmp(&a.dead_count));
+        dead_classes.sort_by_key(|b| std::cmp::Reverse(b.dead_count));
         if !dead_classes.is_empty() {
             println!("  {} Top dead code candidates:", "?".purple());
             for c in dead_classes.iter().take(10) {

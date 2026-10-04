@@ -205,7 +205,7 @@ impl App {
                 });
             }
         }
-        communities.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+        communities.sort_by_key(|b| std::cmp::Reverse(b.member_count));
 
         // Build processes list
         let mut processes: Vec<ProcessItem> = Vec::new();
@@ -219,7 +219,7 @@ impl App {
                 });
             }
         }
-        processes.sort_by(|a, b| b.step_count.cmp(&a.step_count));
+        processes.sort_by_key(|b| std::cmp::Reverse(b.step_count));
 
         let mut app = App {
             graph,

@@ -222,6 +222,7 @@ pub fn extract_entry_points(graph: &mut KnowledgeGraph, files: &[FileEntry]) -> 
     stats
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_node(
     graph: &mut KnowledgeGraph,
     label: NodeLabel,

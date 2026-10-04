@@ -956,6 +956,142 @@ pub(super) fn is_default_export_statement(node: tree_sitter::Node, content: &[u8
 
 /// Create a definition node and a DEFINES edge from the file to it.
 #[allow(clippy::too_many_arguments)]
+/// Source of a definition plus the comment glued to it, capped so a generated
+/// file cannot flood the index. The cap is on a char boundary.
+fn definition_source(def_node: tree_sitter::Node, content: &[u8]) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if let Some(prev) = def_node.prev_sibling() {
+        if prev.kind() == "comment" {
+            if let Ok(comment) = prev.utf8_text(content) {
+                parts.push(comment);
+            }
+        }
+    }
+    if let Ok(body) = def_node.utf8_text(content) {
+        parts.push(body);
+    }
+    let mut text = parts.join("\n");
+    if text.len() > 12_000 {
+        let mut end = 12_000;
+        while !text.is_char_boundary(end) && end > 0 {
+            end -= 1;
+        }
+        text.truncate(end);
+    }
+    text
+}
+
+/// Lines of natural language inside comments and string literals.
+/// Code identifiers stay in the symbol name; they are not copied into the body.
+fn prose_lines(source: &str) -> Vec<String> {
+    let chars: Vec<char> = source.chars().collect();
+    let mut chunks: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '/' && i + 1 < chars.len() && chars[i + 1] == '/' {
+            i += 2;
+            let start = i;
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+            chunks.push(chars[start..i].iter().collect());
+            continue;
+        }
+        if chars[i] == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
+            i += 2;
+            let start = i;
+            while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            chunks.push(chars[start..i].iter().collect());
+            if i + 1 < chars.len() {
+                i += 2;
+            }
+            continue;
+        }
+        if chars[i] == '`' {
+            i += 1;
+            let mut buf = String::new();
+            while i < chars.len() && chars[i] != '`' {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    buf.push(chars[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if chars[i] == '$' && i + 1 < chars.len() && chars[i + 1] == '{' {
+                    i += 2;
+                    let mut depth = 1;
+                    while i < chars.len() && depth > 0 {
+                        if chars[i] == '{' {
+                            depth += 1;
+                        } else if chars[i] == '}' {
+                            depth -= 1;
+                        }
+                        if depth > 0 {
+                            i += 1;
+                        }
+                    }
+                    if i < chars.len() && chars[i] == '}' {
+                        i += 1;
+                    }
+                    buf.push(' ');
+                    continue;
+                }
+                buf.push(chars[i]);
+                i += 1;
+            }
+            chunks.push(buf);
+            if i < chars.len() && chars[i] == '`' {
+                i += 1;
+            }
+            continue;
+        }
+        if chars[i] == '"' || chars[i] == '\'' {
+            let quote = chars[i];
+            i += 1;
+            let mut buf = String::new();
+            while i < chars.len() && chars[i] != quote && chars[i] != '\n' {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    buf.push(chars[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                buf.push(chars[i]);
+                i += 1;
+            }
+            chunks.push(buf);
+            if i < chars.len() && chars[i] == quote {
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+
+    let mut lines = Vec::new();
+    for chunk in chunks {
+        for raw in chunk.split(['\n', '\r']) {
+            let line = raw
+                .trim()
+                .trim_matches(|c: char| c == '*' || c == '/' || c == '#')
+                .trim();
+            let words = line
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|word| word.chars().count() >= 3)
+                .count();
+            if words < 2 {
+                continue;
+            }
+            lines.push(line.chars().take(180).collect());
+            if lines.len() == 48 {
+                return lines;
+            }
+        }
+    }
+    lines
+}
+
+#[allow(clippy::too_many_arguments)]
 fn create_definition_node(
     label: NodeLabel,
     name: &str,
@@ -1008,48 +1144,35 @@ fn create_definition_node(
     };
 
     let mut keywords = None;
-    if matches!(label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Const) {
+    let mut description = None;
+    if matches!(
+        label,
+        NodeLabel::Function
+            | NodeLabel::Method
+            | NodeLabel::Class
+            | NodeLabel::Const
+            | NodeLabel::Interface
+            | NodeLabel::TypeAlias
+    ) {
         let def_node = node.parent().unwrap_or(*node);
-        if let Ok(text) = def_node.utf8_text(file.content.as_bytes()) {
-            let truncated = if text.len() > 10000 {
-                // Find nearest char boundary
-                let mut end = 10000;
-                while !text.is_char_boundary(end) && end > 0 {
-                    end -= 1;
-                }
-                &text[..end]
-            } else {
-                text
-            };
-            
+        let text = definition_source(def_node, file.content.as_bytes());
+        let lines = prose_lines(&text);
+        if !lines.is_empty() {
             let mut tokens = Vec::new();
-            let mut current_token = String::new();
-            let mut last_was_uppercase = false;
-            for c in truncated.chars() {
-                if !c.is_alphanumeric() {
-                    if current_token.len() > 1 {
-                        tokens.push(current_token.to_lowercase());
+            for line in &lines {
+                for token in code_explorer_db::inmemory::fts::tokenize(line) {
+                    if token.len() > 1 && !tokens.contains(&token) {
+                        tokens.push(token);
                     }
-                    current_token.clear();
-                    last_was_uppercase = false;
-                } else {
-                    let is_upper = c.is_uppercase();
-                    if is_upper && !current_token.is_empty() && !last_was_uppercase {
-                        if current_token.len() > 1 {
-                            tokens.push(current_token.to_lowercase());
-                        }
-                        current_token.clear();
+                    if tokens.len() == 60 {
+                        break;
                     }
-                    current_token.push(c);
-                    last_was_uppercase = is_upper;
+                }
+                if tokens.len() == 60 {
+                    break;
                 }
             }
-            if current_token.len() > 1 {
-                tokens.push(current_token.to_lowercase());
-            }
-
-            tokens.sort();
-            tokens.dedup();
+            description = Some(lines.join("\n"));
             if !tokens.is_empty() {
                 keywords = Some(tokens);
             }
@@ -1069,6 +1192,7 @@ fn create_definition_node(
             parameter_count,
             complexity,
             keywords,
+            description,
             ..Default::default()
         },
     };
@@ -2179,6 +2303,45 @@ mod tests {
         assert_eq!(func.properties.name, "greet");
         // Note: original queries don't capture parameter count directly
         // Parameter count extraction happens via AST analysis in full implementation
+    }
+
+    #[test]
+    fn string_template_is_indexed_and_member_alias_is_not_a_const() {
+        let content = r#"
+export function getBaseSystemPrompt(): string {
+  const today = new Date().toISOString().split('T')[0];
+  return `- Current date: ${today}`;
+}
+const execute = api.run;
+const STARTUP_TIME = Date.now();
+"#;
+        let file = FileEntry {
+            path: "prompt.ts".to_string(),
+            content: content.to_string(),
+            size: content.len(),
+            language: Some(SupportedLanguage::TypeScript),
+        };
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(GraphNode {
+            id: "File:prompt.ts".to_string(),
+            label: NodeLabel::File,
+            properties: NodeProperties {
+                name: "prompt.ts".to_string(),
+                file_path: "prompt.ts".to_string(),
+                ..Default::default()
+            },
+        });
+        parse_files(&mut graph, &[file], None).unwrap();
+        let prompt = graph
+            .get_node("Function:prompt.ts:getBaseSystemPrompt")
+            .expect("function node");
+        let description = prompt.properties.description.as_deref().unwrap_or("");
+        assert!(
+            description.contains("Current date"),
+            "template text missing from {description:?}"
+        );
+        assert!(graph.get_node("Const:prompt.ts:execute").is_none());
+        assert!(graph.get_node("Const:prompt.ts:STARTUP_TIME").is_some());
     }
 
     #[test]

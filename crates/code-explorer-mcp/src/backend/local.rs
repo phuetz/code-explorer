@@ -71,6 +71,13 @@ impl FileFingerprint {
     }
 }
 
+type LoadedRepoIndexes = (
+    RegistryEntry,
+    Arc<KnowledgeGraph>,
+    Arc<GraphIndexes>,
+    Arc<FtsIndex>,
+);
+
 const MAX_QUERY_LIMIT: usize = 100;
 const MAX_ANALYTICS_LIMIT: usize = 100;
 const MAX_IMPACT_DEPTH: usize = 10;
@@ -264,15 +271,7 @@ impl LocalBackend {
     /// exploration endpoints. The returned registry entry is cloned so callers
     /// can safely keep repository metadata while the mutable backend borrow is
     /// used to populate caches.
-    pub fn load_repo_indexes(
-        &mut self,
-        repo: &str,
-    ) -> Result<(
-        RegistryEntry,
-        Arc<KnowledgeGraph>,
-        Arc<GraphIndexes>,
-        Arc<FtsIndex>,
-    )> {
+    pub fn load_repo_indexes(&mut self, repo: &str) -> Result<LoadedRepoIndexes> {
         let entry = self.resolve_repo(Some(repo))?;
         let snap_path = PathBuf::from(&entry.storage_path).join("graph.bin");
         let (graph, indexes, fts) = self.load_cached_indexes(&snap_path)?;
@@ -3305,7 +3304,7 @@ impl LocalBackend {
         if !report.pages.is_empty() {
             summary.push_str("\n**Top pages with issues:**\n");
             let mut sorted = report.pages.clone();
-            sorted.sort_by(|a, b| b.issues.len().cmp(&a.issues.len()));
+            sorted.sort_by_key(|page| std::cmp::Reverse(page.issues.len()));
             for page in sorted.iter().take(5) {
                 summary.push_str(&format!(
                     "\n*{}* — {} issue(s):\n",
@@ -3789,9 +3788,12 @@ mod tests {
         assert!(cached_indexes
             .outgoing
             .contains_key("Class:src/old.rs:OldSymbol"));
-        let results = cached_fts.search(&cached_graph, "OldSymbol", None, 10);
-        assert!(!results.is_empty());
-        assert_eq!(results[0].name, "OldSymbol");
+        assert_eq!(
+            cached_fts
+                .search(&cached_graph, "OldSymbol", None, 10)
+                .len(),
+            1
+        );
 
         let mut replacement_graph = KnowledgeGraph::new();
         replacement_graph.add_node(test_node(

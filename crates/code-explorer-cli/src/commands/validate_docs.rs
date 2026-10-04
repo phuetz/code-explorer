@@ -72,7 +72,7 @@ fn print_console_report(report: &ValidationReport, json_path: &std::path::Path) 
     }
 
     let mut sorted = report.pages.clone();
-    sorted.sort_by(|a, b| b.issues.len().cmp(&a.issues.len()));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.issues.len()));
     println!();
     for page in sorted.iter().take(10) {
         println!("  {} — {} issue(s)", page.path.bold(), page.issues.len());

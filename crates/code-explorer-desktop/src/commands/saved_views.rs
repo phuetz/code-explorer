@@ -108,7 +108,7 @@ pub async fn saved_views_save(
     // Upsert by id.
     file.views.retain(|v| v.id != next.id);
     file.views.push(next);
-    file.views.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    file.views.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     save(&path, &file)?;
     Ok(file.views)
 }

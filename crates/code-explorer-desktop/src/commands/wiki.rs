@@ -327,7 +327,7 @@ fn render_index(pages: &[WikiPage]) -> String {
     md.push_str(&format!("**{}** modules\n\n", pages.len()));
     md.push_str("| Module | Symbols | Page |\n|---|---:|---|\n");
     let mut sorted: Vec<&WikiPage> = pages.iter().collect();
-    sorted.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.member_count));
     for p in sorted {
         md.push_str(&format!(
             "| {} | {} | [{}]({}) |\n",

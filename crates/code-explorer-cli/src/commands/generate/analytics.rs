@@ -245,7 +245,7 @@ pub(super) fn generate_git_analytics_pages(docs_dir: &Path, repo_path: &Path) ->
             writeln!(f, "|---|---------|---------|---------------------|")?;
             // Sorted by author_count desc (most distributed first)
             let mut sorted_own = ownerships.clone();
-            sorted_own.sort_by(|a, b| b.author_count.cmp(&a.author_count));
+            sorted_own.sort_by_key(|b| std::cmp::Reverse(b.author_count));
             for (i, o) in sorted_own.iter().take(20).enumerate() {
                 writeln!(
                     f,

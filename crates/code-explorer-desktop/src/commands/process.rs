@@ -173,7 +173,7 @@ pub async fn get_process_flows(state: State<'_, AppState>) -> Result<Vec<Process
     }
 
     // Sort by step count desc
-    flows.sort_by(|a, b| b.step_count.cmp(&a.step_count));
+    flows.sort_by_key(|b| std::cmp::Reverse(b.step_count));
 
     // Add synthetic business flows (Heuristic-based for Sample)
     add_synthetic_business_flows(&graph, &mut flows);

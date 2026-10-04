@@ -220,6 +220,47 @@ pub fn walk_repository_with(
     Ok(entries)
 }
 
+/// The banner comment at the top of a file ("Background Task Manager",
+/// "Data Redaction Engine"). Stops at the first line of code.
+fn leading_file_comment(content: &str) -> Option<String> {
+    let mut lines = Vec::new();
+    let mut started = false;
+    for line in content.lines().take(40) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if started {
+                break;
+            }
+            continue;
+        }
+        let is_comment = trimmed.starts_with("//")
+            || trimmed.starts_with("/*")
+            || trimmed.starts_with('*')
+            || trimmed.starts_with("*/");
+        if !is_comment {
+            break;
+        }
+        started = true;
+        let cleaned = trimmed
+            .trim_start_matches('/')
+            .trim_start_matches('*')
+            .trim_end_matches('*')
+            .trim_end_matches('/')
+            .trim();
+        if cleaned.chars().count() >= 8 {
+            lines.push(cleaned.to_string());
+        }
+        if lines.len() == 12 {
+            break;
+        }
+    }
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    }
+}
+
 /// Create File and Folder nodes with CONTAINS edges.
 pub fn create_structure_nodes(graph: &mut KnowledgeGraph, files: &[FileEntry]) {
     let mut created_folders: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -252,6 +293,11 @@ pub fn create_structure_nodes(graph: &mut KnowledgeGraph, files: &[FileEntry]) {
                         name: part.to_string(),
                         file_path: current_path.clone(),
                         language: if is_file { file.language } else { None },
+                        description: if is_file {
+                            leading_file_comment(&file.content)
+                        } else {
+                            None
+                        },
                         ..Default::default()
                     },
                 };

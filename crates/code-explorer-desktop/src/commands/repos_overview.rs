@@ -130,7 +130,7 @@ pub async fn repos_overview(_state: State<'_, AppState>) -> Result<Vec<RepoOverv
                         file_count,
                     })
                     .collect();
-                language_breakdown.sort_by(|a, b| b.file_count.cmp(&a.file_count));
+                language_breakdown.sort_by_key(|b| std::cmp::Reverse(b.file_count));
 
                 out.push(RepoOverview {
                     name: entry.name,
@@ -176,7 +176,7 @@ pub async fn repos_overview(_state: State<'_, AppState>) -> Result<Vec<RepoOverv
         }
     }
 
-    out.sort_by(|a, b| b.node_count.cmp(&a.node_count));
+    out.sort_by_key(|b| std::cmp::Reverse(b.node_count));
     Ok(out)
 }
 

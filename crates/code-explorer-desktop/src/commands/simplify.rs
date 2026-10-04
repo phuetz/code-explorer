@@ -275,7 +275,7 @@ fn build_signals(graph: &KnowledgeGraph, scope: &Scope, min_complexity: u32) -> 
     }
 
     s.complex_symbols
-        .sort_by(|a, b| b.complexity.cmp(&a.complexity));
+        .sort_by_key(|b| std::cmp::Reverse(b.complexity));
     s.complex_symbols.truncate(15);
     s.dead_candidates.sort();
     s.dead_candidates.dedup();
@@ -297,7 +297,7 @@ fn build_signals(graph: &KnowledgeGraph, scope: &Scope, min_complexity: u32) -> 
         }
     }
     s.duplicate_groups
-        .sort_by(|a, b| b.occurrences.cmp(&a.occurrences));
+        .sort_by_key(|b| std::cmp::Reverse(b.occurrences));
     s.duplicate_groups.truncate(20);
 
     s

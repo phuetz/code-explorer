@@ -173,7 +173,7 @@ fn enforce_cap_and_save(storage: &str, idx: &mut SnapshotIndex) -> Result<(), St
         }
     }
     idx.snapshots
-        .sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        .sort_by_key(|b| std::cmp::Reverse(b.created_at));
     save_index(storage, idx)
 }
 
@@ -521,7 +521,7 @@ pub async fn snapshot_diff(
         })
         .filter(|d| d.from_count > 0 || d.to_count > 0)
         .collect();
-    by_label.sort_by(|a, b| (b.added + b.removed).cmp(&(a.added + a.removed)));
+    by_label.sort_by_key(|b| std::cmp::Reverse(b.added + b.removed));
 
     Ok(SnapshotDiff {
         from_id: request.from.clone(),

@@ -235,6 +235,8 @@ pub const QUERIES: &str = r#"
   arguments: (arguments
     (string (string_fragment) @express_route.path))) @express_route
 
+; Literal consts and calls (`Date.now()`, `new Date()...`). Member expressions
+; (`const execute = api.run`) stay aliases: indexing them as Const steals the call.
 (lexical_declaration
   (variable_declarator
     name: (identifier) @name
@@ -245,11 +247,6 @@ pub const QUERIES: &str = r#"
       (true)
       (false)
       (call_expression)
-      (member_expression)
-      (identifier)
-      (binary_expression)
-      (array)
-      (object)
     ])) @definition.const
 
 (export_statement
@@ -263,10 +260,5 @@ pub const QUERIES: &str = r#"
         (true)
         (false)
         (call_expression)
-        (member_expression)
-        (identifier)
-        (binary_expression)
-        (array)
-        (object)
       ]))) @definition.const
 "#;

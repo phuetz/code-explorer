@@ -16,28 +16,38 @@ use code_explorer_search::reranker::{Candidate, LlmReranker, Reranker};
 /// broader pool to reorder, then truncate to `limit` after reranking.
 const RERANK_CANDIDATE_POOL: usize = 20;
 
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::items_after_test_module)]
-pub async fn run(
-    query: &str,
-    repo: Option<&str>,
-    limit: usize,
-    file_type: Option<&str>,
-    page: usize,
-    compact: bool,
-    rerank: bool,
-    actual_hybrid: bool,
-) -> anyhow::Result<()> {
+/// Options of `code-explorer query`, kept together so `run` stays under
+/// clippy's argument limit without a crate-wide allow.
+pub struct QueryOpts<'a> {
+    pub repo: Option<&'a str>,
+    pub limit: usize,
+    pub file_type: Option<&'a str>,
+    pub page: usize,
+    pub compact: bool,
+    pub rerank: bool,
+    pub hybrid: bool,
+}
+
+pub async fn run(query: &str, opts: QueryOpts<'_>) -> anyhow::Result<()> {
+    let QueryOpts {
+        repo,
+        limit,
+        file_type,
+        page,
+        compact,
+        rerank,
+        hybrid,
+    } = opts;
     let (offset, page_size, pool) = page_window(page, limit)?;
     let repo_path = resolve_repo_path(repo)?;
     let storage = repo_manager::get_storage_paths(&repo_path);
     
-    let mut actual_hybrid = actual_hybrid;
-    let mut has_embeddings = false;
+    let mut actual_hybrid = hybrid;
     if !actual_hybrid {
-        if let Ok(Some(_)) = fusion::try_load_embeddings_from_storage(Path::new(&storage.storage_path)) {
+        if let Ok(Some(_)) =
+            fusion::try_load_embeddings_from_storage(Path::new(&storage.storage_path))
+        {
             actual_hybrid = true;
-            has_embeddings = true;
         }
     }
 

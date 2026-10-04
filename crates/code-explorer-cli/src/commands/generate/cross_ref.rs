@@ -68,7 +68,7 @@ pub(super) fn apply_cross_references(docs_dir: &Path, graph: &KnowledgeGraph) ->
     }
 
     // Sort by length descending (longest match first, avoid partial matches)
-    known_names.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    known_names.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
 
     // Filter out names shorter than 5 chars (too generic)
     known_names.retain(|(name, _)| name.len() >= 5);

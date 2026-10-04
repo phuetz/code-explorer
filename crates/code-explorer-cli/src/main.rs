@@ -610,13 +610,15 @@ async fn async_main() -> anyhow::Result<()> {
         } => {
             commands::query_cmd::run(
                 &query,
-                repo.as_deref(),
-                limit,
-                file_type.as_deref(),
-                page,
-                compact,
-                rerank,
-                hybrid,
+                commands::query_cmd::QueryOpts {
+                    repo: repo.as_deref(),
+                    limit,
+                    file_type: file_type.as_deref(),
+                    page,
+                    compact,
+                    rerank,
+                    hybrid,
+                },
             )
             .await
         }

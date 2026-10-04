@@ -740,7 +740,7 @@ fn extension_distribution(files: &[String]) -> Vec<(String, usize)> {
         }
     }
     let mut out: Vec<(String, usize)> = counts.into_iter().collect();
-    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out.sort_by_key(|b| std::cmp::Reverse(b.1));
     out
 }
 
