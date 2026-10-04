@@ -1918,7 +1918,7 @@ fn enrich_single_section(
         .iter()
         .map(|e| (e, section_content.matches(e.title.as_str()).count()))
         .collect();
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    scored.sort_by_key(|b| std::cmp::Reverse(b.1));
     let top_ev: Vec<&EvidenceRef> = scored.into_iter().take(5).map(|(e, _)| e).collect();
     let ev_ids: Vec<&str> = top_ev.iter().map(|e| e.id.as_str()).collect();
     let ev_ctx: String = top_ev

@@ -237,12 +237,36 @@ pub const QUERIES: &str = r#"
 
 (lexical_declaration
   (variable_declarator
-    name: (identifier) @const.name
-    value: [(string) (template_string)])) @definition.const
+    name: (identifier) @name
+    value: [
+      (string)
+      (template_string)
+      (number)
+      (true)
+      (false)
+      (call_expression)
+      (member_expression)
+      (identifier)
+      (binary_expression)
+      (array)
+      (object)
+    ])) @definition.const
 
 (export_statement
   declaration: (lexical_declaration
     (variable_declarator
-      name: (identifier) @const.name
-      value: [(string) (template_string)]))) @definition.const
+      name: (identifier) @name
+      value: [
+        (string)
+        (template_string)
+        (number)
+        (true)
+        (false)
+        (call_expression)
+        (member_expression)
+        (identifier)
+        (binary_expression)
+        (array)
+        (object)
+      ]))) @definition.const
 "#;

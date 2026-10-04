@@ -442,7 +442,7 @@ pub(super) fn top_connected_files(graph: &KnowledgeGraph, n: usize) -> Vec<Strin
         }
     }
     let mut sorted: Vec<_> = file_degree.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.1));
     sorted.into_iter().take(n).map(|(f, _)| f).collect()
 }
 

@@ -197,7 +197,7 @@ pub(super) fn generate_skills(graph: &KnowledgeGraph, repo_path: &Path) -> Resul
             writeln!(f, "## Connections to Other Modules")?;
             writeln!(f)?;
             let mut sorted: Vec<_> = connected_communities.into_iter().collect();
-            sorted.sort_by(|a, b| b.1.cmp(&a.1));
+            sorted.sort_by_key(|b| std::cmp::Reverse(b.1));
             for (comm_label, call_count) in sorted {
                 writeln!(f, "- **{comm_label}**: {call_count} call(s)")?;
             }

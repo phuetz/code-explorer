@@ -16,6 +16,8 @@ use code_explorer_search::reranker::{Candidate, LlmReranker, Reranker};
 /// broader pool to reorder, then truncate to `limit` after reranking.
 const RERANK_CANDIDATE_POOL: usize = 20;
 
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::items_after_test_module)]
 pub async fn run(
     query: &str,
     repo: Option<&str>,
@@ -31,9 +33,11 @@ pub async fn run(
     let storage = repo_manager::get_storage_paths(&repo_path);
     
     let mut actual_hybrid = actual_hybrid;
+    let mut has_embeddings = false;
     if !actual_hybrid {
         if let Ok(Some(_)) = fusion::try_load_embeddings_from_storage(Path::new(&storage.storage_path)) {
             actual_hybrid = true;
+            has_embeddings = true;
         }
     }
 
@@ -70,6 +74,7 @@ pub async fn run(
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Warning: hybrid path failed ({e}); falling back to BM25-only.");
+                actual_hybrid = false;
                 bm25.clone()
             }
         }
@@ -340,100 +345,6 @@ fn is_source_file(path: &str, file_type: Option<&str>) -> bool {
     .any(|extension| lower.ends_with(extension))
 }
 
-#[cfg(test)]
-mod pagination_tests {
-    use super::*;
-    use code_explorer_core::graph::types::{GraphNode, NodeProperties};
-
-    #[test]
-    fn pages_are_bounded_and_do_not_overlap() {
-        assert_eq!(page_window(1, 10).unwrap(), (0, 10, 11));
-        assert_eq!(page_window(2, 10).unwrap(), (10, 10, 21));
-        assert!(page_window(0, 10).is_err());
-        assert!(page_window(1, 51).is_err());
-        assert!(page_window(501, 10).is_err());
-    }
-
-    #[test]
-    fn evidence_is_read_from_the_declared_line() {
-        let dir = std::env::temp_dir().join(format!("ce-query-proof-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("sample.rs"), "first\nfn expected() {}\nthird\n").unwrap();
-        assert_eq!(
-            source_excerpt(&dir, "sample.rs", Some(2)).as_deref(),
-            Some("fn expected() {}")
-        );
-        assert!(source_excerpt(&dir, "../sample.rs", Some(2)).is_none());
-        std::fs::remove_file(dir.join("sample.rs")).unwrap();
-        std::fs::remove_dir(dir).unwrap();
-    }
-
-    #[test]
-    fn code_markers_find_source_files_before_test_files() {
-        let dir = std::env::temp_dir().join(format!("ce-query-markers-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("src")).unwrap();
-        std::fs::create_dir_all(dir.join("tests")).unwrap();
-        std::fs::write(
-            dir.join("src/Pragma.cs"),
-            "PRAGMA journal_mode=WAL;\nPRAGMA busy_timeout=5000;",
-        )
-        .unwrap();
-        std::fs::write(dir.join("tests/PragmaTests.cs"), "WAL busy_timeout").unwrap();
-        let mut graph = KnowledgeGraph::new();
-        for path in ["src/Pragma.cs", "tests/PragmaTests.cs"] {
-            graph.add_node(GraphNode {
-                id: format!("File:{path}"),
-                label: NodeLabel::File,
-                properties: NodeProperties {
-                    name: path.to_string(),
-                    file_path: path.to_string(),
-                    ..Default::default()
-                },
-            });
-        }
-        let hits = source_code_hits(
-            &graph,
-            &dir,
-            "Where are WAL and busy_timeout set?",
-            Some("cs"),
-        );
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].file_path, "src/Pragma.cs");
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn file_question_is_detected_in_french_and_english() {
-        assert!(asks_for_files("Quels fichiers relient les modules ?"));
-        assert!(asks_for_files("Which files configure the database?"));
-        assert!(!asks_for_files("Où est définie cette méthode ?"));
-    }
-
-    #[test]
-    fn file_question_returns_one_result_per_source_file() {
-        let rows = [("a", "src/a.ts"), ("b", "src/a.ts"), ("c", "src/c.ts")].map(|(name, path)| {
-            FtsResult {
-                node_id: name.to_string(),
-                score: 1.0,
-                name: name.to_string(),
-                file_path: path.to_string(),
-                label: "Function".to_string(),
-                start_line: Some(1),
-                end_line: Some(1),
-            }
-        });
-        let mut candidates = fts_to_candidates(&rows);
-        distinct_files(&mut candidates);
-        assert_eq!(
-            candidates
-                .iter()
-                .map(|r| r.name.as_str())
-                .collect::<Vec<_>>(),
-            vec!["a", "c"]
-        );
-    }
-}
-
 fn fts_to_candidates(bm25: &[FtsResult]) -> Vec<Candidate> {
     bm25.iter()
         .enumerate()
@@ -533,5 +444,99 @@ fn resolve_repo_path(repo: Option<&str>) -> anyhow::Result<PathBuf> {
             Ok(p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
         }
         None => Ok(std::env::current_dir()?),
+    }
+}
+
+#[cfg(test)]
+mod pagination_tests {
+    use super::*;
+    use code_explorer_core::graph::types::{GraphNode, NodeProperties};
+
+    #[test]
+    fn pages_are_bounded_and_do_not_overlap() {
+        assert_eq!(page_window(1, 10).unwrap(), (0, 10, 11));
+        assert_eq!(page_window(2, 10).unwrap(), (10, 10, 21));
+        assert!(page_window(0, 10).is_err());
+        assert!(page_window(1, 51).is_err());
+        assert!(page_window(501, 10).is_err());
+    }
+
+    #[test]
+    fn evidence_is_read_from_the_declared_line() {
+        let dir = std::env::temp_dir().join(format!("ce-query-proof-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("sample.rs"), "first\nfn expected() {}\nthird\n").unwrap();
+        assert_eq!(
+            source_excerpt(&dir, "sample.rs", Some(2)).as_deref(),
+            Some("fn expected() {}")
+        );
+        assert!(source_excerpt(&dir, "../sample.rs", Some(2)).is_none());
+        std::fs::remove_file(dir.join("sample.rs")).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
+    fn code_markers_find_source_files_before_test_files() {
+        let dir = std::env::temp_dir().join(format!("ce-query-markers-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("tests")).unwrap();
+        std::fs::write(
+            dir.join("src/Pragma.cs"),
+            "PRAGMA journal_mode=WAL;\nPRAGMA busy_timeout=5000;",
+        )
+        .unwrap();
+        std::fs::write(dir.join("tests/PragmaTests.cs"), "WAL busy_timeout").unwrap();
+        let mut graph = KnowledgeGraph::new();
+        for path in ["src/Pragma.cs", "tests/PragmaTests.cs"] {
+            graph.add_node(GraphNode {
+                id: format!("File:{path}"),
+                label: NodeLabel::File,
+                properties: NodeProperties {
+                    name: path.to_string(),
+                    file_path: path.to_string(),
+                    ..Default::default()
+                },
+            });
+        }
+        let hits = source_code_hits(
+            &graph,
+            &dir,
+            "Where are WAL and busy_timeout set?",
+            Some("cs"),
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].file_path, "src/Pragma.cs");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn file_question_is_detected_in_french_and_english() {
+        assert!(asks_for_files("Quels fichiers relient les modules ?"));
+        assert!(asks_for_files("Which files configure the database?"));
+        assert!(!asks_for_files("Où est définie cette méthode ?"));
+    }
+
+    #[test]
+    fn file_question_returns_one_result_per_source_file() {
+        let rows = [("a", "src/a.ts"), ("b", "src/a.ts"), ("c", "src/c.ts")].map(|(name, path)| {
+            FtsResult {
+                node_id: name.to_string(),
+                score: 1.0,
+                name: name.to_string(),
+                file_path: path.to_string(),
+                label: "Function".to_string(),
+                start_line: Some(1),
+                end_line: Some(1),
+            }
+        });
+        let mut candidates = fts_to_candidates(&rows);
+        distinct_files(&mut candidates);
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "c"]
+        );
     }
 }

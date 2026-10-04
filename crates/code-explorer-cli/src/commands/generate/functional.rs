@@ -106,7 +106,7 @@ pub(super) fn generate_functional_guide(
             (*ctrl, actions)
         })
         .collect();
-    ctrl_with_actions.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    ctrl_with_actions.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
     for (ctrl, actions) in &ctrl_with_actions {
         let name = ctrl

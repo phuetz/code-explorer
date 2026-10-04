@@ -1008,21 +1008,50 @@ fn create_definition_node(
     };
 
     let mut keywords = None;
-    if matches!(label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Const | NodeLabel::Property) {
+    if matches!(label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Const) {
         let def_node = node.parent().unwrap_or(*node);
         if let Ok(text) = def_node.utf8_text(file.content.as_bytes()) {
-            if text.len() < 10000 {
-                let mut tokens: Vec<String> = text
-                    .to_ascii_lowercase()
-                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-                    .filter(|w| w.len() > 2)
-                    .map(|w| w.to_string())
-                    .collect();
-                tokens.sort();
-                tokens.dedup();
-                if !tokens.is_empty() {
-                    keywords = Some(tokens);
+            let truncated = if text.len() > 10000 {
+                // Find nearest char boundary
+                let mut end = 10000;
+                while !text.is_char_boundary(end) && end > 0 {
+                    end -= 1;
                 }
+                &text[..end]
+            } else {
+                text
+            };
+            
+            let mut tokens = Vec::new();
+            let mut current_token = String::new();
+            let mut last_was_uppercase = false;
+            for c in truncated.chars() {
+                if !c.is_alphanumeric() {
+                    if current_token.len() > 1 {
+                        tokens.push(current_token.to_lowercase());
+                    }
+                    current_token.clear();
+                    last_was_uppercase = false;
+                } else {
+                    let is_upper = c.is_uppercase();
+                    if is_upper && !current_token.is_empty() && !last_was_uppercase {
+                        if current_token.len() > 1 {
+                            tokens.push(current_token.to_lowercase());
+                        }
+                        current_token.clear();
+                    }
+                    current_token.push(c);
+                    last_was_uppercase = is_upper;
+                }
+            }
+            if current_token.len() > 1 {
+                tokens.push(current_token.to_lowercase());
+            }
+
+            tokens.sort();
+            tokens.dedup();
+            if !tokens.is_empty() {
+                keywords = Some(tokens);
             }
         }
     }

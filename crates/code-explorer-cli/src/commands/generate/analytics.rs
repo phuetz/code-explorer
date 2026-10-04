@@ -204,7 +204,7 @@ pub(super) fn generate_git_analytics_pages(docs_dir: &Path, repo_path: &Path) ->
                     (author.clone(), files.len(), avg_pct)
                 })
                 .collect();
-            author_stats.sort_by(|a, b| b.1.cmp(&a.1));
+            author_stats.sort_by_key(|b| std::cmp::Reverse(b.1));
             for (author, file_count, avg_pct) in &author_stats {
                 writeln!(f, "| {} | {} | {:.0}% |", author, file_count, avg_pct)?;
             }

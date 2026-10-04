@@ -48,7 +48,7 @@ pub(super) fn generate_process_docs(
         return Ok(Vec::new());
     }
 
-    processes.sort_by(|a, b| b.2.unwrap_or(0).cmp(&a.2.unwrap_or(0)));
+    processes.sort_by_key(|b| std::cmp::Reverse(b.2.unwrap_or(0)));
 
     let processes_dir = docs_dir.join("processes");
     std::fs::create_dir_all(&processes_dir)?;

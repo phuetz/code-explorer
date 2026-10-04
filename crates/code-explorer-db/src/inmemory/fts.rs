@@ -22,7 +22,6 @@ const FTS_LABELS: &[NodeLabel] = &[
     NodeLabel::Variable,
     NodeLabel::Type,
     NodeLabel::Const,
-    NodeLabel::Property,
     NodeLabel::Module,
     NodeLabel::Route,
     NodeLabel::Tool,
@@ -338,7 +337,8 @@ pub fn path_weight(file_path: &str, query_tokens: &[String]) -> f64 {
         return 0.1;
     }
 
-    if is_test_file(&lc) && !query_tokens.iter().any(|t| t.contains("test")) {
+    let test_words = ["test", "tests", "testing", "tested", "spec", "specs"];
+    if is_test_file(&lc) && !query_tokens.iter().any(|t| test_words.contains(&t.as_str())) {
         return 0.3;
     }
 
@@ -404,11 +404,31 @@ impl Default for FtsIndex {
 
 /// Tokenize text: lowercase, split on non-alphanumeric characters, filter empty tokens.
 fn tokenize(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect()
+    let mut tokens = Vec::new();
+    let mut current_token = String::new();
+    let mut last_was_uppercase = false;
+
+    for c in text.chars() {
+        if !c.is_alphanumeric() {
+            if !current_token.is_empty() {
+                tokens.push(current_token.to_lowercase());
+                current_token.clear();
+            }
+            last_was_uppercase = false;
+        } else {
+            let is_upper = c.is_uppercase();
+            if is_upper && !current_token.is_empty() && !last_was_uppercase {
+                tokens.push(current_token.to_lowercase());
+                current_token.clear();
+            }
+            current_token.push(c);
+            last_was_uppercase = is_upper;
+        }
+    }
+    if !current_token.is_empty() {
+        tokens.push(current_token.to_lowercase());
+    }
+    tokens
 }
 
 /// Extract a table/label filter from FTS table names like `"fts_Function"`.
@@ -500,7 +520,7 @@ mod tests {
     #[test]
     fn test_tokenize() {
         let tokens = tokenize("handleLogin src/auth.ts");
-        assert_eq!(tokens, vec!["handlelogin", "src", "auth", "ts"]);
+        assert_eq!(tokens, vec!["handle", "login", "src", "auth", "ts"]);
     }
 
     #[test]
@@ -648,6 +668,18 @@ mod tests {
         );
         assert!(path_weight("src/agent-executor.ts", &q) > path_weight("src/agent-executor.test.ts", &q));
         assert!(path_weight("src/main.rs", &q) > path_weight("src/main_test.rs", &q));
+    }
+
+    #[test]
+    fn test_substring_does_not_lift_test_penalty() {
+        let q: Vec<String> = vec!["latest".to_string(), "invoice".to_string()];
+        assert_eq!(path_weight("tests/SqlitePragmaInterceptorTests.cs", &q), 0.3);
+    }
+
+    #[test]
+    fn test_explicit_test_query_lifts_penalty() {
+        let q: Vec<String> = vec!["how".to_string(), "to".to_string(), "test".to_string()];
+        assert_eq!(path_weight("tests/SqlitePragmaInterceptorTests.cs", &q), 1.0);
     }
 
     #[test]

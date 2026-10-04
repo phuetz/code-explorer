@@ -2147,7 +2147,7 @@ impl LocalBackend {
             .unwrap_or(false);
         // Hybrid BM25 + semantic RRF fusion (opt-in). Requires `code-explorer embed`
         // to have populated .codeexplorer/embeddings.bin + embeddings.meta.json.
-        let hybrid_mode = args
+        let mut hybrid_mode = args
             .get("hybrid")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
@@ -2155,6 +2155,13 @@ impl LocalBackend {
         let entry = self.resolve_repo(repo_name)?;
         let repo_path = std::path::PathBuf::from(&entry.path);
         let storage_path = std::path::PathBuf::from(&entry.storage_path);
+        
+        if !hybrid_mode {
+            if let Ok(Some(_)) = code_explorer_search::fusion::try_load_embeddings_from_storage(&storage_path) {
+                hybrid_mode = true;
+            }
+        }
+
         let snap_path = code_explorer_db::snapshot::snapshot_path(&storage_path);
         let (graph, indexes, fts) = self.load_cached_indexes(&snap_path)?;
 
@@ -3782,12 +3789,9 @@ mod tests {
         assert!(cached_indexes
             .outgoing
             .contains_key("Class:src/old.rs:OldSymbol"));
-        assert_eq!(
-            cached_fts
-                .search(&cached_graph, "OldSymbol", None, 10)
-                .len(),
-            1
-        );
+        let results = cached_fts.search(&cached_graph, "OldSymbol", None, 10);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].name, "OldSymbol");
 
         let mut replacement_graph = KnowledgeGraph::new();
         replacement_graph.add_node(test_node(

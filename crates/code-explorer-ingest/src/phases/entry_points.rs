@@ -117,7 +117,7 @@ pub fn extract_entry_points(graph: &mut KnowledgeGraph, files: &[FileEntry]) -> 
                         })
                         .filter(|n| {
                             lines[index..=end].join("\n").contains(
-                                &n.properties.name.split(['<', '>']).nth(1).unwrap_or("\0"),
+                                n.properties.name.split(['<', '>']).nth(1).unwrap_or("\0"),
                             )
                         })
                         .map(|n| n.id.clone())

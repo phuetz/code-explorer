@@ -3597,7 +3597,7 @@ fn generate_docs_modules(
                     action_impacts.push((action_name, callees, callers));
                 }
             }
-            action_impacts.sort_by(|a, b| (b.1.len() + b.2.len()).cmp(&(a.1.len() + a.2.len())));
+            action_impacts.sort_by_key(|b| std::cmp::Reverse(b.1.len() + b.2.len()));
             if !action_impacts.is_empty() {
                 content.push_str("## Analyse d'Impact\n\n> Si une action de ce controller est modifiée, voici les composants potentiellement impactés.\n\n");
                 content.push_str("| Action modifiée | Impact aval (callees) | Impact amont (callers) |\n|----------------|----------------------|----------------------|\n");

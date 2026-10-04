@@ -243,7 +243,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         *node_degree.entry(rel.target_id.clone()).or_insert(0) += 1;
     }
     let mut sorted_degree: Vec<_> = node_degree.into_iter().collect();
-    sorted_degree.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted_degree.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     writeln!(f, "| Composant | Type | Connexions | Fichier |")?;
     writeln!(f, "|-----------|------|-----------|---------|")?;
@@ -277,7 +277,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
         }
     }
     let mut sorted_files: Vec<_> = file_stats.into_iter().collect();
-    sorted_files.sort_by(|a, b| (b.1).0.cmp(&(a.1).0));
+    sorted_files.sort_by_key(|b| std::cmp::Reverse((b.1).0));
 
     writeln!(f, "| Fichier | Symboles | Type principal |")?;
     writeln!(f, "|---------|----------|---------------|")?;
@@ -329,7 +329,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
                 })
             })
             .collect();
-        complex_fns.sort_by(|a, b| b.2.cmp(&a.2));
+        complex_fns.sort_by_key(|b| std::cmp::Reverse(b.2));
 
         if !complex_fns.is_empty() && complex_fns[0].2 > 1 {
             writeln!(f, "## Fonctions les plus complexes")?;
@@ -376,7 +376,7 @@ pub(super) fn generate_project_health(docs_dir: &Path, graph: &KnowledgeGraph) -
 
         // Show top 15 files with most dead code
         let mut files_sorted: Vec<_> = dead_by_file.iter().collect();
-        files_sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        files_sorted.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
         writeln!(f, "| Fichier | Méthodes mortes | Exemples |")?;
         writeln!(f, "|---------|----------------|----------|")?;
