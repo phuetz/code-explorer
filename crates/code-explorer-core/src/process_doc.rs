@@ -288,7 +288,7 @@ pub fn collect_process_components(
         })
         .collect();
 
-    components.sort_by(|a, b| b.step_count.cmp(&a.step_count));
+    components.sort_by_key(|b| std::cmp::Reverse(b.step_count));
     components
 }
 

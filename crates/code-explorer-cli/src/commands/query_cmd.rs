@@ -24,11 +24,19 @@ pub async fn run(
     page: usize,
     compact: bool,
     rerank: bool,
-    hybrid_mode: bool,
+    actual_hybrid: bool,
 ) -> anyhow::Result<()> {
     let (offset, page_size, pool) = page_window(page, limit)?;
     let repo_path = resolve_repo_path(repo)?;
     let storage = repo_manager::get_storage_paths(&repo_path);
+    
+    let mut actual_hybrid = actual_hybrid;
+    if !actual_hybrid {
+        if let Ok(Some(_)) = fusion::try_load_embeddings_from_storage(Path::new(&storage.storage_path)) {
+            actual_hybrid = true;
+        }
+    }
+
     let snap = code_explorer_db::snapshot::snapshot_path(&storage.storage_path);
 
     if !snap.exists() {
@@ -41,23 +49,23 @@ pub async fn run(
     let fts = FtsIndex::build(&graph);
 
     // Pull a larger pool when reranking or fusing so there's room to reorder.
-    let mut pool = if rerank || hybrid_mode {
+    let mut pool = if rerank || actual_hybrid {
         pool.max(RERANK_CANDIDATE_POOL)
     } else {
         pool
     };
-    if asks_for_files(query) && !rerank && !hybrid_mode {
+    if asks_for_files(query) && !rerank && !actual_hybrid {
         pool = pool.max(200);
     }
     let bm25 = fts.search_with_file_type(&graph, query, None, file_type, pool);
 
-    if bm25.is_empty() && !hybrid_mode {
+    if bm25.is_empty() && !actual_hybrid {
         println!("No results for '{query}'.");
         return Ok(());
     }
 
     // Hybrid: fuse BM25 with semantic via RRF BEFORE any LLM rerank.
-    let fused: Vec<FtsResult> = if hybrid_mode {
+    let fused: Vec<FtsResult> = if actual_hybrid {
         match run_hybrid(query, &bm25, &graph, Path::new(&storage.storage_path), pool) {
             Ok(r) => r,
             Err(e) => {
@@ -85,7 +93,7 @@ pub async fn run(
     } else {
         fts_to_candidates(&fused)
     };
-    if !rerank && !hybrid_mode {
+    if !rerank && !actual_hybrid {
         let source_matches = source_code_hits(&graph, &repo_path, query, file_type);
         if !source_matches.is_empty() {
             let source_paths: HashSet<&str> = source_matches
@@ -128,7 +136,7 @@ pub async fn run(
         );
     }
     let mut mods: Vec<&str> = Vec::new();
-    if hybrid_mode {
+    if actual_hybrid {
         mods.push("hybrid BM25+semantic RRF");
     }
     if rerank {

@@ -2627,11 +2627,12 @@ fn search_relevant_context(
     // used by FTS so a name hit inside `jquery-ui-1.8.20.min.js` doesn't
     // outscore a real BM25 match in business code.
     let query_lower = query.to_lowercase();
+    let empty_q = vec![];
     for node in graph.iter_nodes() {
         if node.properties.name.to_lowercase().contains(&query_lower)
             && seen.insert(node.id.clone())
         {
-            let score = code_explorer_db::inmemory::fts::path_weight(&node.properties.file_path);
+            let score = code_explorer_db::inmemory::fts::path_weight(&node.properties.file_path, &empty_q);
             results.push((node.id.clone(), score));
         }
     }

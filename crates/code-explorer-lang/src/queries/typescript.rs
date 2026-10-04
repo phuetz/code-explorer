@@ -234,4 +234,15 @@ pub const QUERIES: &str = r#"
     property: (property_identifier) @express_route.method)
   arguments: (arguments
     (string (string_fragment) @express_route.path))) @express_route
+
+(lexical_declaration
+  (variable_declarator
+    name: (identifier) @const.name
+    value: [(string) (template_string)])) @definition.const
+
+(export_statement
+  declaration: (lexical_declaration
+    (variable_declarator
+      name: (identifier) @const.name
+      value: [(string) (template_string)]))) @definition.const
 "#;

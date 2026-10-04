@@ -1007,6 +1007,26 @@ fn create_definition_node(
         None
     };
 
+    let mut keywords = None;
+    if matches!(label, NodeLabel::Function | NodeLabel::Method | NodeLabel::Const | NodeLabel::Property) {
+        let def_node = node.parent().unwrap_or(*node);
+        if let Ok(text) = def_node.utf8_text(file.content.as_bytes()) {
+            if text.len() < 10000 {
+                let mut tokens: Vec<String> = text
+                    .to_ascii_lowercase()
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .filter(|w| w.len() > 2)
+                    .map(|w| w.to_string())
+                    .collect();
+                tokens.sort();
+                tokens.dedup();
+                if !tokens.is_empty() {
+                    keywords = Some(tokens);
+                }
+            }
+        }
+    }
+
     let graph_node = GraphNode {
         id: node_id.clone(),
         label,
@@ -1019,6 +1039,7 @@ fn create_definition_node(
             is_exported: Some(is_exported),
             parameter_count,
             complexity,
+            keywords,
             ..Default::default()
         },
     };

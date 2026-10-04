@@ -21,6 +21,8 @@ const FTS_LABELS: &[NodeLabel] = &[
     NodeLabel::Enum,
     NodeLabel::Variable,
     NodeLabel::Type,
+    NodeLabel::Const,
+    NodeLabel::Property,
     NodeLabel::Module,
     NodeLabel::Route,
     NodeLabel::Tool,
@@ -94,6 +96,10 @@ impl FtsIndex {
             if let Some(ref desc) = node.properties.description {
                 text.push(' ');
                 text.push_str(desc);
+            }
+            if let Some(ref kw) = node.properties.keywords {
+                text.push(' ');
+                text.push_str(&kw.join(" "));
             }
             let tokens = tokenize(&text);
             let doc_len = tokens.len() as u32;
@@ -207,7 +213,7 @@ impl FtsIndex {
                     }
                 }
                 let weighted_score = score
-                    * path_weight(&node.properties.file_path)
+                    * path_weight(&node.properties.file_path, &query_tokens)
                     * test_intent_weight(&node.properties.file_path, &query_tokens)
                     * label_weight(node.label)
                     * entry_intent_weight(node, &query_tokens);
@@ -278,7 +284,7 @@ fn entry_intent_weight(
 /// Exposed so callers that score nodes outside `FtsIndex::search` (e.g.
 /// `chat::search_relevant_context`'s name-match pass) can apply the same
 /// penalty consistently.
-pub fn path_weight(file_path: &str) -> f64 {
+pub fn path_weight(file_path: &str, query_tokens: &[String]) -> f64 {
     let lc = file_path.to_ascii_lowercase();
 
     // Substring patterns — anywhere in the path. Good for file-extension
@@ -332,7 +338,7 @@ pub fn path_weight(file_path: &str) -> f64 {
         return 0.1;
     }
 
-    if is_test_file(&lc) {
+    if is_test_file(&lc) && !query_tokens.iter().any(|t| t.contains("test")) {
         return 0.3;
     }
 
@@ -616,30 +622,32 @@ mod tests {
 
     #[test]
     fn test_path_weight_penalizes_minified() {
+        let q: Vec<String> = vec![];
         assert_eq!(
-            path_weight("Acme.Sample.ihm/Scripts/jquery-1.7.1.min.js"),
+            path_weight("Acme.Sample.ihm/Scripts/jquery-1.7.1.min.js", &q),
             0.1
         );
         assert_eq!(
-            path_weight("packages/jQuery.1.7.1.1/Content/Scripts/jquery-1.7.1.js"),
+            path_weight("packages/jQuery.1.7.1.1/Content/Scripts/jquery-1.7.1.js", &q),
             0.1
         );
-        assert_eq!(path_weight("node_modules/react/index.js"), 0.1);
+        assert_eq!(path_weight("node_modules/react/index.js", &q), 0.1);
         assert_eq!(
-            path_weight("Acme.Sample.BAL/Facture/InvoiceService.cs"),
+            path_weight("Acme.Sample.BAL/Facture/InvoiceService.cs", &q),
             1.0
         );
-        assert_eq!(path_weight("src/main.rs"), 1.0);
+        assert_eq!(path_weight("src/main.rs", &q), 1.0);
     }
 
     #[test]
     fn source_file_wins_over_test_for_a_generic_question() {
+        let q: Vec<String> = vec![];
         assert!(
-            path_weight("src/SqlitePragmaInterceptor.cs")
-                > path_weight("tests/SqlitePragmaInterceptorTests.cs")
+            path_weight("src/SqlitePragmaInterceptor.cs", &q)
+                > path_weight("tests/SqlitePragmaInterceptorTests.cs", &q)
         );
-        assert!(path_weight("src/agent-executor.ts") > path_weight("src/agent-executor.test.ts"));
-        assert!(path_weight("src/main.rs") > path_weight("src/main_test.rs"));
+        assert!(path_weight("src/agent-executor.ts", &q) > path_weight("src/agent-executor.test.ts", &q));
+        assert!(path_weight("src/main.rs", &q) > path_weight("src/main_test.rs", &q));
     }
 
     #[test]

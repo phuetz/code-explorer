@@ -115,7 +115,7 @@ pub fn analyze_ownership(repo_path: &Path) -> Result<Vec<FileOwnership>, Ownersh
     }
 
     // Sort by author_count descending (files with most distributed ownership first)
-    ownerships.sort_by(|a, b| b.author_count.cmp(&a.author_count));
+    ownerships.sort_by_key(|b| std::cmp::Reverse(b.author_count));
 
     Ok(ownerships)
 }

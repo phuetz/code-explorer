@@ -148,7 +148,7 @@ pub fn get_complexity(graph: &KnowledgeGraph, opts: ComplexityOptions) -> Comple
     }
 
     // 4. Top-N most complex, above threshold.
-    measured.sort_by(|a, b| b.0.cmp(&a.0));
+    measured.sort_by_key(|b| std::cmp::Reverse(b.0));
     let top_symbols: Vec<ComplexSymbol> = measured
         .iter()
         .filter(|(cc, _)| *cc >= opts.threshold)
