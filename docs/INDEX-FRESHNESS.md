@@ -102,10 +102,14 @@ cargo test --release -p code-explorer-mcp --locked
 ## Related boundaries
 
 `watch` still directly uses the old partial engine and is not repaired by this
-CLI parsing cache. `status` compares Git HEAD rather than dirty source content, so its
-up-to-date message does not establish worktree freshness. Plain `analyze` still
-uses its existing-index shortcut. Use the explicit update command above after
-editing; these fixes do not claim relevance-ranking or language-coverage gains.
+CLI parsing cache. `status` still compares the indexed commit to `git rev-parse HEAD`.
+When those hashes match, it also SHA-256-compares tracked worktree bytes with the
+HEAD blob and lists untracked paths from `git ls-files --others --exclude-standard`
+(ignored files do not count; `.codeexplorer/` is omitted). It prints
+`Index is up-to-date.` only when that set is empty. Plain `analyze` keeps an
+existing index unless `--force`, `--incremental`, or `--include-dirty` (the last
+re-indexes when that set is non-empty). `doctor` warns in the same situation.
+These fixes do not claim relevance-ranking or language-coverage gains.
 
 ## Renames, deletions and branch switches
 

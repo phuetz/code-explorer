@@ -9,6 +9,7 @@ pub mod cypher_cmd;
 pub mod dashboard;
 pub mod demo;
 pub mod diagram;
+pub mod dirty;
 pub mod doctor;
 pub mod embed;
 pub mod export_docx;

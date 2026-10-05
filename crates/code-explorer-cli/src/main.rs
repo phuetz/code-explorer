@@ -78,6 +78,12 @@ enum Commands {
         /// for an unbounded time. 0 removes the guard.
         #[arg(long, default_value = "50000", value_name = "N")]
         max_files: usize,
+        /// Re-index when an index already exists and the working tree differs
+        /// from the indexed commit (tracked file contents, or untracked files
+        /// that are not gitignored). Ignored files are not included. A clean
+        /// worktree still keeps the existing index.
+        #[arg(long)]
+        include_dirty: bool,
     },
     /// Start MCP server (stdio transport)
     Mcp,
@@ -549,6 +555,7 @@ async fn async_main() -> anyhow::Result<()> {
             include,
             no_default_excludes,
             max_files,
+            include_dirty,
         } => {
             let docs = match (include_docs, no_docs) {
                 (true, _) => Some(true),
@@ -572,6 +579,7 @@ async fn async_main() -> anyhow::Result<()> {
                     no_default_excludes,
                     max_files,
                 },
+                include_dirty,
             )
             .await
         }

@@ -635,6 +635,38 @@ fn freshness_check(
             .fix(analyze);
     }
     if indexed == head {
+        match super::dirty::paths_differing_from_head(repo_path) {
+            Some(paths) if !paths.is_empty() => {
+                let shown = paths.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+                let mut check = Check::new(
+                    "freshness",
+                    Level::Warn,
+                    format!(
+                        "index matches HEAD ({}) but the working tree differs ({} path(s))",
+                        short(&head),
+                        paths.len()
+                    ),
+                )
+                .detail(shown)
+                .fix(format!("{analyze} --include-dirty"));
+                if !index_usable {
+                    check = check.detail("the snapshot itself is unusable, see the `index` check");
+                }
+                return check;
+            }
+            None => {
+                return Check::new(
+                    "freshness",
+                    Level::Warn,
+                    format!(
+                        "index matches HEAD ({}) but the worktree could not be compared",
+                        short(&head)
+                    ),
+                )
+                .fix(analyze);
+            }
+            Some(_) => {}
+        }
         let check = Check::new("freshness", Level::Ok, format!("index at HEAD ({})", short(&head)));
         return if index_usable {
             check

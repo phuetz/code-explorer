@@ -46,6 +46,7 @@ pub async fn run(
     llm_max_symbols: Option<usize>,
     include_docs: Option<bool>,
     walk: WalkOptions,
+    include_dirty: bool,
 ) -> anyhow::Result<()> {
     let repo_path = Path::new(path)
         .canonicalize()
@@ -80,10 +81,39 @@ pub async fn run(
         );
     }
 
-    // Check if already indexed
+    // An existing index used to be reused without looking at the worktree.
+    // `--include-dirty` re-indexes when the worktree differs from HEAD
+    // (tracked content hash, or an untracked path that is not ignored).
+    // A clean worktree whose HEAD moved since meta.last_commit is unchanged
+    // here: that case still needs `--force` or `--incremental`.
     if !force && !incremental && repo_manager::has_index(&repo_path) {
-        println!("Repository already indexed. Use --force to re-index.");
-        return Ok(());
+        let dirty = if skip_git {
+            None
+        } else {
+            super::dirty::paths_differing_from_head(&repo_path)
+        };
+        match super::dirty::existing_index_action(include_dirty, dirty.as_deref()) {
+            super::dirty::ExistingIndex::Keep => {
+                println!("Repository already indexed. Use --force to re-index.");
+                return Ok(());
+            }
+            super::dirty::ExistingIndex::KeepButWarn { count } => {
+                println!(
+                    "Repository already indexed. The commit matches but {count} working-tree path(s) differ."
+                );
+                println!("Use --include-dirty to include those changes, or --force to re-index.");
+                return Ok(());
+            }
+            super::dirty::ExistingIndex::Reindex { count } => {
+                if count == 0 {
+                    println!(
+                        "--include-dirty: worktree was not compared to HEAD; re-indexing."
+                    );
+                } else {
+                    println!("Including {count} uncommitted path(s) (--include-dirty).");
+                }
+            }
+        }
     }
 
     if incremental && !force {

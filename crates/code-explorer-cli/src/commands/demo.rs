@@ -51,6 +51,7 @@ pub async fn run(path: Option<&str>, symbol: Option<&str>) -> anyhow::Result<()>
             None,
             None,
             crate::commands::analyze::WalkOptions::default(),
+            false,
         )
         .await?;
         println!();

@@ -38,8 +38,12 @@ pub fn run() -> anyhow::Result<()> {
                 None => {
                     println!("  Git: not available or not a git repo");
                 }
-                _ => {
-                    println!("  Index is up-to-date.");
+                Some(_) => {
+                    for line in super::dirty::freshness_lines(&super::dirty::freshness_when_commit_matches(
+                        &cwd,
+                    )) {
+                        println!("{line}");
+                    }
                 }
             }
 
