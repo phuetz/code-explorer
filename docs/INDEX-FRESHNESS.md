@@ -103,8 +103,10 @@ cargo test --release -p code-explorer-mcp --locked
 
 `watch` still directly uses the old partial engine and is not repaired by this
 CLI parsing cache. `status` still compares the indexed commit to `git rev-parse HEAD`.
-When those hashes match, it also SHA-256-compares tracked worktree bytes with the
-HEAD blob and lists untracked paths from `git ls-files --others --exclude-standard`
+When those hashes match, it also asks Git which tracked paths differ
+(`git diff --name-only -z --no-renames --no-ext-diff --ignore-submodules=dirty HEAD`,
+so `core.autocrlf`, `.gitattributes` and clean/smudge filters are applied by Git,
+not re-implemented) and lists untracked paths from `git ls-files --others --exclude-standard`
 (ignored files do not count; `.codeexplorer/` is omitted). It prints
 `Index is up-to-date.` only when that set is empty. Plain `analyze` keeps an
 existing index unless `--force`, `--incremental`, or `--include-dirty` (the last
