@@ -16,8 +16,12 @@ static RE_SERVICE_CLASS: Lazy<Regex> = Lazy::new(|| {
     .unwrap()
 });
 
-/// Constructor parameter matching an interface: ISomeService someService
-static RE_CTOR_PARAM: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(I[A-Z]\w+)\s+(\w+)"#).unwrap());
+/// Constructor parameter: interface or concrete type, with optional generics.
+/// Matches `IEmailSender email`, `PizzaService service`, `IAppLogger<T> logger`,
+/// `UserManager<ApplicationUser> userManager`, `IRepository<Basket> repo`.
+static RE_CTOR_PARAM: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"((?:I)?[A-Z]\w*(?:<[^>]+>)?)\s+(\w+)"#).expect("RE_CTOR_PARAM")
+});
 
 /// Extract service / repository / manager / provider classes from C# source.
 pub fn extract_services_and_repositories(source: &str) -> Vec<ServiceInfo> {
@@ -84,7 +88,8 @@ pub fn extract_services_and_repositories(source: &str) -> Vec<ServiceInfo> {
 /// is essentially always the DI constructor.
 pub fn extract_constructor_dependencies(source: &str, class_name: &str) -> Vec<(String, String)> {
     // Build a regex for this specific constructor: public ClassName(...)
-    let pattern = format!(r"public\s+{}\s*\(([^)]*)\)", regex::escape(class_name));
+    // (?s) so multi-line parameter lists (common in ASP.NET controllers) are captured.
+    let pattern = format!(r"(?s)public\s+{}\s*\(([^)]*)\)", regex::escape(class_name));
     let re = Regex::new(&pattern).unwrap();
 
     let mut best: Vec<(String, String)> = Vec::new();
@@ -212,5 +217,50 @@ public class UnitOfWorkAide : IUnitOfWork
         assert_eq!(uow.class_name, "UnitOfWorkAide");
         assert_eq!(uow.layer_type, "UnitOfWork");
         assert_eq!(uow.implements_interface.as_deref(), Some("IUnitOfWork"));
+    }
+
+    /// Cause : paramètres DI génériques et types concrets (sans préfixe I).
+    #[test]
+    fn test_extract_constructor_deps_generics_and_concrete() {
+        let source = r#"
+public class ManageController : Controller
+{
+    public ManageController(
+      UserManager<ApplicationUser> userManager,
+      IEmailSender emailSender,
+      IAppLogger<ManageController> logger,
+      PizzaService service,
+      IRepository<Basket> basketRepo)
+    {
+    }
+}
+"#;
+        let deps = extract_constructor_dependencies(source, "ManageController");
+        let types: Vec<&str> = deps.iter().map(|(t, _)| t.as_str()).collect();
+        assert!(
+            types.iter().any(|t| *t == "IEmailSender"),
+            "IEmailSender missing: {:?}",
+            deps
+        );
+        assert!(
+            types.iter().any(|t| t.starts_with("IAppLogger")),
+            "IAppLogger<ManageController> missing: {:?}",
+            deps
+        );
+        assert!(
+            types.iter().any(|t| *t == "PizzaService"),
+            "concrete PizzaService missing: {:?}",
+            deps
+        );
+        assert!(
+            types.iter().any(|t| t.starts_with("IRepository")),
+            "IRepository<Basket> missing: {:?}",
+            deps
+        );
+        assert!(
+            types.iter().any(|t| t.starts_with("UserManager")),
+            "UserManager<ApplicationUser> missing: {:?}",
+            deps
+        );
     }
 }

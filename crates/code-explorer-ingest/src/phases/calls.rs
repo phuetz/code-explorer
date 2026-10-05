@@ -16,10 +16,14 @@ use crate::phases::parsing::{CallForm, ExtractedCall, ExtractedData};
 use crate::type_env::TypeEnvironment;
 use crate::IngestError;
 
-// Pattern 1: Field declarations like "LetterService letterService = null;"
+// Pattern 1: Field declarations including `readonly` / `required` and I*-interfaces.
+// Old pattern missed `private readonly IEmailSender _emailSender;` (modifier + interface),
+// which dropped CALLS from controllers to injected collaborators (eShopOnWeb ManageController).
 static FIELD_RE: Lazy<Regex> = Lazy::new(|| {
+    // Type = I-prefixed interface (optional generics) OR concrete *Service/*Repository/…
+    // Requires `readonly`/`required`/`static`/`volatile` between access and type when present.
     Regex::new(
-        r"(?:private|protected|public|internal)?\s*([A-Z]\w+(?:Service|Repository|Manager|Helper|Provider|Client|Handler))\s+(\w+)\s*[=;]"
+        r"(?:private|protected|public|internal)?\s*(?:(?:readonly|required|static|volatile)\s+)*((?:I[A-Z]\w+(?:<[^>]+>)?)|(?:[A-Z]\w+(?:Service|Repository|Manager|Helper|Provider|Client|Handler|Sender|Mediator)))\s+(\w+)\s*[=;]"
     ).expect("FIELD_RE must compile")
 });
 

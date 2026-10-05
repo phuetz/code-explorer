@@ -31,6 +31,13 @@ static DI: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
     r"\b(AddScoped|AddSingleton|AddTransient)\s*<\s*([A-Za-z_]\w*)(?:\s*,\s*([A-Za-z_]\w*))?\s*>\s*\(").unwrap()
 });
+/// Open-generic MS DI: AddScoped(typeof(IReadRepository<>), typeof(EfRepository<>))
+static DI_TYPEOF: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"\b(AddScoped|AddSingleton|AddTransient)\(\s*typeof\(([A-Za-z_]\w*(?:<>)?)\),\s*typeof\(([A-Za-z_]\w*(?:<>)?)\)",
+    )
+    .unwrap()
+});
 static CLAP_ARM: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\bCommands::([A-Za-z_]\w*)\s*(?:\{|\()?").unwrap());
 static COMMANDER: Lazy<Regex> =
@@ -88,6 +95,34 @@ pub fn extract_entry_points(graph: &mut KnowledgeGraph, files: &[FileEntry]) -> 
                             &symbols,
                             RelationshipType::DependsOn,
                             "DI registration",
+                        );
+                    }
+                    stats.registrations += 1;
+                }
+                for cap in DI_TYPEOF.captures_iter(line) {
+                    let service = cap.get(2).unwrap().as_str();
+                    let impl_type = cap.get(3).unwrap().as_str();
+                    let name = format!("{}<{}>", &cap[1], service);
+                    let id = add_node(
+                        graph,
+                        NodeLabel::CodeElement,
+                        path,
+                        index,
+                        index,
+                        &name,
+                        None,
+                        None,
+                        "aspnet-di",
+                    );
+                    for type_name in [service, impl_type] {
+                        let bare = type_name.trim_end_matches("<>");
+                        link_named(
+                            graph,
+                            &id,
+                            bare,
+                            &symbols,
+                            RelationshipType::DependsOn,
+                            "DI typeof registration",
                         );
                     }
                     stats.registrations += 1;

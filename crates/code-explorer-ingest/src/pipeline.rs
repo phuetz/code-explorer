@@ -845,6 +845,149 @@ public class HomeController : Controller
         cleanup(&dir);
     }
 
+    /// Cause : FIELD_RE ignoreait `readonly` et les interfaces I* hors suffixe Service.
+    /// Sans le type du champ, `_emailSender.SendEmailAsync` ne produit pas d'arête CALLS.
+    #[tokio::test]
+    async fn test_pipeline_csharp_readonly_field_di_calls() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("IEmailSender.cs"),
+            r#"
+public interface IEmailSender
+{
+    void SendEmailAsync(string email, string subject, string htmlMessage);
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("EmailSender.cs"),
+            r#"
+public class EmailSender : IEmailSender
+{
+    public void SendEmailAsync(string email, string subject, string htmlMessage) { }
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("AccountController.cs"),
+            r#"
+using System.Web.Mvc;
+
+public class AccountController : Controller
+{
+    private readonly IEmailSender _emailSender;
+
+    public AccountController(IEmailSender emailSender)
+    {
+        _emailSender = emailSender;
+    }
+
+    [HttpPost]
+    public ActionResult ForgotPassword(string email)
+    {
+        _emailSender.SendEmailAsync(email, "Reset", "body");
+        return View();
+    }
+}
+"#,
+        )
+        .unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let graph = &result.graph;
+
+        let calls: Vec<(String, String)> = graph
+            .iter_relationships()
+            .filter(|r| r.rel_type == RelationshipType::Calls)
+            .filter_map(|r| {
+                let src = graph.get_node(&r.source_id)?;
+                let tgt = graph.get_node(&r.target_id)?;
+                Some((src.properties.name.clone(), tgt.properties.name.clone()))
+            })
+            .collect();
+
+        assert!(
+            calls.iter().any(|(s, t)| s == "ForgotPassword" && t == "SendEmailAsync"),
+            "CALLS ForgotPassword -> SendEmailAsync missing (readonly IEmailSender field). calls={:?}",
+            calls
+        );
+
+        cleanup(&dir);
+    }
+
+    /// Cause : AddScoped(typeof(IFoo<>), typeof(Bar<>)) absent des entry points DI.
+    #[tokio::test]
+    async fn test_pipeline_csharp_typeof_di_registration() {
+        let dir = create_test_dir();
+        fs::write(
+            dir.join("IReadRepository.cs"),
+            "public interface IReadRepository<T> where T : class { }
+",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("EfRepository.cs"),
+            "public class EfRepository<T> : IReadRepository<T> where T : class { }
+",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("Program.cs"),
+            r#"
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped(typeof(IReadRepository<>), typeof(EfRepository<>));
+        services.AddScoped<IBasketService, BasketService>();
+    }
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("IBasketService.cs"),
+            "public interface IBasketService { }
+",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("BasketService.cs"),
+            "public class BasketService : IBasketService { }
+",
+        )
+        .unwrap();
+
+        let result = run_pipeline(&dir, None, PipelineOptions::default())
+            .await
+            .expect("pipeline");
+        let graph = &result.graph;
+
+        let di_names: Vec<String> = graph
+            .iter_nodes()
+            .filter(|n| n.label == NodeLabel::CodeElement)
+            .map(|n| n.properties.name.clone())
+            .collect();
+
+        assert!(
+            di_names.iter().any(|n| n.contains("IReadRepository")),
+            "typeof open-generic DI node missing; di_names={:?}",
+            di_names
+        );
+        assert!(
+            di_names.iter().any(|n| n.contains("IBasketService")),
+            "AddScoped<IBasketService, BasketService> missing; di_names={:?}",
+            di_names
+        );
+
+        cleanup(&dir);
+    }
+
     #[tokio::test]
     async fn test_pipeline_javascript_functions() {
         let dir = create_test_dir();

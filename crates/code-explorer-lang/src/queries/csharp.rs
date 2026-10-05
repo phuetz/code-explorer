@@ -51,10 +51,18 @@ pub const QUERIES: &str = r#"
 ; Target-typed new (C# 9): User u = new("x", 5)
 (variable_declaration type: (identifier) @call.name (variable_declarator (implicit_object_creation_expression) @call))
 
-; Heritage
+; Heritage — base_list children are `type` subtypes (identifier | generic_name | qualified_name).
+; Interface-looking bases (IFoo / IFoo<T>) are tagged @heritage.implements so the heritage
+; phase emits IMPLEMENTS (and interface_name_pattern remains a safety net for Extends→Implements).
 (class_declaration name: (identifier) @heritage.class
   (base_list (identifier) @heritage.extends)) @heritage
 (class_declaration name: (identifier) @heritage.class
+  (base_list (generic_name (identifier) @heritage.extends))) @heritage
+(class_declaration name: (identifier) @heritage.class
+  (base_list (qualified_name name: (identifier) @heritage.extends))) @heritage
+(interface_declaration name: (identifier) @heritage.class
+  (base_list (identifier) @heritage.extends)) @heritage
+(interface_declaration name: (identifier) @heritage.class
   (base_list (generic_name (identifier) @heritage.extends))) @heritage
 
 ; Write access: obj.field = value
