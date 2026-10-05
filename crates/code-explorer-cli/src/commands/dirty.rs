@@ -7,28 +7,22 @@
 //!
 //! Detection added here:
 //!
-//! * Tracked files. `git ls-tree -r -z HEAD` and `git ls-files -z -s`. For a
-//!   regular file or symlink present on both sides, SHA-256 of the worktree
-//!   bytes (symlink: the link target, not the followed file) compared with
-//!   SHA-256 of the raw HEAD blob (`git cat-file --batch`). A missing side, a
-//!   hash mismatch, or an unmerged index stage is a difference. Gitlinks
-//!   (mode `160000`) compare the recorded commit id only; the submodule
-//!   worktree is not hashed.
+//! * Tracked files. `git diff --name-only -z HEAD`: Git applies `core.autocrlf`,
+//!   `.gitattributes` and clean/smudge filters itself, so a checkout whose line
+//!   endings Git rewrote is clean, and same bytes with a new mtime stay clean.
+//!   Deleted, modified and unmerged paths are differences. Submodules compare
+//!   the recorded commit only (`--ignore-submodules=dirty`).
 //! * Untracked, non-ignored files. `git ls-files -z --others --exclude-standard`,
 //!   which applies `.gitignore`, `.git/info/exclude`, and the global excludes
 //!   file. Those paths have no HEAD blob, so presence is the difference.
 //! * `.codeexplorer/` is omitted. `analyze` creates it, and counting it would
 //!   mark every fresh index dirty.
 //!
-//! These git invocations are read-only (`ls-tree`, `ls-files`, `cat-file`).
-//! They do not refresh the index.
+//! These git invocations are read-only and run with `GIT_OPTIONAL_LOCKS=0`, so
+//! they never write the index.
 
-use std::collections::{BTreeSet, HashMap};
-use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
-
-use sha2::{Digest, Sha256};
+use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HeadFreshness {
@@ -95,84 +89,37 @@ pub(crate) fn freshness_lines(state: &HeadFreshness) -> Vec<String> {
 }
 
 pub(crate) fn paths_differing_from_head(repo: &Path) -> Option<Vec<String>> {
-    let head = parse_ls_tree_z(&git_bytes(repo, &["ls-tree", "-r", "-z", "HEAD"])?)?;
-    let index = parse_ls_files_s_z(&git_bytes(repo, &["ls-files", "-z", "-s"])?)?;
+    // Ask Git itself, so that core.autocrlf, .gitattributes and clean/smudge
+    // filters are applied exactly as Git applies them. Comparing raw worktree
+    // bytes with the raw HEAD blob reported a clean checkout as dirty as soon as
+    // Git had rewritten line endings. `git diff` refreshes the index in memory
+    // only (GIT_OPTIONAL_LOCKS=0 stops it writing it back), so a touched file
+    // with identical content is not a difference. Submodule worktrees are not
+    // inspected: only the recorded commit is compared.
+    let tracked = parse_z_paths(&git_bytes(
+        repo,
+        &[
+            "-c",
+            "core.quotepath=off",
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            "--ignore-submodules=dirty",
+            "HEAD",
+            "--",
+        ],
+    )?)?;
     let untracked = parse_z_paths(&git_bytes(
         repo,
         &["ls-files", "-z", "--others", "--exclude-standard"],
     )?)?;
-
-    let mut head_map: HashMap<String, (u32, String)> = HashMap::new();
-    for (path, mode, oid) in head {
-        head_map.insert(path, (mode, oid));
-    }
-
-    let mut index_map: HashMap<String, (u32, String)> = HashMap::new();
-    let mut conflicted: BTreeSet<String> = BTreeSet::new();
-    for (path, mode, oid, stage) in index {
-        if is_storage(&path) {
-            continue;
-        }
-        if stage != 0 {
-            conflicted.insert(path);
-            continue;
-        }
-        index_map.insert(path, (mode, oid));
-    }
-
-    let mut names: BTreeSet<String> = BTreeSet::new();
-    names.extend(head_map.keys().cloned());
-    names.extend(index_map.keys().cloned());
-
-    let mut dirty: Vec<String> = conflicted.iter().cloned().collect();
-    // path, worktree sha256, HEAD blob oid
-    let mut need: Vec<(String, String, String)> = Vec::new();
-
-    for path in names {
-        if is_storage(&path) || conflicted.contains(&path) {
-            continue;
-        }
-        let head_e = head_map.get(&path);
-        let index_e = index_map.get(&path);
-        let mode = index_e
-            .map(|entry| entry.0)
-            .or_else(|| head_e.map(|entry| entry.0))
-            .unwrap_or(0);
-        if mode == 0o160000 {
-            match (
-                head_e.map(|entry| entry.1.as_str()),
-                index_e.map(|entry| entry.1.as_str()),
-            ) {
-                (Some(head_oid), Some(index_oid)) if head_oid == index_oid => {}
-                _ => dirty.push(path),
-            }
-            continue;
-        }
-        match (worktree_hash(&repo.join(&path)), head_e) {
-            (Some(work), Some((_, oid))) => need.push((path, work, oid.clone())),
-            _ => dirty.push(path),
-        }
-    }
-
-    let oids: Vec<String> = need.iter().map(|(_, _, oid)| oid.clone()).collect();
-    let head_hashes = blob_sha256s(repo, &oids)?;
-    if head_hashes.len() != need.len() {
-        return None;
-    }
-    for ((path, work, _), head_hash) in need.into_iter().zip(head_hashes) {
-        match head_hash {
-            Some(head) if head == work => {}
-            _ => dirty.push(path),
-        }
-    }
-
-    for path in untracked {
-        if is_storage(&path) {
-            continue;
-        }
-        dirty.push(path);
-    }
-
+    let mut dirty: Vec<String> = tracked
+        .into_iter()
+        .chain(untracked)
+        .filter(|path| !is_storage(path))
+        .collect();
     dirty.sort();
     dirty.dedup();
     Some(dirty)
@@ -187,52 +134,13 @@ fn git_bytes(repo: &Path, args: &[&str]) -> Option<Vec<u8>> {
     let output = Command::new("git")
         .args(args)
         .current_dir(repo)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
     Some(output.stdout)
-}
-
-fn parse_ls_tree_z(raw: &[u8]) -> Option<Vec<(String, u32, String)>> {
-    let mut out = Vec::new();
-    for entry in raw.split(|byte| *byte == 0) {
-        if entry.is_empty() {
-            continue;
-        }
-        let entry = std::str::from_utf8(entry).ok()?;
-        let (meta, path) = entry.split_once('\t')?;
-        let mut parts = meta.split_whitespace();
-        let mode = u32::from_str_radix(parts.next()?, 8).ok()?;
-        let _kind = parts.next()?;
-        let oid = parts.next()?.to_string();
-        if parts.next().is_some() {
-            return None;
-        }
-        out.push((path.to_string(), mode, oid));
-    }
-    Some(out)
-}
-
-fn parse_ls_files_s_z(raw: &[u8]) -> Option<Vec<(String, u32, String, u32)>> {
-    let mut out = Vec::new();
-    for entry in raw.split(|byte| *byte == 0) {
-        if entry.is_empty() {
-            continue;
-        }
-        let entry = std::str::from_utf8(entry).ok()?;
-        let (meta, path) = entry.split_once('\t')?;
-        let mut parts = meta.split_whitespace();
-        let mode = u32::from_str_radix(parts.next()?, 8).ok()?;
-        let oid = parts.next()?.to_string();
-        let stage: u32 = parts.next()?.parse().ok()?;
-        if parts.next().is_some() {
-            return None;
-        }
-        out.push((path.to_string(), mode, oid, stage));
-    }
-    Some(out)
 }
 
 fn parse_z_paths(raw: &[u8]) -> Option<Vec<String>> {
@@ -246,142 +154,13 @@ fn parse_z_paths(raw: &[u8]) -> Option<Vec<String>> {
     Some(out)
 }
 
-fn worktree_hash(path: &Path) -> Option<String> {
-    let meta = std::fs::symlink_metadata(path).ok()?;
-    let file_type = meta.file_type();
-    if file_type.is_symlink() {
-        let target = std::fs::read_link(path).ok()?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            return Some(sha256_bytes(target.as_os_str().as_bytes()));
-        }
-        #[cfg(not(unix))]
-        {
-            return Some(sha256_bytes(target.to_string_lossy().as_bytes()));
-        }
-    }
-    if !file_type.is_file() {
-        return None;
-    }
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut hasher = Sha256::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        let n = file.read(&mut buf).ok()?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Some(format!("{:x}", hasher.finalize()))
-}
-
-fn sha256_bytes(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
-}
-
-fn blob_sha256s(repo: &Path, oids: &[String]) -> Option<Vec<Option<String>>> {
-    if oids.is_empty() {
-        return Some(Vec::new());
-    }
-    let mut child = Command::new("git")
-        .args(["cat-file", "--batch"])
-        .current_dir(repo)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let mut stdin = match child.stdin.take() {
-        Some(stdin) => stdin,
-        None => {
-            let _ = child.wait();
-            return None;
-        }
-    };
-    let stdout = match child.stdout.take() {
-        Some(stdout) => stdout,
-        None => {
-            drop(stdin);
-            let _ = child.wait();
-            return None;
-        }
-    };
-    let to_send = oids.to_vec();
-    let writer = std::thread::spawn(move || {
-        for oid in to_send {
-            if writeln!(stdin, "{oid}").is_err() {
-                break;
-            }
-        }
-    });
-    let result = read_batch(stdout, oids.len());
-    let _ = writer.join();
-    let status_ok = child
-        .wait()
-        .ok()
-        .map(|status| status.success())
-        .unwrap_or(false);
-    let hashes = result?;
-    if !status_ok {
-        return None;
-    }
-    Some(hashes)
-}
-
-fn read_batch(stdout: std::process::ChildStdout, count: usize) -> Option<Vec<Option<String>>> {
-    let mut reader = BufReader::new(stdout);
-    let mut hashes = Vec::with_capacity(count);
-    for _ in 0..count {
-        let mut header = String::new();
-        let got = reader.read_line(&mut header).ok()?;
-        if got == 0 {
-            return None;
-        }
-        let header = header.trim_end_matches(['\n', '\r']);
-        if header.ends_with(" missing") {
-            hashes.push(None);
-            continue;
-        }
-        let size: usize = header.split_whitespace().last()?.parse().ok()?;
-        let mut hasher = Sha256::new();
-        let mut left = size;
-        let mut buf = [0u8; 8192];
-        while left > 0 {
-            let chunk = left.min(buf.len());
-            reader.read_exact(&mut buf[..chunk]).ok()?;
-            hasher.update(&buf[..chunk]);
-            left -= chunk;
-        }
-        let mut newline = [0u8; 1];
-        reader.read_exact(&mut newline).ok()?;
-        if newline[0] != b'\n' {
-            return None;
-        }
-        hashes.push(Some(format!("{:x}", hasher.finalize())));
-    }
-    Some(hashes)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::process::Command;
 
     #[test]
-    fn parses_ls_tree_and_index_bytes() {
-        let tree = b"100644 blob ca05282d78fc4edbdc73e5ec2ce1fe1e16725e42\ta.rs\x00";
-        let index = b"100644 ca05282d78fc4edbdc73e5ec2ce1fe1e16725e42 0\ta.rs\x00";
-        let parsed = parse_ls_tree_z(tree).unwrap();
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].0, "a.rs");
-        assert_eq!(parsed[0].1, 0o100644);
-        assert_eq!(parsed[0].2, "ca05282d78fc4edbdc73e5ec2ce1fe1e16725e42");
-        let indexed = parse_ls_files_s_z(index).unwrap();
-        assert_eq!(indexed[0].3, 0);
+    fn parses_nul_separated_paths() {
         assert!(parse_z_paths(b".codeexplorer/meta.json\x00b.rs\x00")
             .unwrap()
             .iter()
@@ -553,5 +332,26 @@ mod tests {
         let bytes = std::fs::read(&path).unwrap();
         std::fs::write(&path, &bytes).unwrap();
         assert_up_to_date(&dir.0);
+    }
+
+    #[test]
+    fn autocrlf_checkout_is_not_reported_as_dirty() {
+        if !git_available() {
+            eprintln!("skipping: git is not installed");
+            return;
+        }
+        let dir = scratch("autocrlf");
+        init_repo(&dir.0);
+        git(&dir.0, &["config", "core.autocrlf", "true"]);
+        std::fs::remove_file(dir.0.join("a.rs")).unwrap();
+        git(&dir.0, &["checkout", "--", "a.rs"]);
+        // Git rewrote the line endings: the worktree bytes differ from the blob,
+        // yet `git diff --quiet HEAD` says the tree is clean.
+        let bytes = std::fs::read(dir.0.join("a.rs")).unwrap();
+        assert!(bytes.windows(2).any(|w| w == b"\r\n"), "expected CRLF, got {bytes:?}");
+        assert_up_to_date(&dir.0);
+        // A real edit is still seen.
+        std::fs::write(dir.0.join("a.rs"), "fn a() { let _ = 2; }\r\n").unwrap();
+        assert_warns_for(&dir.0, "a.rs");
     }
 }
