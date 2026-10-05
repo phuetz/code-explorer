@@ -1,6 +1,35 @@
 //! The `status` command: check Code Explorer index status for the current directory.
 
+use code_explorer_core::config::exclusions::ExclusionRules;
 use code_explorer_core::storage::{git, repo_manager};
+use code_explorer_ingest::manifest::FileChange;
+
+/// Files that differ between the working tree and the last indexed manifest
+/// (default exclusions + `.gitignore`). `None` when it cannot be judged.
+pub fn working_tree_drift(repo_path: &std::path::Path) -> Option<Vec<FileChange>> {
+    let storage = repo_manager::get_storage_paths(repo_path);
+    let rules = ExclusionRules::for_repo(repo_path);
+    code_explorer_ingest::incremental::working_tree_changes(repo_path, &storage.storage_path, &rules)
+        .ok()
+        .flatten()
+}
+
+/// `modified: path` lines, at most `max`, with an "... and N more" tail.
+pub fn drift_file_lines(changes: &[FileChange], max: usize) -> Vec<String> {
+    let mut lines: Vec<String> = changes
+        .iter()
+        .take(max)
+        .map(|c| match c {
+            FileChange::Added(p) => format!("added:    {p}"),
+            FileChange::Modified(p) => format!("modified: {p}"),
+            FileChange::Removed(p) => format!("removed:  {p}"),
+        })
+        .collect();
+    if changes.len() > max {
+        lines.push(format!("... and {} more", changes.len() - max));
+    }
+    lines
+}
 
 pub fn run() -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
@@ -25,10 +54,13 @@ pub fn run() -> anyhow::Result<()> {
             println!("  Commit: {}", meta.last_commit);
             println!("  Storage: {}", storage_paths.storage_path.display());
 
-            // Check if index is stale
+            // Check if index is stale: HEAD moved, or the working tree moved
+            // (uncommitted edits are what a developer actually queries).
             let current_commit = git::current_commit(&cwd);
+            let mut fresh = true;
             match current_commit {
                 Some(ref commit) if commit != &meta.last_commit => {
+                    fresh = false;
                     println!();
                     println!("  WARNING: Index is stale!");
                     println!("    Indexed commit: {}", meta.last_commit);
@@ -38,9 +70,27 @@ pub fn run() -> anyhow::Result<()> {
                 None => {
                     println!("  Git: not available or not a git repo");
                 }
-                _ => {
-                    println!("  Index is up-to-date.");
+                _ => {}
+            }
+            match working_tree_drift(&cwd) {
+                Some(changes) if !changes.is_empty() => {
+                    fresh = false;
+                    println!();
+                    println!("  WARNING: Index is stale (uncommitted work not indexed)!");
+                    println!("    {}", code_explorer_ingest::incremental::describe_changes(&changes));
+                    for line in drift_file_lines(&changes, 10) {
+                        println!("      {line}");
+                    }
+                    println!("    Run `code-explorer analyze` to update (incremental).");
                 }
+                None => {
+                    fresh = false;
+                    println!("  Working tree: freshness unknown (no file manifest, re-run `code-explorer analyze --force`)");
+                }
+                _ => {}
+            }
+            if fresh {
+                println!("  Index is up-to-date.");
             }
 
             if let Some(stats) = &meta.stats {

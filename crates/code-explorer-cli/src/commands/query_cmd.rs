@@ -37,6 +37,16 @@ pub async fn run(
         ));
     }
 
+    // Say so when the answer may come from code that has since changed.
+    if let Some(changes) = super::status::working_tree_drift(&repo_path) {
+        if !changes.is_empty() {
+            eprintln!(
+                "Warning: index may be stale ({}); run `code-explorer analyze` to refresh.",
+                code_explorer_ingest::incremental::describe_changes(&changes)
+            );
+        }
+    }
+
     let graph = code_explorer_db::snapshot::load_snapshot(&snap)?;
     let fts = FtsIndex::build(&graph);
 

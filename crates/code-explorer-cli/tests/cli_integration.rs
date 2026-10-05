@@ -1008,3 +1008,98 @@ fn default_exclusions_keep_vendored_code_out_of_the_index() {
         "--no-default-excludes must bring all 70 files back:\n{stdout}"
     );
 }
+
+fn status_in(repo: &TestRepo) -> String {
+    let output = code_explorer()
+        .arg("status")
+        .current_dir(repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer status");
+    assert_success(&output, "code-explorer status");
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn committed_indexed_repo(name: &str) -> (TestRepo, String) {
+    let repo = TestRepo::new(name);
+    fs::write(repo.path().join(".gitignore"), "ignored.rs\n").unwrap();
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha_original() {}\n").unwrap();
+    fs::write(repo.path().join("src/b.rs"), "pub fn beta_original() {}\n").unwrap();
+    repo.git(&["add", ".gitignore", "src/a.rs", "src/b.rs"]);
+    repo.git(&["commit", "--quiet", "-m", "initial"]);
+    let repo_arg = repo.path().display().to_string();
+    assert_success(&repo.explorer(&["analyze", &repo_arg]), "analyze");
+    (repo, repo_arg)
+}
+
+#[test]
+fn status_is_up_to_date_on_a_clean_tree() {
+    let (repo, _) = committed_indexed_repo("status-clean");
+    let out = status_in(&repo);
+    assert!(out.contains("Index is up-to-date."), "clean tree:\n{out}");
+}
+
+#[test]
+fn status_flags_uncommitted_edits_as_stale() {
+    let (repo, _) = committed_indexed_repo("status-dirty");
+    // modified (tracked), added (untracked), removed (tracked), ignored (must not count)
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha_edited() {}\n").unwrap();
+    fs::write(repo.path().join("src/c.rs"), "pub fn gamma_new() {}\n").unwrap();
+    fs::remove_file(repo.path().join("src/b.rs")).unwrap();
+    fs::write(repo.path().join("ignored.rs"), "pub fn ignored_fn() {}\n").unwrap();
+
+    let out = status_in(&repo);
+    assert!(
+        !out.contains("Index is up-to-date."),
+        "dirty tree must not claim freshness:\n{out}"
+    );
+    assert!(out.contains("1 modified, 1 added, 1 removed"), "{out}");
+    assert!(out.contains("modified: src/a.rs"), "{out}");
+    assert!(out.contains("added:    src/c.rs"), "{out}");
+    assert!(out.contains("removed:  src/b.rs"), "{out}");
+    assert!(!out.contains("ignored.rs"), "ignored file leaked:\n{out}");
+}
+
+#[test]
+fn analyze_refreshes_a_stale_index_and_query_warns_before() {
+    let (repo, repo_arg) = committed_indexed_repo("analyze-dirty");
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha_edited_probe() {}\n").unwrap();
+
+    let before = repo.explorer(&["query", "alpha_edited_probe", "--repo", &repo_arg]);
+    assert!(
+        String::from_utf8_lossy(&before.stderr).contains("index may be stale"),
+        "query must warn: {}",
+        String::from_utf8_lossy(&before.stderr)
+    );
+
+    // No --force, no --incremental: the stale index is refreshed by itself.
+    let analyze = repo.explorer(&["analyze", &repo_arg]);
+    assert_success(&analyze, "analyze on a stale index");
+    assert!(
+        String::from_utf8_lossy(&analyze.stdout).contains("Index is stale"),
+        "{}",
+        String::from_utf8_lossy(&analyze.stdout)
+    );
+
+    let after = repo.explorer(&["query", "alpha_edited_probe", "--repo", &repo_arg]);
+    let stdout = String::from_utf8_lossy(&after.stdout);
+    assert!(stdout.contains("alpha_edited_probe"), "{stdout}");
+    assert!(!String::from_utf8_lossy(&after.stderr).contains("index may be stale"));
+    assert!(status_in(&repo).contains("Index is up-to-date."));
+
+    // A second analyze on the now-clean tree is a no-op that says so.
+    let again = repo.explorer(&["analyze", &repo_arg]);
+    assert!(String::from_utf8_lossy(&again.stdout).contains("Index is up-to-date"));
+}
+
+#[test]
+fn status_sees_an_edit_that_keeps_the_file_size() {
+    let (repo, _) = committed_indexed_repo("status-same-size");
+    // Same byte length, different content: only a content hash can tell.
+    let before = "pub fn alpha_original() {}\n";
+    let after = "pub fn alpha_originbl() {}\n";
+    assert_eq!(before.len(), after.len());
+    fs::write(repo.path().join("src/a.rs"), after).unwrap();
+    let out = status_in(&repo);
+    assert!(out.contains("modified: src/a.rs"), "{out}");
+}

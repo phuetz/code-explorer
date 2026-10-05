@@ -169,6 +169,25 @@ pub fn walk_repository_with(
     repo_path: &Path,
     rules: &ExclusionRules,
 ) -> Result<Vec<FileEntry>, crate::IngestError> {
+    walk_repository_reading(repo_path, rules, |abs_path, rel_path, _size| {
+        match std::fs::read_to_string(abs_path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Cannot read {}: {}", rel_path, e);
+                String::new()
+            }
+        }
+    })
+}
+
+/// Same walk and filters as [`walk_repository_with`], but the caller decides
+/// how (and whether) each file's content is read. The freshness check uses it
+/// to skip reading files whose size and mtime prove they did not change.
+pub fn walk_repository_reading(
+    repo_path: &Path,
+    rules: &ExclusionRules,
+    mut read_content: impl FnMut(&Path, &str, usize) -> String,
+) -> Result<Vec<FileEntry>, crate::IngestError> {
     let mut entries = Vec::new();
 
     for result in build_walker(repo_path, rules) {
@@ -200,13 +219,7 @@ pub fn walk_repository_with(
 
         // Only include files with supported languages
         if language.is_some() {
-            let content = match std::fs::read_to_string(abs_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!("Cannot read {}: {}", rel_path, e);
-                    String::new()
-                }
-            };
+            let content = read_content(abs_path, &rel_path, size);
             entries.push(FileEntry {
                 path: rel_path,
                 content,

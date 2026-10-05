@@ -80,10 +80,32 @@ pub async fn run(
         );
     }
 
-    // Check if already indexed
+    // Check if already indexed. An existing index is only "done" when the
+    // working tree still matches it: otherwise refresh incrementally.
+    let mut incremental = incremental;
     if !force && !incremental && repo_manager::has_index(&repo_path) {
-        println!("Repository already indexed. Use --force to re-index.");
-        return Ok(());
+        let storage = repo_manager::get_storage_paths(&repo_path);
+        match code_explorer_ingest::incremental::working_tree_changes(
+            &repo_path,
+            &storage.storage_path,
+            &exclusions,
+        ) {
+            Ok(Some(changes)) if changes.is_empty() => {
+                println!("Index is up-to-date (no file changed since the last analyze). Use --force to re-index.");
+                return Ok(());
+            }
+            Ok(Some(changes)) => {
+                println!(
+                    "Index is stale: {} since the last analyze; refreshing incrementally.",
+                    code_explorer_ingest::incremental::describe_changes(&changes)
+                );
+                incremental = true;
+            }
+            _ => {
+                println!("Repository already indexed (no file manifest to compare). Use --force to re-index.");
+                return Ok(());
+            }
+        }
     }
 
     if incremental && !force {

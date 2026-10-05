@@ -635,6 +635,23 @@ fn freshness_check(
             .fix(analyze);
     }
     if indexed == head {
+        if let Some(changes) = super::status::working_tree_drift(repo_path) {
+            if !changes.is_empty() {
+                let mut c = Check::new(
+                    "freshness",
+                    Level::Warn,
+                    format!(
+                        "index at HEAD ({}) but uncommitted work is not indexed",
+                        short(&head)
+                    ),
+                )
+                .detail(code_explorer_ingest::incremental::describe_changes(&changes));
+                for l in super::status::drift_file_lines(&changes, 5) {
+                    c = c.detail(l);
+                }
+                return c.fix(analyze);
+            }
+        }
         let check = Check::new("freshness", Level::Ok, format!("index at HEAD ({})", short(&head)));
         return if index_usable {
             check

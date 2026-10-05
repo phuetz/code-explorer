@@ -54,6 +54,80 @@ impl IncrementalResult {
     }
 }
 
+// ─── Freshness ───────────────────────────────────────────────────────────
+
+/// Compare the working tree with the manifest saved by the last `analyze`.
+///
+/// This is what decides whether an index is fresh: the HEAD commit says
+/// nothing about uncommitted edits, which are exactly what a developer is
+/// querying. The walk honours `.gitignore` and `rules`, so modified tracked
+/// files, new untracked files and deleted files are all seen, ignored ones
+/// are not.
+///
+/// Returns `Ok(None)` when no manifest exists (index predates it: freshness
+/// cannot be judged), otherwise the sorted list of changes (empty = fresh).
+pub fn working_tree_changes(
+    repo_path: &Path,
+    storage_path: &Path,
+    rules: &code_explorer_core::config::exclusions::ExclusionRules,
+) -> Result<Option<Vec<FileChange>>, crate::IngestError> {
+    let manifest_file = manifest::manifest_path(storage_path);
+    let old = match manifest::load_manifest(&manifest_file) {
+        Ok(Some(m)) => m,
+        _ => return Ok(None),
+    };
+    // Fast path (git's "racy index" rule): a file whose size is unchanged and
+    // whose mtime is clearly older than the manifest itself cannot have been
+    // edited since the last analyze, so its content is not even read. Anything
+    // newer, or of a different size, is hashed: no edit after the analyze can
+    // slip through. A 2 s margin covers edits racing the manifest write.
+    let manifest_mtime = std::fs::metadata(&manifest_file)
+        .and_then(|m| m.modified())
+        .ok();
+    let mut trusted: HashSet<String> = HashSet::new();
+    let entries = phases::structure::walk_repository_reading(
+        repo_path,
+        rules,
+        |abs_path, rel_path, size| {
+            if let (Some(limit), Some(prev)) = (manifest_mtime, old.files.get(rel_path)) {
+                let older = std::fs::metadata(abs_path)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|m| m.checked_add(std::time::Duration::from_secs(2)))
+                    .is_some_and(|m| m < limit);
+                if older && prev.size == size as u64 {
+                    trusted.insert(rel_path.to_string());
+                    return String::new();
+                }
+            }
+            std::fs::read_to_string(abs_path).unwrap_or_default()
+        },
+    )?;
+    let (kept, read): (Vec<_>, Vec<_>) = entries
+        .into_iter()
+        .partition(|e| trusted.contains(&e.path));
+    let mut new = manifest::build_manifest_from_entries(&read);
+    for e in &kept {
+        if let Some(prev) = old.files.get(&e.path) {
+            new.files.insert(e.path.clone(), prev.clone());
+        }
+    }
+    Ok(Some(manifest::diff_manifests(&old, &new)))
+}
+
+/// One-line summary of a change list, e.g. `2 modified, 1 added, 1 removed`.
+pub fn describe_changes(changes: &[FileChange]) -> String {
+    let (mut a, mut m, mut r) = (0, 0, 0);
+    for c in changes {
+        match c {
+            FileChange::Added(_) => a += 1,
+            FileChange::Modified(_) => m += 1,
+            FileChange::Removed(_) => r += 1,
+        }
+    }
+    format!("{m} modified, {a} added, {r} removed")
+}
+
 // ─── Engine ──────────────────────────────────────────────────────────────
 
 /// Run an incremental update on an existing graph.
