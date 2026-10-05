@@ -3,6 +3,14 @@
 use code_explorer_core::storage::{git, repo_manager};
 use code_explorer_ingest::manifest::FileChange;
 
+/// An index with a file manifest but no walk settings: written by an older
+/// build, whose exclusions and prose choice are unknown.
+pub fn legacy_index(repo_path: &std::path::Path) -> bool {
+    let storage = repo_manager::get_storage_paths(repo_path);
+    code_explorer_ingest::manifest::manifest_path(&storage.storage_path).exists()
+        && code_explorer_ingest::manifest::load_settings(&storage.storage_path).is_none()
+}
+
 /// The exact command that refreshes the index, flags included.
 pub fn refresh_command(repo_path: &std::path::Path) -> String {
     let storage = repo_manager::get_storage_paths(repo_path);
@@ -94,7 +102,7 @@ pub fn run() -> anyhow::Result<()> {
                     println!("  WARNING: Index is stale!");
                     println!("    Indexed commit: {}", meta.last_commit);
                     println!("    Current commit: {commit}");
-                    println!("    Run `code-explorer analyze` to update.");
+                    println!("    Run `{}` to update.", refresh_command(&cwd));
                 }
                 None => {
                     println!("  Git: not available or not a git repo");

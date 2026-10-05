@@ -667,6 +667,17 @@ fn freshness_check(
                 return c.fix(super::status::refresh_command(repo_path));
             }
         }
+        if super::status::legacy_index(repo_path) {
+            return Check::new(
+                "freshness",
+                Level::Warn,
+                format!(
+                    "index at HEAD ({}) but written by an older build: working-tree freshness unknown",
+                    short(&head)
+                ),
+            )
+            .fix(format!("{} --force", analyze));
+        }
         let check = Check::new("freshness", Level::Ok, format!("index at HEAD ({})", short(&head)));
         return if index_usable {
             check

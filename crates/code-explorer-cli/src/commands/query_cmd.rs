@@ -48,6 +48,13 @@ pub async fn run(
         }
     }
 
+    if super::status::legacy_index(&repo_path) {
+        eprintln!(
+            "Warning: index written by an older build; freshness cannot be judged. Re-run `code-explorer analyze {} --force`.",
+            repo_path.display()
+        );
+    }
+
     let graph = code_explorer_db::snapshot::load_snapshot(&snap)?;
     let fts = FtsIndex::build(&graph);
 

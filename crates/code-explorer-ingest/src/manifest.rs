@@ -233,6 +233,9 @@ pub struct WalkSettings {
     pub no_default_excludes: bool,
     /// Prose documents were indexed (and their hashes are in the manifest).
     pub documents: bool,
+    /// Explicit `--include-docs` (`Some(true)`) / `--no-docs` (`Some(false)`);
+    /// `None` = the repository-shape heuristic decided.
+    pub include_docs: Option<bool>,
 }
 
 /// Where [`WalkSettings`] are stored, next to the manifest.

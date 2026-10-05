@@ -1257,3 +1257,54 @@ fn an_index_without_walk_settings_is_not_touched_or_trusted() {
         "nothing may be rewritten silently"
     );
 }
+
+#[test]
+fn a_refresh_keeps_the_prose_chosen_with_include_docs() {
+    let repo = TestRepo::new("refresh-include-docs");
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha() {}\n").unwrap();
+    fs::write(repo.path().join("src/b.rs"), "pub fn beta() {}\n").unwrap();
+    fs::write(repo.path().join("README.md"), "# AlphaHeading\n\ntext\n").unwrap();
+    repo.git(&["add", "src/a.rs", "src/b.rs", "README.md"]);
+    repo.git(&["commit", "--quiet", "-m", "initial"]);
+    let arg = repo.path().display().to_string();
+    assert_success(&repo.explorer(&["analyze", &arg, "--include-docs"]), "analyze");
+    let q = repo.explorer(&["query", "AlphaHeading", "--repo", &arg]);
+    assert!(String::from_utf8_lossy(&q.stdout).contains("AlphaHeading"));
+
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha_edited() {}\n").unwrap();
+    let status = status_in(&repo);
+    assert!(status.contains("--include-docs"), "command must carry the flag:\n{status}");
+
+    // The plain refresh must not drop the prose.
+    assert_success(&repo.explorer(&["analyze", &arg]), "refresh");
+    let q = repo.explorer(&["query", "AlphaHeading", "--repo", &arg]);
+    assert!(String::from_utf8_lossy(&q.stdout).contains("AlphaHeading"), "prose lost");
+    assert!(status_in(&repo).contains("Index is up-to-date."));
+}
+
+#[test]
+fn doctor_and_query_flag_an_index_without_walk_settings() {
+    let (repo, arg) = committed_indexed_repo("legacy-doctor");
+    fs::remove_file(repo.path().join(".codeexplorer/walk-settings.json")).unwrap();
+    let doctor = repo.explorer(&["doctor", &arg]);
+    let out = String::from_utf8_lossy(&doctor.stdout).into_owned();
+    assert!(out.contains("[WARN") && out.contains("older build"), "{out}");
+    assert!(!out.contains("Verdict: healthy"), "{out}");
+    let q = repo.explorer(&["query", "alpha_original", "--repo", &arg]);
+    assert!(String::from_utf8_lossy(&q.stderr).contains("older build"));
+}
+
+#[test]
+fn analyze_records_a_new_head_when_no_indexed_file_changed() {
+    let (repo, arg) = committed_indexed_repo("head-moved");
+    fs::write(repo.path().join("NOTES.txt"), "not indexed\n").unwrap();
+    repo.git(&["add", "NOTES.txt"]);
+    repo.git(&["commit", "--quiet", "-m", "notes"]);
+    let status = status_in(&repo);
+    assert!(status.contains("Index is stale!"), "{status}");
+
+    let analyze = repo.explorer(&["analyze", &arg]);
+    assert_success(&analyze, "analyze");
+    let after = status_in(&repo);
+    assert!(after.contains("Index is up-to-date."), "the suggested command must clear it:\n{after}");
+}

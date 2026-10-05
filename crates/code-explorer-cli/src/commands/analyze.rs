@@ -55,6 +55,11 @@ pub fn settings_flags(s: &code_explorer_ingest::manifest::WalkSettings) -> Vec<S
     for i in &s.include {
         out.push(format!("--include {}", q(i)));
     }
+    match s.include_docs {
+        Some(true) => out.push("--include-docs".to_string()),
+        Some(false) => out.push("--no-docs".to_string()),
+        None => {}
+    }
     out
 }
 
@@ -83,6 +88,7 @@ pub async fn run(
     // drop files indexed with --no-default-excludes, or pull in excluded
     // ones). Only explicit walk flags replace them.
     let mut walk = walk;
+    let mut include_docs = include_docs;
     let saved = code_explorer_ingest::manifest::load_settings(
         &repo_manager::get_storage_paths(&repo_path).storage_path,
     );
@@ -93,6 +99,9 @@ pub async fn run(
             walk.exclude = s.exclude.clone();
             walk.include = s.include.clone();
             walk.no_default_excludes = s.no_default_excludes;
+            if include_docs.is_none() {
+                include_docs = s.include_docs;
+            }
             if !settings_flags(s).is_empty() {
                 println!(
                     "Walk settings: reusing those of the last analyze ({}).",
@@ -106,6 +115,14 @@ pub async fn run(
                 include: walk.include.clone(),
                 no_default_excludes: walk.no_default_excludes,
                 documents: s.documents,
+                include_docs,
+            };
+            if include_docs.is_none() {
+                include_docs = s.include_docs;
+            }
+            let given = code_explorer_ingest::manifest::WalkSettings {
+                include_docs,
+                ..given
             };
             if &given != s {
                 println!(
@@ -172,6 +189,19 @@ pub async fn run(
         ) {
             Ok(Some(changes)) if changes.is_empty() => {
                 println!("Index is up-to-date (no file changed since the last analyze). Use --force to re-index.");
+                // HEAD may have moved without touching an indexed file (a
+                // README commit, or a commit of what was analyzed dirty): the
+                // index is right for the new HEAD, so record it.
+                if let (Ok(Some(mut meta)), Some(head)) = (
+                    repo_manager::load_meta(&storage.storage_path),
+                    git::current_commit(&repo_path),
+                ) {
+                    if meta.last_commit != head {
+                        meta.last_commit = head;
+                        repo_manager::save_meta(&storage.storage_path, &meta)?;
+                        println!("Recorded the current commit for the index.");
+                    }
+                }
                 return Ok(());
             }
             Ok(Some(changes)) => {
@@ -389,6 +419,7 @@ pub async fn run(
                         include: walk.include.clone(),
                         no_default_excludes: walk.no_default_excludes,
                         documents,
+                        include_docs,
                     },
                     &storage_paths.storage_path,
                 )?;
