@@ -33,6 +33,31 @@ impl WalkOptions {
     }
 }
 
+/// The CLI flags that reproduce a recorded walk (empty = defaults).
+pub fn settings_flags(s: &code_explorer_ingest::manifest::WalkSettings) -> Vec<String> {
+    fn q(v: &str) -> String {
+        if !v.is_empty()
+            && v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "/._-+=:@%".contains(c))
+        {
+            v.to_string()
+        } else {
+            format!("'{}'", v.replace('\'', "'\\''"))
+        }
+    }
+    let mut out = Vec::new();
+    if s.no_default_excludes {
+        out.push("--no-default-excludes".to_string());
+    }
+    for e in &s.exclude {
+        out.push(format!("--exclude {}", q(e)));
+    }
+    for i in &s.include {
+        out.push(format!("--include {}", q(i)));
+    }
+    out
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     path: &str,
@@ -52,6 +77,49 @@ pub async fn run(
         .unwrap_or_else(|_| Path::new(path).to_path_buf());
 
     println!("Indexing repository: {}", repo_path.display());
+
+    // The walk settings of the last analyze are the index's own: a plain
+    // `analyze` reuses them (so the refresh `status` suggests cannot silently
+    // drop files indexed with --no-default-excludes, or pull in excluded
+    // ones). Only explicit walk flags replace them.
+    let mut walk = walk;
+    let saved = code_explorer_ingest::manifest::load_settings(
+        &repo_manager::get_storage_paths(&repo_path).storage_path,
+    );
+    let explicit =
+        !walk.exclude.is_empty() || !walk.include.is_empty() || walk.no_default_excludes;
+    match (&saved, explicit) {
+        (Some(s), false) => {
+            walk.exclude = s.exclude.clone();
+            walk.include = s.include.clone();
+            walk.no_default_excludes = s.no_default_excludes;
+            if !settings_flags(s).is_empty() {
+                println!(
+                    "Walk settings: reusing those of the last analyze ({}).",
+                    settings_flags(s).join(" ")
+                );
+            }
+        }
+        (Some(s), true) => {
+            let given = code_explorer_ingest::manifest::WalkSettings {
+                exclude: walk.exclude.clone(),
+                include: walk.include.clone(),
+                no_default_excludes: walk.no_default_excludes,
+                documents: s.documents,
+            };
+            if &given != s {
+                println!(
+                    "Walk settings: the flags given replace those of the last analyze ({}).",
+                    if settings_flags(s).is_empty() {
+                        "defaults".to_string()
+                    } else {
+                        settings_flags(s).join(" ")
+                    }
+                );
+            }
+        }
+        (None, _) => {}
+    }
 
     let exclusions = walk.resolve(&repo_path);
     if exclusions.is_empty() {
@@ -85,8 +153,17 @@ pub async fn run(
     let mut incremental = incremental;
     if !force && !incremental && repo_manager::has_index(&repo_path) {
         let storage = repo_manager::get_storage_paths(&repo_path);
-        let documents = code_explorer_ingest::manifest::load_settings(&storage.storage_path)
-            .is_some_and(|s| s.documents);
+        let Some(saved) = &saved else {
+            // Index written before walk settings were recorded: we cannot know
+            // which flags built it, so refreshing could silently drop files.
+            println!(
+                "Repository already indexed by an older build (no walk-settings.json): \
+                 cannot tell which exclusions it used, nothing was changed."
+            );
+            println!("Re-run with --force (plus the --exclude/--include flags you used) to rebuild it.");
+            return Ok(());
+        };
+        let documents = saved.documents;
         match code_explorer_ingest::incremental::working_tree_changes(
             &repo_path,
             &storage.storage_path,

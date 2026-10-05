@@ -41,8 +41,9 @@ pub async fn run(
     if let Some(changes) = super::status::working_tree_drift(&repo_path) {
         if !changes.is_empty() {
             eprintln!(
-                "Warning: index may be stale ({}); run `code-explorer analyze` to refresh.",
-                code_explorer_ingest::incremental::describe_changes(&changes)
+                "Warning: index may be stale ({}); run `{}` to refresh.",
+                code_explorer_ingest::incremental::describe_changes(&changes),
+                super::status::refresh_command(&repo_path)
             );
         }
     }

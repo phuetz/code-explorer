@@ -3,14 +3,29 @@
 use code_explorer_core::storage::{git, repo_manager};
 use code_explorer_ingest::manifest::FileChange;
 
+/// The exact command that refreshes the index, flags included.
+pub fn refresh_command(repo_path: &std::path::Path) -> String {
+    let storage = repo_manager::get_storage_paths(repo_path);
+    let flags = code_explorer_ingest::manifest::load_settings(&storage.storage_path)
+        .map(|s| super::analyze::settings_flags(&s))
+        .unwrap_or_default();
+    let mut cmd = format!("code-explorer analyze {}", repo_path.display());
+    for f in flags {
+        cmd.push(' ');
+        cmd.push_str(&f);
+    }
+    cmd
+}
+
 /// Files that differ between the working tree and the last indexed manifest
 /// (default exclusions + `.gitignore`). `None` when it cannot be judged.
 pub fn working_tree_drift(repo_path: &std::path::Path) -> Option<Vec<FileChange>> {
     let storage = repo_manager::get_storage_paths(repo_path);
     // Replay the walk the last `analyze` did (its --exclude/--include flags,
     // prose or not); an index without the record used the defaults.
-    let saved = code_explorer_ingest::manifest::load_settings(&storage.storage_path)
-        .unwrap_or_default();
+    // No record (index from an older build): the walk that built it is
+    // unknown, so freshness cannot be judged honestly.
+    let saved = code_explorer_ingest::manifest::load_settings(&storage.storage_path)?;
     let rules = super::analyze::WalkOptions {
         exclude: saved.exclude.clone(),
         include: saved.include.clone(),
@@ -95,11 +110,12 @@ pub fn run() -> anyhow::Result<()> {
                     for line in drift_file_lines(&changes, 10) {
                         println!("      {line}");
                     }
-                    println!("    Run `code-explorer analyze` to update (incremental).");
+                    println!("    Run `{}` to update (incremental).", refresh_command(&cwd));
                 }
                 None => {
                     fresh = false;
-                    println!("  Working tree: freshness unknown (no file manifest, re-run `code-explorer analyze --force`)");
+                    println!("  Working tree: freshness unknown (index from an older build, no record of its walk settings).");
+                    println!("    Re-run `code-explorer analyze {} --force` (add the --exclude/--include flags you used).", cwd.display());
                 }
                 _ => {}
             }

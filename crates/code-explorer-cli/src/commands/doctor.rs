@@ -633,7 +633,7 @@ fn freshness_check(
                 for l in super::status::drift_file_lines(&changes, 5) {
                     c = c.detail(l);
                 }
-                return c.fix(format!("code-explorer analyze {}", repo_path.display()));
+                return c.fix(super::status::refresh_command(repo_path));
             }
         }
         return Check::new("freshness", Level::Ok, "not a git repository, nothing to compare");
@@ -664,7 +664,7 @@ fn freshness_check(
                 for l in super::status::drift_file_lines(&changes, 5) {
                     c = c.detail(l);
                 }
-                return c.fix(analyze);
+                return c.fix(super::status::refresh_command(repo_path));
             }
         }
         let check = Check::new("freshness", Level::Ok, format!("index at HEAD ({})", short(&head)));

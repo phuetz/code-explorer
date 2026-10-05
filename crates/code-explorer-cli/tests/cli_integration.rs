@@ -1194,3 +1194,66 @@ fn doctor_warns_about_edits_outside_a_git_repository() {
         "{stdout}"
     );
 }
+
+#[test]
+fn a_plain_analyze_reuses_the_remembered_walk_settings() {
+    let repo = TestRepo::new("analyze-reuses-settings");
+    fs::create_dir_all(repo.path().join("vendor")).unwrap();
+    fs::create_dir_all(repo.path().join("archive")).unwrap();
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha() {}\n").unwrap();
+    fs::write(repo.path().join("vendor/v.rs"), "pub fn vendored() {}\n").unwrap();
+    fs::write(repo.path().join("archive/old.rs"), "pub fn old_fn() {}\n").unwrap();
+    repo.git(&["add", "src/a.rs", "vendor/v.rs", "archive/old.rs"]);
+    repo.git(&["commit", "--quiet", "-m", "initial"]);
+    let arg = repo.path().display().to_string();
+
+    assert_success(
+        &repo.explorer(&["analyze", &arg, "--force", "--no-default-excludes", "--exclude", "vendor"]),
+        "analyze with flags",
+    );
+    fs::write(repo.path().join("archive/old.rs"), "pub fn older_fn() {}\n").unwrap();
+    let status = status_in(&repo);
+    assert!(status.contains("modified: archive/old.rs"), "{status}");
+    // The suggested command carries the flags.
+    assert!(
+        status.contains("--no-default-excludes") && status.contains("--exclude vendor"),
+        "{status}"
+    );
+
+    // Plain analyze (no walk flag): archive/ must stay indexed, vendor/ excluded.
+    let analyze = repo.explorer(&["analyze", &arg]);
+    assert_success(&analyze, "plain analyze");
+    assert!(String::from_utf8_lossy(&analyze.stdout).contains("reusing those of the last analyze"));
+    let q = repo.explorer(&["query", "older_fn", "--repo", &arg]);
+    assert!(String::from_utf8_lossy(&q.stdout).contains("older_fn"));
+    assert!(status_in(&repo).contains("Index is up-to-date."));
+    let manifest = fs::read_to_string(repo.path().join(".codeexplorer/manifest.json")).unwrap();
+    assert!(manifest.contains("archive/old.rs") && !manifest.contains("vendor/v.rs"), "{manifest}");
+
+    // Explicit flags do replace them, and say so.
+    let replace = repo.explorer(&["analyze", &arg, "--exclude", "archive"]);
+    assert_success(&replace, "analyze with new flags");
+    assert!(String::from_utf8_lossy(&replace.stdout).contains("replace those of the last analyze"));
+}
+
+#[test]
+fn an_index_without_walk_settings_is_not_touched_or_trusted() {
+    let (repo, arg) = committed_indexed_repo("legacy-index");
+    let settings = repo.path().join(".codeexplorer/walk-settings.json");
+    fs::remove_file(&settings).unwrap();
+    let manifest_before = fs::read(repo.path().join(".codeexplorer/manifest.json")).unwrap();
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha_edited() {}\n").unwrap();
+
+    let status = status_in(&repo);
+    assert!(!status.contains("Index is up-to-date."), "{status}");
+    assert!(status.contains("freshness unknown"), "{status}");
+
+    let analyze = repo.explorer(&["analyze", &arg]);
+    assert_success(&analyze, "analyze on a legacy index");
+    assert!(String::from_utf8_lossy(&analyze.stdout).contains("older build"));
+    assert_eq!(
+        manifest_before,
+        fs::read(repo.path().join(".codeexplorer/manifest.json")).unwrap(),
+        "nothing may be rewritten silently"
+    );
+}
