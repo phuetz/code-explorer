@@ -1103,3 +1103,94 @@ fn status_sees_an_edit_that_keeps_the_file_size() {
     let out = status_in(&repo);
     assert!(out.contains("modified: src/a.rs"), "{out}");
 }
+
+#[test]
+fn status_replays_the_exclusions_the_index_was_built_with() {
+    let repo = TestRepo::new("status-exclusions");
+    fs::create_dir_all(repo.path().join("vendor")).unwrap();
+    fs::create_dir_all(repo.path().join("archive")).unwrap();
+    fs::write(repo.path().join("src/a.rs"), "pub fn alpha() {}\n").unwrap();
+    fs::write(repo.path().join("vendor/v.rs"), "pub fn vendored() {}\n").unwrap();
+    fs::write(repo.path().join("archive/old.rs"), "pub fn old() {}\n").unwrap();
+    repo.git(&["add", "src/a.rs", "vendor/v.rs", "archive/old.rs"]);
+    repo.git(&["commit", "--quiet", "-m", "initial"]);
+    let arg = repo.path().display().to_string();
+
+    // --exclude: vendor/ is left out of the manifest, and must stay out of the check.
+    assert_success(&repo.explorer(&["analyze", &arg, "--force", "--exclude", "vendor"]), "analyze");
+    let out = status_in(&repo);
+    assert!(out.contains("Index is up-to-date."), "--exclude:\n{out}");
+
+    // --no-default-excludes: archive/ is indexed, and must stay in the check.
+    assert_success(
+        &repo.explorer(&["analyze", &arg, "--force", "--no-default-excludes"]),
+        "analyze",
+    );
+    let out = status_in(&repo);
+    assert!(out.contains("Index is up-to-date."), "--no-default-excludes:\n{out}");
+    fs::write(repo.path().join("archive/old.rs"), "pub fn older() {}\n").unwrap();
+    assert!(status_in(&repo).contains("modified: archive/old.rs"));
+}
+
+#[test]
+fn status_sees_a_prose_edit_when_documents_are_indexed() {
+    let repo = TestRepo::new("status-prose");
+    fs::write(repo.path().join("README.md"), "# AlphaHeading\n\ntext\n").unwrap();
+    repo.git(&["add", "README.md"]);
+    repo.git(&["commit", "--quiet", "-m", "initial"]);
+    let arg = repo.path().display().to_string();
+    let analyze = repo.explorer(&["analyze", &arg]);
+    assert_success(&analyze, "analyze");
+    assert!(String::from_utf8_lossy(&analyze.stdout).contains("Documents"));
+    assert!(status_in(&repo).contains("Index is up-to-date."));
+
+    fs::write(repo.path().join("README.md"), "# BetaHeading\n\ntext\n").unwrap();
+    let out = status_in(&repo);
+    assert!(out.contains("modified: README.md"), "{out}");
+}
+
+#[test]
+fn status_sees_a_same_size_edit_with_a_backdated_mtime() {
+    let (repo, _) = committed_indexed_repo("status-backdated");
+    // Let the manifest age past the 2 s racy margin the fast path relies on.
+    std::thread::sleep(std::time::Duration::from_millis(2200));
+    let path = repo.path().join("src/a.rs");
+    fs::write(&path, "pub fn alpha_originbl() {}\n").unwrap();
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(946_684_800);
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let out = status_in(&repo);
+    assert!(out.contains("modified: src/a.rs"), "{out}");
+}
+
+#[test]
+fn doctor_warns_about_edits_outside_a_git_repository() {
+    let parent = std::env::temp_dir().join(format!("ce-nogit-{}", std::process::id()));
+    let work = parent.join("work");
+    let home = parent.join("home");
+    fs::create_dir_all(work.join("src")).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(work.join("src/a.rs"), "pub fn alpha() {}\n").unwrap();
+    let run = |args: &[&str]| {
+        code_explorer()
+            .args(args)
+            .env("CODE_EXPLORER_HOME", &home)
+            .env("GIT_CEILING_DIRECTORIES", &parent)
+            .output()
+            .unwrap()
+    };
+    let arg = work.display().to_string();
+    assert_success(&run(&["analyze", &arg]), "analyze");
+    fs::write(work.join("src/a.rs"), "pub fn alpha_edited() {}\n").unwrap();
+    let doctor = run(&["doctor", &arg]);
+    let stdout = String::from_utf8_lossy(&doctor.stdout).into_owned();
+    let _ = fs::remove_dir_all(&parent);
+    assert!(
+        stdout.contains("[WARN") && stdout.contains("working tree differs"),
+        "{stdout}"
+    );
+}

@@ -222,6 +222,35 @@ pub fn manifest_path(storage_path: &Path) -> std::path::PathBuf {
     storage_path.join("manifest.json")
 }
 
+/// How the last `analyze` walked the repository. Freshness checks must replay
+/// the same walk, or a repository indexed with `--exclude vendor` looks
+/// permanently stale (and one indexed with `--include build` too).
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WalkSettings {
+    pub exclude: Vec<String>,
+    pub include: Vec<String>,
+    pub no_default_excludes: bool,
+    /// Prose documents were indexed (and their hashes are in the manifest).
+    pub documents: bool,
+}
+
+/// Where [`WalkSettings`] are stored, next to the manifest.
+pub fn settings_path(storage_path: &Path) -> std::path::PathBuf {
+    storage_path.join("walk-settings.json")
+}
+
+pub fn save_settings(settings: &WalkSettings, storage_path: &Path) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(settings).map_err(io::Error::other)?;
+    fs::write(settings_path(storage_path), json)
+}
+
+/// `None` when absent or unreadable (an index written by an older build).
+pub fn load_settings(storage_path: &Path) -> Option<WalkSettings> {
+    let text = fs::read_to_string(settings_path(storage_path)).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────
 
 #[cfg(test)]

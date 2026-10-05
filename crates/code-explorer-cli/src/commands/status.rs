@@ -1,6 +1,5 @@
 //! The `status` command: check Code Explorer index status for the current directory.
 
-use code_explorer_core::config::exclusions::ExclusionRules;
 use code_explorer_core::storage::{git, repo_manager};
 use code_explorer_ingest::manifest::FileChange;
 
@@ -8,10 +7,25 @@ use code_explorer_ingest::manifest::FileChange;
 /// (default exclusions + `.gitignore`). `None` when it cannot be judged.
 pub fn working_tree_drift(repo_path: &std::path::Path) -> Option<Vec<FileChange>> {
     let storage = repo_manager::get_storage_paths(repo_path);
-    let rules = ExclusionRules::for_repo(repo_path);
-    code_explorer_ingest::incremental::working_tree_changes(repo_path, &storage.storage_path, &rules)
-        .ok()
-        .flatten()
+    // Replay the walk the last `analyze` did (its --exclude/--include flags,
+    // prose or not); an index without the record used the defaults.
+    let saved = code_explorer_ingest::manifest::load_settings(&storage.storage_path)
+        .unwrap_or_default();
+    let rules = super::analyze::WalkOptions {
+        exclude: saved.exclude.clone(),
+        include: saved.include.clone(),
+        no_default_excludes: saved.no_default_excludes,
+        max_files: 0,
+    }
+    .resolve(repo_path);
+    code_explorer_ingest::incremental::working_tree_changes(
+        repo_path,
+        &storage.storage_path,
+        &rules,
+        saved.documents,
+    )
+    .ok()
+    .flatten()
 }
 
 /// `modified: path` lines, at most `max`, with an "... and N more" tail.

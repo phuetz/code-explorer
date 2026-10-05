@@ -85,10 +85,13 @@ pub async fn run(
     let mut incremental = incremental;
     if !force && !incremental && repo_manager::has_index(&repo_path) {
         let storage = repo_manager::get_storage_paths(&repo_path);
+        let documents = code_explorer_ingest::manifest::load_settings(&storage.storage_path)
+            .is_some_and(|s| s.documents);
         match code_explorer_ingest::incremental::working_tree_changes(
             &repo_path,
             &storage.storage_path,
             &exclusions,
+            documents,
         ) {
             Ok(Some(changes)) if changes.is_empty() => {
                 println!("Index is up-to-date (no file changed since the last analyze). Use --force to re-index.");
@@ -288,8 +291,30 @@ pub async fn run(
                     &repo_path,
                     &exclusions,
                 )?;
-                let manifest =
+                let mut manifest =
                     code_explorer_ingest::manifest::build_manifest_from_entries(&file_entries);
+                // Prose is part of the index when documents were indexed: its
+                // edits must be seen too.
+                let documents = result.doc_stats.documents > 0;
+                if documents {
+                    let docs = code_explorer_ingest::phases::docs::walk_documents_with(
+                        &repo_path,
+                        &exclusions,
+                    )?;
+                    manifest.files.extend(
+                        code_explorer_ingest::incremental::document_manifest(&repo_path, &docs)
+                            .files,
+                    );
+                }
+                code_explorer_ingest::manifest::save_settings(
+                    &code_explorer_ingest::manifest::WalkSettings {
+                        exclude: walk.exclude.clone(),
+                        include: walk.include.clone(),
+                        no_default_excludes: walk.no_default_excludes,
+                        documents,
+                    },
+                    &storage_paths.storage_path,
+                )?;
                 let manifest_file =
                     code_explorer_ingest::manifest::manifest_path(&storage_paths.storage_path);
                 code_explorer_ingest::manifest::save_manifest(&manifest, &manifest_file)?;

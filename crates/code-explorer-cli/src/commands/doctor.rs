@@ -621,6 +621,21 @@ fn freshness_check(
         return Check::new("freshness", Level::Warn, "no index metadata to compare with HEAD");
     };
     if !git::is_git_repo(repo_path) {
+        // No HEAD to compare, but edits to the working tree still age the index.
+        if let Some(changes) = super::status::working_tree_drift(repo_path) {
+            if !changes.is_empty() {
+                let mut c = Check::new(
+                    "freshness",
+                    Level::Warn,
+                    "not a git repository, and the working tree differs from the index",
+                )
+                .detail(code_explorer_ingest::incremental::describe_changes(&changes));
+                for l in super::status::drift_file_lines(&changes, 5) {
+                    c = c.detail(l);
+                }
+                return c.fix(format!("code-explorer analyze {}", repo_path.display()));
+            }
+        }
         return Check::new("freshness", Level::Ok, "not a git repository, nothing to compare");
     }
     let Some(head) = git::current_commit(repo_path) else {

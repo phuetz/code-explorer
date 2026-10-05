@@ -70,6 +70,7 @@ pub fn working_tree_changes(
     repo_path: &Path,
     storage_path: &Path,
     rules: &code_explorer_core::config::exclusions::ExclusionRules,
+    track_documents: bool,
 ) -> Result<Option<Vec<FileChange>>, crate::IngestError> {
     let manifest_file = manifest::manifest_path(storage_path);
     let old = match manifest::load_manifest(&manifest_file) {
@@ -91,8 +92,8 @@ pub fn working_tree_changes(
         |abs_path, rel_path, size| {
             if let (Some(limit), Some(prev)) = (manifest_mtime, old.files.get(rel_path)) {
                 let older = std::fs::metadata(abs_path)
-                    .and_then(|m| m.modified())
                     .ok()
+                    .and_then(|m| last_change_time(&m))
                     .and_then(|m| m.checked_add(std::time::Duration::from_secs(2)))
                     .is_some_and(|m| m < limit);
                 if older && prev.size == size as u64 {
@@ -112,7 +113,40 @@ pub fn working_tree_changes(
             new.files.insert(e.path.clone(), prev.clone());
         }
     }
+    if track_documents {
+        let docs = docs_phase::walk_documents_with(repo_path, rules)?;
+        new.files.extend(document_manifest(repo_path, &docs).files);
+    }
     Ok(Some(manifest::diff_manifests(&old, &new)))
+}
+
+/// Hashes of prose documents, as stored by `analyze` and compared here.
+pub fn document_manifest(repo_path: &Path, docs: &[DocEntry]) -> FileManifest {
+    let paths: Vec<(String, std::path::PathBuf)> = docs
+        .iter()
+        .map(|d| (d.path.clone(), repo_path.join(&d.path)))
+        .collect();
+    let borrowed: Vec<(&str, &Path)> = paths
+        .iter()
+        .map(|(rel, abs)| (rel.as_str(), abs.as_path()))
+        .collect();
+    manifest::build_manifest(&borrowed)
+}
+
+/// Time of the last change to a file that the user cannot set backwards:
+/// on Unix the inode change time (`touch -d` moves mtime, never ctime).
+fn last_change_time(m: &std::fs::Metadata) -> Option<std::time::SystemTime> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let secs = u64::try_from(m.ctime()).ok()?;
+        let nanos = u32::try_from(m.ctime_nsec()).ok()?;
+        Some(std::time::UNIX_EPOCH + std::time::Duration::new(secs, nanos))
+    }
+    #[cfg(not(unix))]
+    {
+        m.modified().ok()
+    }
 }
 
 /// One-line summary of a change list, e.g. `2 modified, 1 added, 1 removed`.
