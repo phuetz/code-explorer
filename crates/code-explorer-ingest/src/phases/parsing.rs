@@ -1019,6 +1019,11 @@ fn create_definition_node(
             is_exported: Some(is_exported),
             parameter_count,
             complexity,
+            description: definition_doc(
+                node.parent().unwrap_or(*node),
+                file.content.as_bytes(),
+                lang,
+            ),
             ..Default::default()
         },
     };
@@ -1061,6 +1066,112 @@ fn create_definition_node(
         reason: "ast".to_string(),
         step: None,
     });
+}
+
+/// Longest documentation excerpt kept as a symbol description.
+const DOC_DESCRIPTION_MAX_CHARS: usize = 200;
+
+/// First paragraph of the documentation written for a definition: the Python
+/// docstring, otherwise the comment block directly above the definition
+/// (`///`, `/** ... */`, `//`, `#`), attributes and decorators skipped. It is
+/// stored as the node description, which full-text search already indexes, so
+/// a question phrased like the documentation ("waits until the duration has
+/// elapsed") finds a symbol whose name alone (`sleep`) does not say it.
+fn definition_doc(
+    def: tree_sitter::Node,
+    content: &[u8],
+    lang: SupportedLanguage,
+) -> Option<String> {
+    if lang == SupportedLanguage::Python {
+        let docstring = def
+            .child_by_field_name("body")
+            .and_then(|body| body.named_child(0))
+            .filter(|first| first.kind() == "expression_statement")
+            .and_then(|first| first.named_child(0))
+            .filter(|value| value.kind() == "string")
+            .and_then(|value| value.utf8_text(content).ok());
+        if let Some(text) = docstring {
+            return first_doc_paragraph(text);
+        }
+    }
+
+    let mut anchor = def;
+    while let Some(parent) = anchor.parent() {
+        if matches!(
+            parent.kind(),
+            "export_statement"
+                | "decorated_definition"
+                | "lexical_declaration"
+                | "variable_declaration"
+                | "variable_declarator"
+        ) {
+            anchor = parent;
+        } else {
+            break;
+        }
+    }
+    let mut comments = Vec::new();
+    let mut next_row = anchor.start_position().row;
+    let mut sibling = anchor.prev_sibling();
+    while let Some(node) = sibling {
+        // A blank line detaches the block from the definition.
+        if node.end_position().row + 1 < next_row {
+            break;
+        }
+        let kind = node.kind();
+        if kind.contains("comment") {
+            if let Ok(text) = node.utf8_text(content) {
+                comments.push(text);
+            }
+        } else if !matches!(kind, "attribute_item" | "decorator" | "attribute") {
+            break;
+        }
+        next_row = node.start_position().row;
+        sibling = node.prev_sibling();
+    }
+    if comments.is_empty() {
+        return None;
+    }
+    comments.reverse();
+    first_doc_paragraph(&comments.join("\n"))
+}
+
+/// Strip comment and string delimiters, keep the first paragraph, stop at
+/// tag lines (`@param`, `# Examples`), and cap the length.
+fn first_doc_paragraph(raw: &str) -> Option<String> {
+    let mut words: Vec<&str> = Vec::new();
+    for line in raw.lines() {
+        let mut text = line.trim();
+        for prefix in [
+            "r\"\"\"", "\"\"\"", "'''", "///", "//!", "//", "/**", "/*", "*/", "*", "#",
+        ] {
+            if let Some(rest) = text.strip_prefix(prefix) {
+                text = rest.trim_start();
+                break;
+            }
+        }
+        let text = text
+            .trim_end_matches("*/")
+            .trim_end_matches("\"\"\"")
+            .trim_end_matches("'''")
+            .trim();
+        if text.is_empty() {
+            if words.is_empty() {
+                continue;
+            }
+            break;
+        }
+        if text.starts_with('@') || text.starts_with('#') {
+            break;
+        }
+        words.extend(text.split_whitespace());
+    }
+    if words.is_empty() {
+        return None;
+    }
+    let joined = words.join(" ");
+    let doc: String = joined.chars().take(DOC_DESCRIPTION_MAX_CHARS).collect();
+    Some(doc)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2074,6 +2185,74 @@ pub fn build_symbol_table(graph: &KnowledgeGraph, table: &mut SymbolTable) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_one(path: &str, lang: SupportedLanguage, content: &str) -> KnowledgeGraph {
+        let file = FileEntry {
+            path: path.to_string(),
+            content: content.to_string(),
+            size: content.len(),
+            language: Some(lang),
+        };
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(GraphNode {
+            id: format!("File:{path}"),
+            label: NodeLabel::File,
+            properties: NodeProperties {
+                name: path.to_string(),
+                file_path: path.to_string(),
+                ..Default::default()
+            },
+        });
+        parse_files(&mut graph, &[file], None).unwrap();
+        graph
+    }
+
+    fn description_of(graph: &KnowledgeGraph, name: &str) -> Option<String> {
+        graph
+            .iter_nodes()
+            .find(|n| n.properties.name == name && n.label != NodeLabel::File)
+            .and_then(|n| n.properties.description.clone())
+    }
+
+    #[test]
+    fn rust_doc_comment_becomes_the_description() {
+        let src = "/// Waits until `duration` has elapsed.\n///\n/// # Examples\n/// more\n#[inline]\npub fn sleep(duration: u64) {}\n\n// unrelated\n\nfn bare() {}\n";
+        let g = parse_one("src/sleep.rs", SupportedLanguage::Rust, src);
+        assert_eq!(
+            description_of(&g, "sleep").as_deref(),
+            Some("Waits until `duration` has elapsed.")
+        );
+        // A comment separated by a blank line is not documentation.
+        assert_eq!(description_of(&g, "bare"), None);
+    }
+
+    #[test]
+    fn python_docstring_becomes_the_description() {
+        let src = "def to_camel(snake: str) -> str:\n    \"\"\"Convert a snake_case string to camelCase.\n\n    Args:\n        snake: x\n    \"\"\"\n    return snake\n";
+        let g = parse_one("pkg/alias.py", SupportedLanguage::Python, src);
+        assert_eq!(
+            description_of(&g, "to_camel").as_deref(),
+            Some("Convert a snake_case string to camelCase.")
+        );
+    }
+
+    #[test]
+    fn jsdoc_above_an_export_becomes_the_description() {
+        let src = "/**\n * Escape HTML special characters.\n * @param s the text\n */\nexport function escapeHtml(s: string): string { return s }\n";
+        let g = parse_one("src/escape.ts", SupportedLanguage::TypeScript, src);
+        assert_eq!(
+            description_of(&g, "escapeHtml").as_deref(),
+            Some("Escape HTML special characters.")
+        );
+    }
+
+    #[test]
+    fn long_documentation_is_capped() {
+        let long = format!("/// {}\nfn f() {{}}\n", "word ".repeat(100));
+        let g = parse_one("src/f.rs", SupportedLanguage::Rust, &long);
+        let d = description_of(&g, "f").unwrap();
+        assert!(d.chars().count() <= DOC_DESCRIPTION_MAX_CHARS);
+    }
 
     #[test]
     fn test_count_parameters_empty() {

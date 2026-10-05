@@ -3782,11 +3782,12 @@ mod tests {
         assert!(cached_indexes
             .outgoing
             .contains_key("Class:src/old.rs:OldSymbol"));
+        // Identifier parts are searchable since camelCase splitting, so
+        // `old_method` (same `old` part) may follow; the cache must still
+        // answer with the exact symbol first.
         assert_eq!(
-            cached_fts
-                .search(&cached_graph, "OldSymbol", None, 10)
-                .len(),
-            1
+            cached_fts.search(&cached_graph, "OldSymbol", None, 10)[0].node_id,
+            "Class:src/old.rs:OldSymbol"
         );
 
         let mut replacement_graph = KnowledgeGraph::new();
@@ -3829,19 +3830,19 @@ mod tests {
             .outgoing
             .contains_key("Class:src/old.rs:OldSymbol"));
         assert_eq!(
-            refreshed_fts
-                .search(
-                    &refreshed_graph,
-                    "ReplacementSymbolWithLongerName",
-                    None,
-                    10,
-                )
-                .len(),
-            1
+            refreshed_fts.search(
+                &refreshed_graph,
+                "ReplacementSymbolWithLongerName",
+                None,
+                10,
+            )[0]
+            .node_id,
+            "Class:src/new.rs:ReplacementSymbolWithLongerName"
         );
         assert!(refreshed_fts
             .search(&refreshed_graph, "OldSymbol", None, 10)
-            .is_empty());
+            .iter()
+            .all(|r| !r.node_id.contains("src/old.rs")));
 
         std::fs::remove_dir_all(storage_dir).unwrap();
     }
