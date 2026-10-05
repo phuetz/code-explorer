@@ -12,8 +12,7 @@
   <img src="https://img.shields.io/badge/Rust-1.75+-ce422b?style=flat-square&logo=rust" alt="Rust"/>
   <img src="https://img.shields.io/badge/languages-14-22c55e?style=flat-square" alt="14 languages"/>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-30_tools-a855f7?style=flat-square" alt="MCP server"/></a>
-  <img src="https://img.shields.io/badge/tests-1007-16a34a?style=flat-square" alt="1007 tests"/>
-  <img src="https://img.shields.io/badge/runs-100%25_local-0ea5e9?style=flat-square" alt="100% local"/>
+  <img src="https://img.shields.io/badge/index_%26_query-offline-0ea5e9?style=flat-square" alt="Indexing and queries offline"/>
 </p>
 
 <br/>
@@ -24,7 +23,7 @@
 
 **Give Claude Code, Codex, Cursor and any MCP agent a persistent, queryable map of your *entire* codebase — so they stop re-reading files and start *knowing* your code.**
 
-Code Explorer is a Rust engine that parses your repository into a **knowledge graph** of symbols and relationships (calls, imports, inheritance, ownership), then serves it to AI agents over the [Model Context Protocol](https://modelcontextprotocol.io/). One command answers "what calls this?" or "what breaks if I change this?" in milliseconds — using a fraction of the context an agent would burn reading source files.
+Code Explorer is a Rust engine that parses your repository into a **knowledge graph** of symbols and relationships (calls, imports, inheritance, ownership), then serves it to AI agents over the [Model Context Protocol](https://modelcontextprotocol.io/). One command answers "what calls this?" or "what breaks if I change this?" using a fraction of the context an agent would burn reading source files.
 
 <br/>
 
@@ -40,23 +39,23 @@ Code Explorer is a Rust engine that parses your repository into a **knowledge gr
 
 ## 🚀 Why it pays off for your LLM
 
-**Code Explorer cuts the context an AI agent burns to answer a structural question by ~40× — and makes the answer instant and reusable.**
+**Code Explorer answers a structural question from a pre-built graph instead of making the agent read every file involved.** The saving depends on the repository, its revision and the symbol.
 
-Measured on [ollama](https://github.com/ollama/ollama) — the question *"what's affected if I change `GenerateHandler`?"*:
+One measurement on [ollama](https://github.com/ollama/ollama) at commit `42e911bc` (8-core Linux machine, Code Explorer 0.2.1 release binary), for the question *"what's affected if I change `GenerateHandler`?"*:
 
-| | 🐌 Without Code Explorer | ⚡ With Code Explorer |
+| | Without Code Explorer | With Code Explorer |
 |---|--:|--:|
-| **Context the agent consumes** | ~730,000 tokens (must read 174 files) | **~18,000 tokens** (one query) |
-| **Latency** | seconds of file-reading, hop by hop | **~25 ms** |
-| **Whole repo** | ~2.5M tokens — exceeds *every* model's context window | one **22,982-node graph**, queryable in a single command |
+| **Context the agent consumes** | 646,510 tokens (the 170 files the affected symbols live in) | **19,241 tokens** (one query), about 34× less |
+| **Time** | depends on how many files the agent reads | 60 ms for the query inside `demo`; 0.48–0.65 s for a separate `code-explorer impact` run, graph loading included |
+| **Whole repo** | about 2.84M tokens, about 14× a 200K-token context window | one graph of 23,740 nodes, queried by a single command |
 
-That's the difference between an agent that *re-reads your codebase every session* and one that *already knows it*. Reproduce these exact numbers on any repo:
+On the same checkout, `code-explorer demo` without `--symbol` picks `Fatalf` and reports 25× less context. Measure on your own repository:
 
 ```bash
-code-explorer demo /path/to/ollama        # or just: code-explorer demo  (in any repo)
+code-explorer demo /path/to/ollama --symbol GenerateHandler   # or just: code-explorer demo  (in any repo)
 ```
 
-<sub>Tokens ≈ chars/4. The "without" figure sums the files the affected symbols live in — what an agent must read to trace the same impact (a conservative floor; the transitive chain has no cheap non-graph equivalent).</sub>
+<sub>Tokens ≈ chars/4. The "without" figure sums the files the affected symbols live in — what an agent must read to trace the same impact.</sub>
 
 ---
 
@@ -68,10 +67,10 @@ Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of
 
 > It's the difference between asking someone to **read a book** versus handing them the **index and table of contents**.
 
-- **Written in Rust** — a 64 MB static binary, no runtime; indexes thousands of files in seconds (the very largest repos in minutes).
+- **Written in Rust** — a single binary of about 65 MB, dynamically linked to the C and C++ runtime libraries on Linux; ollama (954 files) indexes in 5.5 s on 8 cores.
 - **14 languages** via tree-sitter — JavaScript, TypeScript, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor.
 - **MCP-native** — drops straight into Claude Code, Codex, Cursor, VS Code, or any MCP client.
-- **100% local & offline** — your code never leaves your machine. No API key required to index or query.
+- **Offline indexing and queries** — no network and no API key are needed to index or query. Optional LLM features and DOCX export (diagrams rendered by Kroki by default) contact external services.
 
 ---
 
@@ -83,9 +82,9 @@ Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of
 | **Scale** | ~50 files fit in context | Thousands of files indexed, queryable in one command |
 | **Persistence** | Starts from scratch every conversation | Graph persists on disk, always available |
 | **Context budget** | Reading 50 files = context full, no room to reason | Returns only the relevant edges — context stays free |
-| **Impact analysis** | Near-impossible without reading the whole project | `impact PaymentService` → full blast radius in 0.3 s |
+| **Impact analysis** | Near-impossible without reading the whole project | `impact PaymentService` → full blast radius in one command |
 | **Refactors** | "Find every caller" = grep + hope | Typed call graph resolves real calls, not text matches |
-| **Offline** | Needs an API | Works 100% local |
+| **Offline** | Needs an API | Indexing and graph queries work offline |
 
 **In short:** an AI assistant *reads* code. Code Explorer *understands* it. Together, the agent answers structural questions instantly instead of spending its context window reconstructing them.
 
@@ -93,83 +92,30 @@ Code Explorer fixes that. It **pre-indexes your whole codebase** into a graph of
 
 ## Benchmarks: with vs without
 
-Real numbers, reproducible on a public repo. Test machine: 24-core workstation, Code Explorer release binary, [ollama](https://github.com/ollama/ollama) checked out (863 files indexed).
+Measured on a public repo: [ollama](https://github.com/ollama/ollama) at commit `42e911bc`, 8-core Linux machine, Code Explorer 0.2.1 release binary.
 
-### 1. The whole codebase can't fit in a context window — the graph can
+| | Measured |
+|---|---|
+| `code-explorer analyze` | 954 files, 23,740 nodes, 84,004 edges, indexed in 5.5 s |
+| On disk | `graph.bin` 42.8 MB; whole `.codeexplorer` directory 113 MB |
+| Whole repo | about 2.84M tokens (chars/4), about 14× a 200K-token context window |
+| `demo --symbol GenerateHandler` | 19,241 tokens with Code Explorer (1,515 affected symbols) vs 646,510 tokens without (170 files): 34× |
+| `demo` (default symbol `Fatalf`) | 51,914 vs 1,301,045 tokens: 25× |
+| `impact GenerateHandler --direction both` | 0.48–0.65 s per command, graph loading included |
 
-| | Without Code Explorer | With Code Explorer |
-|---|---|---|
-| ollama's source | **~2.5 M tokens** — exceeds *every* model's context window | One `analyze` → **~23,000-node graph** in **~3.4 s**, persisted (33 MB on disk), queryable forever |
-
-An agent literally cannot load ollama into context. Code Explorer distills it into a graph you query in one command.
-
-### 2. Answering one structural question: *"What's the blast radius of `GenerateHandler`?"*
-
-| | Without Code Explorer | With Code Explorer |
-|---|---|---|
-| **How** | open every file the affected code lives in, recurse by hand | `code-explorer impact GenerateHandler` |
-| **Context consumed** | **~730,000 tokens** (174 files to read) | **~18,000 tokens** (one query) |
-| **Latency** | seconds of file-reading per hop | **~25 ms** |
-| **Completeness** | 174 files of raw text to interpret | **1,370 affected symbols**, full transitive chain |
-| **Reusable?** | No — next question starts over | Yes — graph persists across sessions |
-
-➡️ **~40× less context** for a *more complete, instant, reusable* answer — reproduce with `code-explorer demo`.
-
-### 3. Measured across real repositories (11 projects, 10 languages)
-
-Each row is `code-explorer demo <repo>` on a representative hub symbol — the context an agent consumes to answer *"what's affected if I change this?"*, with vs without Code Explorer. Every repo's full source already exceeds any model's context window.
-
-**The bigger the codebase, the bigger the win.** Large repos overflow the context window by more and have longer dependency chains, so the graph saves proportionally more — Kubernetes, the largest here, tops the table at **164×**. (The exact per-query ratio also depends on how connected the symbol you ask about is.)
-
-| Repo | Lang | Files | 🐌 Without | ⚡ With | Saved | Repo size |
-|---|---|--:|--:|--:|:--:|--:|
-| [**kubernetes**](https://github.com/kubernetes/kubernetes) | Go | **17,280** | 3.88M tok | 24K tok | **164×** | **42.8M tok** |
-| [TypeScript](https://github.com/microsoft/TypeScript)* | TypeScript | 707 | 821K tok | 12K tok | **67×** | 3.9M tok |
-| [mastodon](https://github.com/mastodon/mastodon) | Ruby | 4,055 | 266K tok | 5K tok | **54×** | 2.1M tok |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | C++ | 887 | 526K tok | 11K tok | **49×** | 4.8M tok |
-| [django](https://github.com/django/django) | Python | 3,031 | 3.04M tok | 79K tok | **39×** | 5.1M tok |
-| [ollama](https://github.com/ollama/ollama) | Go | 863 | 1.93M tok | 53K tok | **36×** | 2.5M tok |
-| [okhttp](https://github.com/square/okhttp) | Kotlin | 640 | 731K tok | 21K tok | **35×** | 1.1M tok |
-| [tokio](https://github.com/tokio-rs/tokio) | Rust | 781 | 39K tok | 1.3K tok | **29×** | 1.4M tok |
-| [langchain4j](https://github.com/langchain4j/langchain4j) | Java | 2,869 | 248K tok | 12K tok | **20×** | 3.7M tok |
-| [laravel](https://github.com/laravel/framework) | PHP | 2,960 | 1.84M tok | 100K tok | **18×** | 4.3M tok |
-| [jellyfin](https://github.com/jellyfin/jellyfin) | C# | 2,095 | 12K tok | 2K tok | **6×** | 3.0M tok |
-
-<sub>* TypeScript = the compiler's `src/` (its 20k-file test corpus excluded). The per-query ratio depends on the hub symbol's reach — jellyfin's pick had a small blast radius (6×); the corpus-can't-fit point holds regardless.</sub>
-
-**Scale check — Kubernetes:** **3.6M lines** of Go (~42.8M tokens ≈ 20 full context windows) distilled into a **296,358-node graph**. A blast-radius query then costs **24K tokens in <1 s** instead of an agent reading 3.9M tokens of source — **164× less context**. (Indexing a graph this size is a one-time batch step — ~38 min for Kubernetes on a 24-core box; every query afterwards stays sub-second.)
-
-*"Without" = tokens of the files the affected symbols live in (what an agent must read to trace the same impact); "With" = tokens of the graph's answer. Median **~36×**, up to **164×** at scale. Tokens ≈ chars/4. These are the same real-world codebases the 14 language parsers are continuously validated against.*
-
-### 4. Indexing speed across languages
-
-| Repo | Language | Files | Lines | Index time | Nodes | Edges |
-|---|---|---:|---:|---:|---:|---:|
-| [kubernetes](https://github.com/kubernetes/kubernetes) | Go | 17,280 | 3.6M | ~38 min | 296,358 | 1,097,538 |
-| [mastodon](https://github.com/mastodon/mastodon) | Ruby | 4,055 | 264K | 17 s | 23,598 | 75,151 |
-| [django](https://github.com/django/django) | Python | 3,031 | 522K | 41 s | 50,380 | 210,177 |
-| [laravel](https://github.com/laravel/framework) | PHP | 2,960 | 528K | 29 s | 50,801 | 211,444 |
-| [langchain4j](https://github.com/langchain4j/langchain4j) | Java | 2,869 | 376K | 16 s | 42,953 | 140,648 |
-| [jellyfin](https://github.com/jellyfin/jellyfin) | C# | 2,095 | 318K | 8 s | 22,128 | 46,153 |
-| [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | C++ | 887 | 541K | 12 s | 26,938 | 77,501 |
-| [ollama](https://github.com/ollama/ollama) | Go | 863 | 384K | 3 s | 22,982 | 70,538 |
-| [tokio](https://github.com/tokio-rs/tokio) | Rust | 781 | 175K | 1.5 s | 12,413 | 27,938 |
-| [TypeScript](https://github.com/microsoft/TypeScript) | TypeScript | 707 | 453K | 19 s | 30,664 | 89,976 |
-| [okhttp](https://github.com/square/okhttp) | Kotlin | 640 | 133K | 4 s | 15,060 | 57,542 |
-
-Indexing is mostly linear in file count up to a few thousand files (3–30 s); Kubernetes (17k files, a 1.1M-edge graph) is the outlier where community/process detection dominates — a one-time cost, then queries stay sub-second.
+Results vary with the repository, its revision, the symbol and the machine.
 
 <details>
 <summary>Reproduce it</summary>
 
 ```bash
 git clone https://github.com/ollama/ollama && cd ollama
-code-explorer demo                                    # measures the LLM context savings, end to end
+code-explorer demo --symbol GenerateHandler           # measures the LLM context savings, end to end
 # or step by step:
 code-explorer analyze . --force                       # build the graph
-code-explorer impact GenerateHandler --direction both # the blast-radius query, in ~25 ms
+code-explorer impact GenerateHandler --direction both # the blast-radius query
 ```
-*Token figures use the common ~4 chars/token approximation; the "without" baseline sums the files the affected symbols live in — what an agent must read to trace the same impact (a conservative floor).*
+*Token figures use the common ~4 chars/token approximation; the "without" baseline sums the files the affected symbols live in — what an agent must read to trace the same impact.*
 </details>
 
 ---
@@ -180,7 +126,7 @@ Code Explorer ships a **React UI** — a desktop app (Tauri) and a web chat — 
 
 _The React UI presents an LLM-powered chat over the code graph, with source-grounded answers and inline documentation generation._
 
-The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic, OpenRouter, Gemini, Mistral — any OpenAI-compatible endpoint via `~/.codeexplorer/chat-config.json`). For each question it pulls just the relevant graph context and sends only that to the model — so answers are precise and cheap, with modes for Q&A, deep research, feature-dev and review. The same LLM layer powers `code-explorer generate docs/wiki/html` to turn a repo into a full documentation site. Validated live (2026-06-23) with **Mistral, Ollama, DeepSeek, OpenRouter and xAI/Grok** — `code-explorer config test` connects to each, and `ask` returns graph-grounded answers (verified on Mistral and Ollama).
+The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic, OpenRouter, Gemini, Mistral — any OpenAI-compatible endpoint via `~/.codeexplorer/chat-config.json`). For each question it pulls just the relevant graph context and sends only that to the model — so answers are precise and cheap, with modes for Q&A, deep research, feature-dev and review. The same LLM layer powers `code-explorer generate docs/wiki/html` to turn a repo into a full documentation site. `code-explorer config test` checks the configured provider.
 
 ---
 
@@ -189,7 +135,7 @@ The chat is **bring-your-own-LLM** (Ollama for free/local, or OpenAI, Anthropic,
 ```bash
 # 1. Get the binary — either grab a prebuilt one (no Rust toolchain needed):
 #      https://github.com/phuetz/code-explorer/releases   (Linux / macOS / Windows)
-#    …or build from source (release: ~64 MB static binary):
+#    …or build from source (release binary: about 65 MB):
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 cargo build --release -p code-explorer-cli
@@ -261,7 +207,7 @@ code-explorer mcp-install --client claude --scope project
 # writes .mcp.json for Claude Code, then restart Claude Code
 ```
 
-**What Claude gains:** instead of reading dozens of files — and filling its context window — to answer *"what calls `PaymentService`?"* or *"what breaks if I change this?"*, Claude calls one tool and gets the answer in **~990 tokens (~40× less context — [see benchmarks](#benchmarks-with-vs-without))**. The graph persists on disk, so Claude doesn't re-learn your codebase every session, and the freed-up context goes to actual reasoning instead of file-reading. Same applies to Codex, Cursor, and any MCP agent.
+**What Claude gains:** instead of reading dozens of files — and filling its context window — to answer *"what calls `PaymentService`?"* or *"what breaks if I change this?"*, Claude calls one tool and gets the graph's answer ([see benchmarks](#benchmarks-with-vs-without)). The graph persists on disk, so Claude doesn't re-learn your codebase every session, and the freed-up context goes to actual reasoning instead of file-reading. Same applies to Codex, Cursor, and any MCP agent.
 
 **Codex**
 
@@ -303,7 +249,7 @@ Once connected, the agent can call:
 | **Agent support** | `get_insights`, `save_memory` |
 | **Doc authoring** | `list_sfd_pages`, `write_sfd_draft`, `validate_sfd` |
 
-When something does not answer, `code-explorer doctor <path>` says why in one pass — index missing or unloadable, registry pointing elsewhere, prose left unindexed, index N commits behind HEAD — and prints the command that repairs it ([docs/doctor.md](docs/doctor.md)). Repositories of prose (books, documentation, knowledge bases) are indexed with their headings as symbols and their internal links as edges ([docs/prose-repositories.md](docs/prose-repositories.md)).
+When something does not answer, `code-explorer doctor <path>` says why in one pass — index missing or unloadable, registry pointing elsewhere, prose left unindexed, index N commits behind HEAD — and prints the command that repairs it ([docs/doctor.md](docs/doctor.md)). Indexing of prose repositories (books, documentation, knowledge bases) is described in [docs/prose-repositories.md](docs/prose-repositories.md).
 
 There are also bundled skills for **Claude Code** (`.claude/skills/code-explorer`) and **Codex** (`.codex/skills/code-explorer`) so the agent knows when to reach for the graph on natural-language code questions.
 
@@ -322,7 +268,7 @@ The skill checks `code-explorer status`, indexes if needed, then answers with `c
 
 | Category | Highlights |
 |---|---|
-| **Knowledge Graph** | 50+ node types, 27 typed relationship kinds (calls, imports, inheritance, ownership), O(1) lookup, persisted snapshots |
+| **Knowledge Graph** | 50+ node types, 41 typed relationship kinds (calls, imports, inheritance, ownership), O(1) lookup, persisted snapshots |
 | **14 Languages** | JS, TS, Python, Java, C, C++, C#, Go, Rust, Ruby, PHP, Kotlin, Swift, Razor — tree-sitter parsers with per-language structural nesting & call resolution |
 | **MCP Server** | 30 tools, stdio + HTTP transports, JSON-RPC 2.0 — works with any MCP agent |
 | **Hybrid Search** | BM25 lexical + optional ONNX semantic embeddings, fused via Reciprocal Rank Fusion; optional LLM reranker |
@@ -355,8 +301,8 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture and design notes.
 ## Why these technical choices
 
 **Rust.** Indexing a large repo means parsing thousands of files and walking millions of graph edges — the work is CPU- and memory-bound, exactly where Rust pays off. It gives:
-- a **single ~64 MB static binary** with no runtime or interpreter — drop it on `PATH` and it just runs (CI, a teammate's laptop, a server);
-- **fearless parallelism** — file parsing fans out across cores with [rayon](https://github.com/rayon-rs/rayon) under a fixed memory budget (20 MB chunks + an LRU AST cache), so a 3,000-file repo indexes in seconds;
+- a **single binary of about 65 MB** with no interpreter; on Linux it links dynamically to the C and C++ runtime libraries;
+- **fearless parallelism** — file parsing fans out across cores with [rayon](https://github.com/rayon-rs/rayon) under a fixed memory budget (20 MB chunks + an LRU AST cache);
 - **predictable speed & memory** (no GC pauses), `opt-level 3` + thin LTO in release;
 - memory safety, so the parser never segfaults on weird input — it degrades gracefully.
 
@@ -366,7 +312,7 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture and design notes.
 
 **MCP as the integration surface.** Rather than a bespoke plugin per editor, Code Explorer speaks the [Model Context Protocol](https://modelcontextprotocol.io/) — so the same server works with Claude Code, Codex, Cursor, VS Code and anything else that speaks MCP, over stdio or HTTP.
 
-**Local-first & private.** Indexing and querying are 100% local — your source never leaves the machine, and no API key is needed. LLM features (`ask`, `--enrich`) are optional and bring-your-own-key.
+**Local-first.** Indexing and querying run locally without network access or an API key. LLM features (`ask`, `--enrich`) are optional, bring-your-own-key, and send context to the configured provider; DOCX export sends Mermaid diagrams to Kroki (`https://kroki.io` by default).
 
 **Hybrid retrieval.** Lexical [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) is fast and exact; ONNX semantic embeddings (via [`ort`](https://github.com/pykeio/ort)) catch paraphrases. They're fused with Reciprocal Rank Fusion (K=60), with graceful fallback to pure BM25 when embeddings aren't built.
 
@@ -378,7 +324,7 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture and design notes.
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 cargo build --workspace
-cargo test  --workspace      # 1,007 tests
+cargo test  --workspace
 cargo clippy --workspace
 ```
 
@@ -413,7 +359,7 @@ self-host and use it for internal and non-commercial purposes; providing it as a
 Code Intelligence Service to third parties is not permitted. It converts to Apache 2.0 on 2030-08-31.
 
 - ✅ **Free** for any noncommercial use — personal projects, research, education, evaluation.
-- 💼 **Commercial use** (using it in a for-profit setting, or in a product/service) requires a separate license.
+- 💼 **Internal business use** is permitted by the license; a separate license is required to provide Code Explorer to third parties as a Code Intelligence Service.
 
 Interested in a commercial license, a partnership, or integrating Code Explorer into your tooling? Reach out: **patrice.huetz@gmail.com** · [agile-up.com](https://agile-up.com).
 

@@ -47,7 +47,7 @@ C'est la différence entre demander à quelqu'un de **lire un livre** et lui don
 - **Feedback par Page** — Widget de feedback intégré sur chaque page pour suivre la qualité et l'utilité du contenu.
 - **Application Desktop** — Application Tauri v2 avec visualisation interactive du graphe, vue treemap, chat intelligent et palette de commandes (Ctrl+K)
 - **Chat Intelligent** — Q&A de code assisté par IA avec réponses en streaming, analyse de complexité des requêtes, plans de recherche multi-étapes et mode recherche approfondie. Supporte Ollama, OpenAI, Anthropic, OpenRouter et Gemini (avec mode raisonnement)
-- **Serveur MCP** — 27 outils accessibles à tout agent IA compatible MCP (Claude, Cursor, VS Code, etc.)
+- **Serveur MCP** — 30 outils accessibles à tout agent IA compatible MCP (Claude, Cursor, VS Code, etc.)
 - **Skill Claude Code** — Skill `/code-explorer` intégré qui permet à Claude d'interroger le graphe de connaissances pendant votre conversation, avec invocation automatique sur les questions en langage naturel
 - **Rapport de Santé du Code** — Commande `code-explorer report` combinant hotspots, couplage temporel, ownership et métriques du graphe en un score de santé (A-E)
 - **Recherche Hybride** — Recherche lexicale BM25 + embeddings sémantiques ONNX optionnels, fusionnés par Reciprocal Rank Fusion. Reranker LLM optionnel pour réordonner les résultats en post-traitement, avec repli automatique si le modèle est indisponible.
@@ -116,7 +116,7 @@ Le site HTML inclut :
 git clone https://github.com/phuetz/code-explorer.git
 cd code-explorer
 
-# 2. Compiler la CLI (mode release, ~35 Mo)
+# 2. Compiler la CLI (mode release, environ 65 Mo)
 cargo build --release -p code-explorer-cli
 
 # Le binaire se trouve à :
@@ -566,7 +566,7 @@ Le skill est défini dans `.claude/skills/code-explorer/SKILL.md` et fonctionne 
 
 ### 2. Serveur MCP (pour tout agent IA)
 
-Un serveur [Model Context Protocol](https://modelcontextprotocol.io/) standard exposant 27 outils. Compatible avec Claude Desktop, Cursor, VS Code Copilot, et tout agent MCP.
+Un serveur [Model Context Protocol](https://modelcontextprotocol.io/) standard exposant 30 outils. Compatible avec Claude Desktop, Cursor, VS Code Copilot, et tout agent MCP.
 
 ```bash
 code-explorer mcp          # transport stdio
