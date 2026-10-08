@@ -1,7 +1,12 @@
-# Notice — GitNexus provenance
+# Notice — relationship to GitNexus
 
-Code Explorer started from the open-source project [GitNexus](https://github.com/abhigyanpatwari/GitNexus) (Apache-2.0), which pioneered the idea of a persistent code graph served to AI agents over MCP. The project has since been substantially rewritten: the engine is now Rust + tree-sitter, the command surface and data model have diverged, and the feature set (14 languages, analytics Git, docs HTML, deep .NET legacy support) goes well beyond the original.
+Code Explorer is an independent implementation written in Rust on top of tree-sitter. It shares one idea with
+[GitNexus](https://github.com/abhigyanpatwari/GitNexus) — a persistent code graph served to AI agents over MCP — but it
+contains no GitNexus code: the engine, the data model, the command surface and the language analyzers (14 languages,
+including in-depth ASP.NET and legacy .NET support) were written separately.
 
-A few leftover references to the name `gitnexus` remain in this repository — notably in `docs/index.html` (terminal mockup, build instructions) and in some `.cmd` scripts. They are cosmetic leftovers from the fork and do not reflect the current product or its license. They will be cleaned up before the public launch.
+**Correction.** An earlier version of this notice stated that Code Explorer "started from" GitNexus under Apache-2.0.
+That was wrong on both counts: Code Explorer is not a fork, and GitNexus is distributed under PolyForm Noncommercial
+1.0.0. No part of GitNexus is used in this repository.
 
-If you spot code that still carries a GitNexus copyright header or license text, please open an issue so it can be attributed or removed.
+If you find code that you believe comes from GitNexus, please open an issue so it can be checked.
