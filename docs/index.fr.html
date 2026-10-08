@@ -54,8 +54,8 @@
         </div>
         <div class="hero-media">
           <div class="terminal">
-            <div class="term-bar"><i></i><i></i><i></i><span>gitnexus impact</span></div>
-            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">gitnexus impact executePlan --direction both</span>
+            <div class="term-bar"><i></i><i></i><i></i><span>code-explorer impact</span></div>
+            <div class="term-body"><pre><span class="t-prompt">$</span> <span class="t-cmd">code-explorer impact executePlan --direction both</span>
 
 <span class="t-key">Aval</span> <span class="t-dim">(symboles affectés par un changement) :</span>
   Niveau 1 (7)  Niveau 2 (39)  Niveau 3 (4)
@@ -177,15 +177,15 @@
       <div class="wrap narrow">
         <h2>Démarrage rapide</h2>
         <pre class="code"><code># 1. Build (release, binaire ~35 Mo)
-cargo build --release        # binaire dans target/release/gitnexus
+cargo build --release        # binaire dans target/release/code-explorer
 
 # 2. Indexer le dépôt une fois (relancer avec --incremental après changements)
-gitnexus analyze .
+code-explorer analyze .
 
 # 3. Brancher ton agent dessus via MCP
-gitnexus mcp-install         # écrit .mcp.json pour Claude Code
-# …ou à la main :  { "command": "gitnexus", "args": ["mcp"] }</code></pre>
-        <p class="sub">Vérif : ton agent doit afficher <b>« gitnexus · 30 tools »</b>.</p>
+code-explorer mcp-install         # écrit .mcp.json pour Claude Code
+# …ou à la main :  { "command": "code-explorer", "args": ["mcp"] }</code></pre>
+        <p class="sub">Vérif : ton agent doit afficher <b>« code-explorer · 30 tools »</b>.</p>
         <div class="cta center">
           <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star sur GitHub</a>
           <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-explorer#readme">Documentation</a>
