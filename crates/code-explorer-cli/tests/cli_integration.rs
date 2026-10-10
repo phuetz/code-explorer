@@ -1008,3 +1008,37 @@ fn default_exclusions_keep_vendored_code_out_of_the_index() {
         "--no-default-excludes must bring all 70 files back:\n{stdout}"
     );
 }
+
+#[test]
+fn cli_validate_docs_exits_with_error_code_with_and_without_json() {
+    let repo = TestRepo::new("validate-docs-exit");
+    std::fs::create_dir_all(repo.path().join(".codeexplorer/docs")).unwrap();
+    std::fs::write(
+        repo.path().join(".codeexplorer/docs/a.md"),
+        "# T\nTODO fix [x](nope.md)\n",
+    )
+    .unwrap();
+
+    let repo_arg = repo.path().to_string_lossy().into_owned();
+
+    let output_json = repo.explorer(&["validate-docs", "--repo", &repo_arg, "--json"]);
+    assert_eq!(
+        output_json.status.code(),
+        Some(2),
+        "validate-docs --json should exit with code 2 on RED issues"
+    );
+
+    let stdout = String::from_utf8(output_json.stdout).unwrap();
+    let json_val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        json_val["red_count"].as_u64().unwrap() > 0,
+        "json output should indicate red issues"
+    );
+
+    let output_normal = repo.explorer(&["validate-docs", "--repo", &repo_arg]);
+    assert_eq!(
+        output_normal.status.code(),
+        Some(2),
+        "validate-docs should exit with code 2 on RED issues"
+    );
+}
