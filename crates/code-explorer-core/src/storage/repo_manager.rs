@@ -289,7 +289,7 @@ pub fn unregister_repo(repo_path: &Path) -> Result<()> {
 /// Check if a path has a Code Explorer index.
 pub fn has_index(repo_path: &Path) -> bool {
     let paths = get_storage_paths(repo_path);
-    paths.meta_path.exists()
+    paths.meta_path.is_file() && paths.storage_path.join("graph.bin").is_file()
 }
 
 /// Load metadata from an indexed repo.

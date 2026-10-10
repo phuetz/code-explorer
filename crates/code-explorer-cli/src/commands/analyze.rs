@@ -165,34 +165,7 @@ pub async fn run(
 
     match result {
         Ok(result) => {
-            println!("\nIndexing complete!");
-            println!("  Files:       {}", result.total_file_count);
-            println!("  Parsed:      {}", result.parsed_files);
-            println!("  Nodes:       {}", result.graph.node_count());
-            println!("  Edges:       {}", result.graph.relationship_count());
-            if result.doc_stats.documents > 0 {
-                println!(
-                    "  Documents:   {} ({} headings, {} internal links)",
-                    result.doc_stats.documents,
-                    result.doc_stats.headings,
-                    result.doc_stats.links_resolved
-                );
-            }
-            println!("  Communities: {}", result.community_count);
-            println!("  Processes:   {}", result.process_count);
-            println!(
-                "  Duration:    {:.2}s ({} ms)",
-                result.total_duration_ms as f64 / 1000.0,
-                result.total_duration_ms
-            );
-            if !result.phase_timings.is_empty() {
-                println!("  Phase breakdown:");
-                for pt in &result.phase_timings {
-                    println!("    {:<18} {:>7} ms", pt.name, pt.duration_ms);
-                }
-            }
-
-            // Save metadata
+            // Prepare metadata; publish it after persistence succeeds.
             let commit = git::current_commit(&repo_path).unwrap_or_else(|| "unknown".to_string());
             let meta = repo_manager::RepoMeta {
                 repo_path: repo_path.display().to_string(),
@@ -212,18 +185,6 @@ pub async fn run(
             };
 
             let storage_paths = repo_manager::get_storage_paths(&repo_path);
-            repo_manager::save_meta(&storage_paths.storage_path, &meta)?;
-            std::fs::write(storage_paths.storage_path.join("analyze.json"),
-                serde_json::to_vec_pretty(&serde_json::json!({
-                    "parsed_files": result.parsed_files,
-                    "total_files": result.total_file_count,
-                    "duration_ms": result.total_duration_ms,
-                    "fallback_reason": result.incremental_fallback,
-                    "resolution_scope": "repository",
-                    "local_enrichments": result.local_enrichments
-                }))?)?;
-            repo_manager::register_repo(&repo_path, &meta)?;
-
             // Persist the detailed performance metrics (per-phase breakdown + throughput).
             {
                 let secs = result.total_duration_ms as f64 / 1000.0;
@@ -292,6 +253,47 @@ pub async fn run(
                 db.bulk_load_csv(&csv_dir)?;
                 db.close()?;
                 println!("  KuzuDB loaded successfully.");
+            }
+
+            std::fs::write(storage_paths.storage_path.join("analyze.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "parsed_files": result.parsed_files,
+                    "total_files": result.total_file_count,
+                    "duration_ms": result.total_duration_ms,
+                    "fallback_reason": result.incremental_fallback,
+                    "resolution_scope": "repository",
+                    "local_enrichments": result.local_enrichments
+                }))?)?;
+            repo_manager::register_repo(&repo_path, &meta)?;
+            // Publish freshness only after all required persistence succeeds.
+            repo_manager::save_meta(&storage_paths.storage_path, &meta)?;
+
+            // Print summary
+            println!("\nIndexing complete!");
+            println!("  Files:       {}", result.total_file_count);
+            println!("  Parsed:      {}", result.parsed_files);
+            println!("  Nodes:       {}", result.graph.node_count());
+            println!("  Edges:       {}", result.graph.relationship_count());
+            if result.doc_stats.documents > 0 {
+                println!(
+                    "  Documents:   {} ({} headings, {} internal links)",
+                    result.doc_stats.documents,
+                    result.doc_stats.headings,
+                    result.doc_stats.links_resolved
+                );
+            }
+            println!("  Communities: {}", result.community_count);
+            println!("  Processes:   {}", result.process_count);
+            println!(
+                "  Duration:    {:.2}s ({} ms)",
+                result.total_duration_ms as f64 / 1000.0,
+                result.total_duration_ms
+            );
+            if !result.phase_timings.is_empty() {
+                println!("  Phase breakdown:");
+                for pt in &result.phase_timings {
+                    println!("    {:<18} {:>7} ms", pt.name, pt.duration_ms);
+                }
             }
 
             println!("  Done! Run 'code-explorer mcp' to start the MCP server.");

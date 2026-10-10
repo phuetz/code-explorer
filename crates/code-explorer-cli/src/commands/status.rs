@@ -2,8 +2,8 @@
 
 use code_explorer_core::storage::{git, repo_manager};
 
-pub fn run() -> anyhow::Result<()> {
-    let cwd = std::env::current_dir()?;
+pub fn run(repo: Option<&str>) -> anyhow::Result<()> {
+    let cwd = crate::commands::query_cmd::resolve_repo_path(repo)?;
     let storage_paths = repo_manager::get_storage_paths(&cwd);
 
     println!("Code Explorer Status");
@@ -39,7 +39,15 @@ pub fn run() -> anyhow::Result<()> {
                     println!("  Git: not available or not a git repo");
                 }
                 _ => {
-                    println!("  Index is up-to-date.");
+                    if git::has_uncommitted_changes(&cwd) {
+                        println!();
+                        println!("  WARNING: Index is stale!");
+                        println!("    Indexed commit: {}", meta.last_commit);
+                        println!("    Current commit: (uncommitted changes)");
+                        println!("    Run `code-explorer analyze` to update.");
+                    } else {
+                        println!("  Index is up-to-date.");
+                    }
                 }
             }
 

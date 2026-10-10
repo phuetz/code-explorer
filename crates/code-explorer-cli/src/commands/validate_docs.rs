@@ -38,10 +38,9 @@ pub fn run(repo_path: Option<&str>, docs_dir_override: Option<&str>, json: bool)
 
     if json {
         println!("{}", json_str);
-        return Ok(());
+    } else {
+        print_console_report(&report, &json_path);
     }
-
-    print_console_report(&report, &json_path);
 
     // Exit non-zero if any RED issue: lets CI / shell pipelines fail-fast.
     if report.red_count > 0 {

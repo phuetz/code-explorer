@@ -1008,3 +1008,224 @@ fn default_exclusions_keep_vendored_code_out_of_the_index() {
         "--no-default-excludes must bring all 70 files back:\n{stdout}"
     );
 }
+
+#[test]
+fn cli_validate_docs_exits_with_error_code_with_and_without_json() {
+    let repo = TestRepo::new("validate-docs-exit");
+    std::fs::create_dir_all(repo.path().join(".codeexplorer/docs")).unwrap();
+    std::fs::write(
+        repo.path().join(".codeexplorer/docs/a.md"),
+        "# T\nTODO fix [x](nope.md)\n",
+    )
+    .unwrap();
+
+    let repo_arg = repo.path().to_string_lossy().into_owned();
+
+    let output_json = repo.explorer(&["validate-docs", "--repo", &repo_arg, "--json"]);
+    assert_eq!(
+        output_json.status.code(),
+        Some(2),
+        "validate-docs --json should exit with code 2 on RED issues"
+    );
+
+    let stdout = String::from_utf8(output_json.stdout).unwrap();
+    let json_val: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(
+        json_val["red_count"].as_u64().unwrap() > 0,
+        "json output should indicate red issues"
+    );
+
+    let output_normal = repo.explorer(&["validate-docs", "--repo", &repo_arg]);
+    assert_eq!(
+        output_normal.status.code(),
+        Some(2),
+        "validate-docs should exit with code 2 on RED issues"
+    );
+}
+
+#[test]
+fn cli_failed_analyze_does_not_leave_a_misleading_index() {
+    let repo = TestRepo::new("failed_analyze");
+    let src_dir = repo.path().join("src");
+    fs::write(
+        src_dir.join("lib.rs"),
+        "pub fn helper(x: &str) -> &str { x }",
+    )
+    .unwrap();
+
+    // Make registry saving fail by creating a directory instead of the registry JSON file
+    let registry_dir = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::create_dir_all(&registry_dir).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["analyze", repo.path().to_str().unwrap(), "--skip-git"])
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer");
+
+    // The test initially expected register_repo to fail the command if it failed,
+    // but register_repo returns an error which causes the `run` fn to return an error,
+    // which in `main.rs` is printed and causes exit code 1.
+    assert!(
+        !output.status.success(),
+        "analyze should fail when registry cannot be written: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let status_output = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["status"])
+        .current_dir(repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer status");
+
+    let stdout = String::from_utf8_lossy(&status_output.stdout);
+    assert!(
+        !stdout.contains("Status: INDEXED"),
+        "status should not report as INDEXED after failed analyze"
+    );
+
+    // Remove the blocking directory to allow registry creation
+    fs::remove_dir_all(&registry_dir).unwrap();
+
+    let output2 = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["analyze", repo.path().to_str().unwrap(), "--skip-git"])
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer");
+
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    assert!(output2.status.success(), "second analyze should succeed");
+    assert!(
+        !stdout2.contains("Repository already indexed"),
+        "second analyze should not say 'already indexed'"
+    );
+
+    let graph_bin = repo.path().join(".codeexplorer/graph.bin");
+    assert!(
+        graph_bin.exists(),
+        "graph.bin should exist after successful analyze"
+    );
+}
+
+#[test]
+fn test_stale_index_warning() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    let home = temp.path().join("home");
+    fs::create_dir_all(&repo).unwrap();
+    let git = |args: &[&str]| {
+        let output = Command::new("git").args(args).current_dir(&repo).output().unwrap();
+        assert_success(&output, "git fixture");
+    };
+    let explorer = |args: &[&str]| {
+        code_explorer().args(args).current_dir(&repo)
+            .env("CODE_EXPLORER_HOME", &home).output().unwrap()
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "code-explorer-tests@example.invalid"]);
+    git(&["config", "user.name", "Code Explorer Tests"]);
+    git(&["config", "commit.gpgsign", "false"]);
+    fs::write(repo.join("o.rs"), "fn old_fn(){}\n").unwrap();
+    git(&["add", "o.rs"]);
+    git(&["commit", "-qm", "base"]);
+    assert_success(&explorer(&["analyze", "."]), "analyze");
+    let check = |stale: bool| {
+        for args in [vec!["query", "old_fn"], vec!["context", "old_fn"], vec!["impact", "old_fn"]] {
+            let output = explorer(&args);
+            assert_success(&output, "read command");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(stderr.contains("WARNING: index perime"), stale, "{args:?}: {stderr}");
+        }
+        let output = explorer(&["status", "--repo", "."]);
+        assert_success(&output, "status");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.contains("WARNING: Index is stale!"), stale, "{stdout}");
+        assert_eq!(stdout.contains("Index is up-to-date."), !stale, "{stdout}");
+    };
+    check(false);
+    fs::write(repo.join("t.rs"), "fn third(){}\n").unwrap();
+    git(&["add", "t.rs"]);
+    git(&["commit", "-qm", "change"]);
+    check(true);
+    assert_success(&explorer(&["analyze", "--force", "."]), "reindex");
+    check(false);
+    fs::write(repo.join("o.rs"), "fn zzz(){}\nfn old_fn(){}\n").unwrap();
+    assert!(code_explorer_core::storage::git::has_uncommitted_changes(&repo));
+    check(true);
+    git(&["checkout", "--", "o.rs"]);
+    check(false);
+    // A source name containing the index directory name is still a real change.
+    fs::write(repo.join("source.codeexplorer.rs"), "fn extra(){}\n").unwrap();
+    check(true);
+}
+
+#[test]
+fn cli_persistence_success_summary_follows_writes() {
+    let repo = TestRepo::new("summary-persistence");
+    fs::write(repo.path().join("src/lib.rs"), "pub fn helper() {}\n").unwrap();
+    let blocker = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::create_dir_all(&blocker).unwrap();
+    let args = ["analyze", repo.path().to_str().unwrap(), "--skip-git", "--force"];
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stdout).contains("Indexing complete!"),
+        "success must not be announced when registry writing fails");
+    fs::remove_dir_all(&blocker).unwrap();
+    let graph = repo.path().join(".codeexplorer/graph.bin");
+    if graph.is_file() { fs::remove_file(&graph).unwrap(); }
+    fs::create_dir_all(&graph).unwrap();
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stdout).contains("Indexing complete!"),
+        "success must not be announced when graph writing fails");
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    fs::remove_dir_all(&graph).unwrap();
+    let success = repo.explorer(&args);
+    assert_success(&success, "analyze after repairing storage");
+    let stdout = String::from_utf8_lossy(&success.stdout);
+    let complete = stdout.find("Indexing complete!").unwrap();
+    assert!(stdout.find("Graph snapshot saved").unwrap() < complete);
+    assert!(stdout.find("CSVs saved").unwrap() < complete);
+}
+
+#[test]
+fn cli_persistence_status_requires_files_instead_of_directories() {
+    let repo = TestRepo::new("index-directories");
+    let storage = repo.path().join(".codeexplorer");
+    fs::create_dir_all(storage.join("meta.json")).unwrap();
+    fs::create_dir_all(storage.join("graph.bin")).unwrap();
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    fs::remove_dir_all(storage.join("meta.json")).unwrap();
+    fs::write(storage.join("meta.json"), "{}").unwrap();
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    let output = code_explorer().arg("status").current_dir(repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home).output().unwrap();
+    assert_success(&output, "status for directory instead of graph");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Status: NOT INDEXED"));
+}
+
+#[test]
+fn cli_persistence_failed_reindex_preserves_the_previous_commit() {
+    let repo = TestRepo::new("failed-reindex");
+    let source = repo.path().join("src/lib.rs");
+    fs::write(&source, "pub fn old_fn() {}\n").unwrap();
+    repo.git(&["add", "src/lib.rs"]);
+    repo.git(&["-c", "commit.gpgsign=false", "commit", "-qm", "base"]);
+    let args = ["analyze", repo.path().to_str().unwrap(), "--force"];
+    assert_success(&repo.explorer(&args), "initial analyze");
+    let storage = repo.path().join(".codeexplorer");
+    let previous = code_explorer_core::storage::repo_manager::load_meta(&storage).unwrap().unwrap();
+    fs::write(&source, "pub fn new_fn() {}\n").unwrap();
+    repo.git(&["add", "src/lib.rs"]);
+    repo.git(&["-c", "commit.gpgsign=false", "commit", "-qm", "change"]);
+    let registry = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::remove_file(&registry).unwrap();
+    fs::create_dir(&registry).unwrap();
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    let after = code_explorer_core::storage::repo_manager::load_meta(&storage).unwrap().unwrap();
+    assert_eq!(after.last_commit, previous.last_commit,
+        "a failed reindex must not publish the new commit before graph persistence");
+}

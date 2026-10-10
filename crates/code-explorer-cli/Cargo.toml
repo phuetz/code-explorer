@@ -63,3 +63,7 @@ rand = "0.9"
 sha2 = { workspace = true }
 webbrowser = "1.0"
 thiserror = { workspace = true }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.27.0"

@@ -7,6 +7,7 @@ use code_explorer_core::storage::repo_manager;
 
 pub async fn run(target: &str, repo: Option<&str>, direction: &str) -> anyhow::Result<()> {
     let repo_path = resolve_repo_path(repo)?;
+    crate::commands::utils::check_and_warn_stale_index(&repo_path);
     let storage = repo_manager::get_storage_paths(&repo_path);
     let snap = code_explorer_db::snapshot::snapshot_path(&storage.storage_path);
 
