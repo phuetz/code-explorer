@@ -28,6 +28,7 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     let (offset, page_size, pool) = page_window(page, limit)?;
     let repo_path = resolve_repo_path(repo)?;
+    crate::commands::utils::check_and_warn_stale_index(&repo_path);
     let storage = repo_manager::get_storage_paths(&repo_path);
     let snap = code_explorer_db::snapshot::snapshot_path(&storage.storage_path);
 
@@ -518,7 +519,7 @@ async fn run_reranker(query: &str, fts: &[FtsResult]) -> anyhow::Result<Vec<Cand
     Ok(result)
 }
 
-fn resolve_repo_path(repo: Option<&str>) -> anyhow::Result<PathBuf> {
+pub fn resolve_repo_path(repo: Option<&str>) -> anyhow::Result<PathBuf> {
     match repo {
         Some(r) => {
             let p = Path::new(r);

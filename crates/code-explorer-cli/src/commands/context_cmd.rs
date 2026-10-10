@@ -9,6 +9,7 @@ use code_explorer_core::symbol::selection::find_symbols;
 
 pub async fn run(name: &str, repo: Option<&str>) -> anyhow::Result<()> {
     let repo_path = resolve_repo_path(repo)?;
+    crate::commands::utils::check_and_warn_stale_index(&repo_path);
     let storage = repo_manager::get_storage_paths(&repo_path);
     let snap = code_explorer_db::snapshot::snapshot_path(&storage.storage_path);
 

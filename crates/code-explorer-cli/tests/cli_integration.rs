@@ -1108,3 +1108,55 @@ fn cli_failed_analyze_does_not_leave_a_misleading_index() {
         "graph.bin should exist after successful analyze"
     );
 }
+
+#[test]
+fn test_stale_index_warning() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    let home = temp.path().join("home");
+    fs::create_dir_all(&repo).unwrap();
+    let git = |args: &[&str]| {
+        let output = Command::new("git").args(args).current_dir(&repo).output().unwrap();
+        assert_success(&output, "git fixture");
+    };
+    let explorer = |args: &[&str]| {
+        code_explorer().args(args).current_dir(&repo)
+            .env("CODE_EXPLORER_HOME", &home).output().unwrap()
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "code-explorer-tests@example.invalid"]);
+    git(&["config", "user.name", "Code Explorer Tests"]);
+    git(&["config", "commit.gpgsign", "false"]);
+    fs::write(repo.join("o.rs"), "fn old_fn(){}\n").unwrap();
+    git(&["add", "o.rs"]);
+    git(&["commit", "-qm", "base"]);
+    assert_success(&explorer(&["analyze", "."]), "analyze");
+    let check = |stale: bool| {
+        for args in [vec!["query", "old_fn"], vec!["context", "old_fn"], vec!["impact", "old_fn"]] {
+            let output = explorer(&args);
+            assert_success(&output, "read command");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(stderr.contains("WARNING: index perime"), stale, "{args:?}: {stderr}");
+        }
+        let output = explorer(&["status", "--repo", "."]);
+        assert_success(&output, "status");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(stdout.contains("WARNING: Index is stale!"), stale, "{stdout}");
+        assert_eq!(stdout.contains("Index is up-to-date."), !stale, "{stdout}");
+    };
+    check(false);
+    fs::write(repo.join("t.rs"), "fn third(){}\n").unwrap();
+    git(&["add", "t.rs"]);
+    git(&["commit", "-qm", "change"]);
+    check(true);
+    assert_success(&explorer(&["analyze", "--force", "."]), "reindex");
+    check(false);
+    fs::write(repo.join("o.rs"), "fn zzz(){}\nfn old_fn(){}\n").unwrap();
+    assert!(code_explorer_core::storage::git::has_uncommitted_changes(&repo));
+    check(true);
+    git(&["checkout", "--", "o.rs"]);
+    check(false);
+    // A source name containing the index directory name is still a real change.
+    fs::write(repo.join("source.codeexplorer.rs"), "fn extra(){}\n").unwrap();
+    check(true);
+}

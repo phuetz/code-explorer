@@ -98,7 +98,10 @@ enum Commands {
     /// List indexed repositories
     List,
     /// Show index status for the current directory
-    Status,
+    Status {
+        #[arg(short, long, help = "Path to the repository to check")]
+        repo: Option<String>,
+    },
     /// Diagnose an index in one pass: presence, schema, registry coherence,
     /// file coverage by extension, freshness against HEAD — and the command
     /// that repairs each problem. Exits with code 1 if the index is unusable.
@@ -594,7 +597,7 @@ async fn async_main() -> anyhow::Result<()> {
         },
         Commands::Serve { port, host } => commands::serve::run(port, &host).await,
         Commands::List => commands::list::run(),
-        Commands::Status => commands::status::run(),
+        Commands::Status { repo } => commands::status::run(repo.as_deref()),
         Commands::Doctor { path, json } => {
             let code = commands::doctor::run(&path, json)?;
             if code != 0 {

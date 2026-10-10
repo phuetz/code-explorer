@@ -33,3 +33,4 @@ pub mod trace_import;
 pub mod validate_docs;
 pub mod watch;
 pub mod workdoc;
+pub mod utils;

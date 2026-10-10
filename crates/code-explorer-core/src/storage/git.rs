@@ -101,3 +101,13 @@ pub fn commit_exists(repo_path: &Path, commit: &str) -> bool {
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
+
+/// Check tracked and untracked changes, excluding the generated root index.
+pub fn has_uncommitted_changes(repo_path: &Path) -> bool {
+    Command::new("git")
+        .args(["status", "--porcelain", "-z", "--untracked-files=all", "--", ".", ":(exclude).codeexplorer"])
+        .current_dir(repo_path)
+        .output()
+        .map(|output| output.status.success() && !output.stdout.is_empty())
+        .unwrap_or(false)
+}
