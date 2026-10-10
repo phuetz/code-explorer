@@ -489,6 +489,11 @@ enum Commands {
 const MAIN_STACK_BYTES: usize = 64 * 1024 * 1024;
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let worker = std::thread::Builder::new()
         .name("code-explorer-main".to_string())
         .stack_size(MAIN_STACK_BYTES)
