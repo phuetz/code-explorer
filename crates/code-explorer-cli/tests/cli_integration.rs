@@ -1042,3 +1042,69 @@ fn cli_validate_docs_exits_with_error_code_with_and_without_json() {
         "validate-docs should exit with code 2 on RED issues"
     );
 }
+
+#[test]
+fn cli_failed_analyze_does_not_leave_a_misleading_index() {
+    let repo = TestRepo::new("failed_analyze");
+    let src_dir = repo.path().join("src");
+    fs::write(
+        src_dir.join("lib.rs"),
+        "pub fn helper(x: &str) -> &str { x }",
+    )
+    .unwrap();
+
+    // Make registry saving fail by creating a directory instead of the registry JSON file
+    let registry_dir = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::create_dir_all(&registry_dir).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["analyze", repo.path().to_str().unwrap(), "--skip-git"])
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer");
+
+    // The test initially expected register_repo to fail the command if it failed,
+    // but register_repo returns an error which causes the `run` fn to return an error,
+    // which in `main.rs` is printed and causes exit code 1.
+    assert!(
+        !output.status.success(),
+        "analyze should fail when registry cannot be written: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let status_output = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["status"])
+        .current_dir(repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer status");
+
+    let stdout = String::from_utf8_lossy(&status_output.stdout);
+    assert!(
+        !stdout.contains("Status: INDEXED"),
+        "status should not report as INDEXED after failed analyze"
+    );
+
+    // Remove the blocking directory to allow registry creation
+    fs::remove_dir_all(&registry_dir).unwrap();
+
+    let output2 = Command::new(env!("CARGO_BIN_EXE_code-explorer"))
+        .args(&["analyze", repo.path().to_str().unwrap(), "--skip-git"])
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home)
+        .output()
+        .expect("failed to run code-explorer");
+
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    assert!(output2.status.success(), "second analyze should succeed");
+    assert!(
+        !stdout2.contains("Repository already indexed"),
+        "second analyze should not say 'already indexed'"
+    );
+
+    let graph_bin = repo.path().join(".codeexplorer/graph.bin");
+    assert!(
+        graph_bin.exists(),
+        "graph.bin should exist after successful analyze"
+    );
+}

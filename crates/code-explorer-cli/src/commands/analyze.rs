@@ -212,18 +212,6 @@ pub async fn run(
             };
 
             let storage_paths = repo_manager::get_storage_paths(&repo_path);
-            repo_manager::save_meta(&storage_paths.storage_path, &meta)?;
-            std::fs::write(storage_paths.storage_path.join("analyze.json"),
-                serde_json::to_vec_pretty(&serde_json::json!({
-                    "parsed_files": result.parsed_files,
-                    "total_files": result.total_file_count,
-                    "duration_ms": result.total_duration_ms,
-                    "fallback_reason": result.incremental_fallback,
-                    "resolution_scope": "repository",
-                    "local_enrichments": result.local_enrichments
-                }))?)?;
-            repo_manager::register_repo(&repo_path, &meta)?;
-
             // Persist the detailed performance metrics (per-phase breakdown + throughput).
             {
                 let secs = result.total_duration_ms as f64 / 1000.0;
@@ -249,6 +237,18 @@ pub async fn run(
                 };
                 repo_manager::save_metrics(&storage_paths.storage_path, &metrics)?;
             }
+
+            repo_manager::save_meta(&storage_paths.storage_path, &meta)?;
+            std::fs::write(storage_paths.storage_path.join("analyze.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "parsed_files": result.parsed_files,
+                    "total_files": result.total_file_count,
+                    "duration_ms": result.total_duration_ms,
+                    "fallback_reason": result.incremental_fallback,
+                    "resolution_scope": "repository",
+                    "local_enrichments": result.local_enrichments
+                }))?)?;
+            repo_manager::register_repo(&repo_path, &meta)?;
 
             // Save binary snapshot for fast reload (REPL, MCP, CLI queries)
             let snapshot_start = std::time::Instant::now();
