@@ -1160,3 +1160,72 @@ fn test_stale_index_warning() {
     fs::write(repo.join("source.codeexplorer.rs"), "fn extra(){}\n").unwrap();
     check(true);
 }
+
+#[test]
+fn cli_persistence_success_summary_follows_writes() {
+    let repo = TestRepo::new("summary-persistence");
+    fs::write(repo.path().join("src/lib.rs"), "pub fn helper() {}\n").unwrap();
+    let blocker = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::create_dir_all(&blocker).unwrap();
+    let args = ["analyze", repo.path().to_str().unwrap(), "--skip-git", "--force"];
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stdout).contains("Indexing complete!"),
+        "success must not be announced when registry writing fails");
+    fs::remove_dir_all(&blocker).unwrap();
+    let graph = repo.path().join(".codeexplorer/graph.bin");
+    if graph.is_file() { fs::remove_file(&graph).unwrap(); }
+    fs::create_dir_all(&graph).unwrap();
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stdout).contains("Indexing complete!"),
+        "success must not be announced when graph writing fails");
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    fs::remove_dir_all(&graph).unwrap();
+    let success = repo.explorer(&args);
+    assert_success(&success, "analyze after repairing storage");
+    let stdout = String::from_utf8_lossy(&success.stdout);
+    let complete = stdout.find("Indexing complete!").unwrap();
+    assert!(stdout.find("Graph snapshot saved").unwrap() < complete);
+    assert!(stdout.find("CSVs saved").unwrap() < complete);
+}
+
+#[test]
+fn cli_persistence_status_requires_files_instead_of_directories() {
+    let repo = TestRepo::new("index-directories");
+    let storage = repo.path().join(".codeexplorer");
+    fs::create_dir_all(storage.join("meta.json")).unwrap();
+    fs::create_dir_all(storage.join("graph.bin")).unwrap();
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    fs::remove_dir_all(storage.join("meta.json")).unwrap();
+    fs::write(storage.join("meta.json"), "{}").unwrap();
+    assert!(!code_explorer_core::storage::repo_manager::has_index(repo.path()));
+    let output = code_explorer().arg("status").current_dir(repo.path())
+        .env("CODE_EXPLORER_HOME", &repo.explorer_home).output().unwrap();
+    assert_success(&output, "status for directory instead of graph");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Status: NOT INDEXED"));
+}
+
+#[test]
+fn cli_persistence_failed_reindex_preserves_the_previous_commit() {
+    let repo = TestRepo::new("failed-reindex");
+    let source = repo.path().join("src/lib.rs");
+    fs::write(&source, "pub fn old_fn() {}\n").unwrap();
+    repo.git(&["add", "src/lib.rs"]);
+    repo.git(&["-c", "commit.gpgsign=false", "commit", "-qm", "base"]);
+    let args = ["analyze", repo.path().to_str().unwrap(), "--force"];
+    assert_success(&repo.explorer(&args), "initial analyze");
+    let storage = repo.path().join(".codeexplorer");
+    let previous = code_explorer_core::storage::repo_manager::load_meta(&storage).unwrap().unwrap();
+    fs::write(&source, "pub fn new_fn() {}\n").unwrap();
+    repo.git(&["add", "src/lib.rs"]);
+    repo.git(&["-c", "commit.gpgsign=false", "commit", "-qm", "change"]);
+    let registry = repo.explorer_home.join(".codeexplorer/registry.json");
+    fs::remove_file(&registry).unwrap();
+    fs::create_dir(&registry).unwrap();
+    let failed = repo.explorer(&args);
+    assert!(!failed.status.success());
+    let after = code_explorer_core::storage::repo_manager::load_meta(&storage).unwrap().unwrap();
+    assert_eq!(after.last_commit, previous.last_commit,
+        "a failed reindex must not publish the new commit before graph persistence");
+}
