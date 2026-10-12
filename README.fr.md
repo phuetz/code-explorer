@@ -1,5 +1,9 @@
 # Code Explorer
 
+<p align="center">
+  <a href="docs/infographic-code-explorer.webp"><img src="docs/infographic-code-explorer.webp" width="900" alt="Code Explorer : le dépôt est analysé en un graphe de connaissances que les agents IA interrogent"/></a>
+</p>
+
 Intelligence de code basée sur un graphe de connaissances pour agents IA. Code Explorer construit un graphe à partir de votre code source et l'expose via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) pour l'analyse de code assistée par IA.
 
 Écrit en Rust. Supporte 14 langages de programmation. Livré avec une application desktop et un générateur de documentation HTML.
